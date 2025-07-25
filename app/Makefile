@@ -106,7 +106,7 @@ PROFILER = # strace -e trace=all -o strace.log
 # 4. users_manager: Process that manages the users processes
 # 5. worker: Process that invests the worker's role
 # 6. user: Process that invests the user's role
-PROJECT_PREFIX 	= SO_Proj-
+PROJECT_PREFIX 	= post_office_
 PROCESSES 		= main director ticket_issuer users_manager worker user
 PROCESSES 	   := $(addprefix $(PROJECT_PREFIX), $(PROCESSES))
 
