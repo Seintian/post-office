@@ -24,7 +24,9 @@ jobs:
           make
 
       - name: Run Unity Tests
-        run: ./bin/post_office_test_main
+        run: |
+          cd app
+          make test
 
       - name: Generate coverage report
         run: |
