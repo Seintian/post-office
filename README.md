@@ -2,6 +2,7 @@
 
 ![CI](https://github.com/seintian/post-office/actions/workflows/ci.yml/badge.svg)
 [![Maintainability](https://qlty.sh/gh/Seintian/projects/post-office/maintainability.svg)](https://qlty.sh/gh/Seintian/projects/post-office)
+[![Code Coverage](https://qlty.sh/gh/Seintian/projects/post-office/coverage.svg)](https://qlty.sh/gh/Seintian/projects/post-office)
 
 ```txt
 <project-root>
