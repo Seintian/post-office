@@ -1,0 +1,90 @@
+# Doxyfile 1.9.1
+#
+# This file describes the settings to be used by the documentation system
+# doxygen (www.doxygen.nl) for a project.
+#
+# For a complete list of options see:
+# https://www.doxygen.nl/manual/config.html
+
+#---------------------------------------------------------------------------
+# Project related configuration options
+#---------------------------------------------------------------------------
+
+PROJECT_NAME           = "SO Project - 24/25"
+PROJECT_NUMBER         = "1.0"
+OUTPUT_DIRECTORY       = docs
+OUTPUT_LANGUAGE        = English
+
+#---------------------------------------------------------------------------
+# Configuration options related to the input files
+#---------------------------------------------------------------------------
+
+# The INPUT tag is used to specify the files and/or directories that contain
+# documented source files. This tag can be used to specify absolute or relative paths.
+INPUT                  = ./src ./libs ./include
+
+# The EXCLUDE tag can be used to specify files and/or directories that should be excluded from the input.
+EXCLUDE                = ./libs/unity ./libs/libfort ./libs/inih
+
+# The FILE_PATTERNS tag can be used to specify one or more wildcard patterns
+# (like *.cpp and *.h) to filter out the source-files in the directories.
+# FILE_PATTERNS          = *.c *.h
+
+# If the value of the RECURSIVE tag is set to YES, doxygen will sub-divide
+# the directories and search for input files in them as well.
+RECURSIVE              = YES
+
+#---------------------------------------------------------------------------
+# Configuration options related to source code parsing
+#---------------------------------------------------------------------------
+
+# Optimize output for C (e.g., no C++ specific constructs).
+OPTIMIZE_OUTPUT_FOR_C  = YES
+
+# Extract documentation from all parts of the code.
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+
+# Generate documentation for preprocessing directives.
+INCLUDE_PATH           = ./src ./src/simulation ./libs ./include
+MACRO_EXPANSION        = YES
+
+#---------------------------------------------------------------------------
+# Configuration options related to source browsing
+#---------------------------------------------------------------------------
+
+# Enable source browsing in the generated documentation.
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = YES
+STRIP_CODE_COMMENTS    = NO
+
+#---------------------------------------------------------------------------
+# Configuration options related to the output formats
+#---------------------------------------------------------------------------
+
+# If the GENERATE_HTML tag is set to YES (the default) Doxygen will generate HTML output.
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+
+# Generate a tree view of the documentation.
+GENERATE_TREEVIEW      = YES
+
+# If the GENERATE_LATEX tag is set to YES Doxygen will generate LaTeX output.
+GENERATE_LATEX         = YES
+LATEX_OUTPUT           = latex
+
+# USE_PDFLATEX		   = YES
+PDF_HYPERLINKS         = YES
+
+#---------------------------------------------------------------------------
+# Configuration options for diagrams and graphs
+#---------------------------------------------------------------------------
+
+# Enable dot tool support for generating call graphs, dependency graphs, etc.
+HAVE_DOT               = YES
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+
+#---------------------------------------------------------------------------
+# End of Doxyfile
+#---------------------------------------------------------------------------

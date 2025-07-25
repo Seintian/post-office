@@ -1,0 +1,7 @@
+project:
+  name: Post Office
+  language: c
+  coverage:
+    paths:
+      - ./build/coverage.info
+    format: lcov

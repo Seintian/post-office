@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential lcov
+
+      - name: Build with coverage flags
+        run: |
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="--coverage -O0 -g" ..
+          make
+
+      - name: Run Unity Tests
+        run: ./bin/test_main
+
+      - name: Generate coverage report
+        run: |
+          cd build
+          lcov --capture --directory . --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' --output-file coverage.info
+          lcov --remove coverage.info '*/main.c' '*/unity.c' --output-file coverage.info
+          lcov --list coverage.info
+
+      - name: Install qlty CLI
+        run: curl -sSfL https://raw.githubusercontent.com/qlty-dev/cli/main/install.sh | sh
+
+      - name: Upload to Qlty
+        env:
+          QLTY_TOKEN: ${{ secrets.QLTY_TOKEN }}
+        run: qlty upload

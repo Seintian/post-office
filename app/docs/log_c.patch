@@ -1,0 +1,143 @@
+--- ./.../log_c-old.c ...
++++ ./.../log_c-new.c ...
+@@ -20,6 +20,11 @@
+  * IN THE SOFTWARE.
+  */
+ 
++#include <string.h>
++#include <sys/time.h> /* (ADDED) gettimeofday */
++#include <stdlib.h>   /* (ADDED) exit */
++#include <stdio.h>    /* (ADDED) fprintf, sprintf, snprintf */
++#include <unistd.h>   /* (ADDED) getpid */
+ #include "log.h"
+ 
+ #define MAX_CALLBACKS 32
+@@ -43,6 +48,7 @@
+     "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"
+ };
+ 
++
+ #ifdef LOG_USE_COLOR
+ static const char *level_colors[] = {
+     "\x1b[94m", "\x1b[36m", "\x1b[32m", "\x1b[33m", "\x1b[31m", "\x1b[35m"
+@@ -50,33 +56,61 @@
+ #endif
+ 
++static int proc_pid = 0;
+ 
++static void get_timestamp(const struct timeval* time, char* timestamp, size_t size) {
++    struct tm calendar;
++
++    localtime_r(&time->tv_sec, &calendar);
++    strftime(timestamp, size, "%Y-%m-%d %H:%M:%S", &calendar);
++    sprintf(timestamp + 17, ".%06ld", (long) time->tv_usec);
++}
++
++
+ static void stdout_callback(log_Event *ev) {
+-    char buf[16];
+-    buf[strftime(buf, sizeof(buf), "%H:%M:%S", ev->time)] = '\0';
++    struct timeval now;
++
++    char timestamp[32];
++    char msg[512];
++
++    gettimeofday(&now, NULL);
++    get_timestamp(&now, timestamp, sizeof(timestamp));
++
+ #ifdef LOG_USE_COLOR
+-    fprintf(
+-        ev->udata, "%s %s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
+-        buf, level_colors[ev->level], level_strings[ev->level],
++    snprintf(
++        msg, sizeof(msg), "%s %d %s[%-5s]\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
++        timestamp, proc_pid, level_colors[ev->level], level_strings[ev->level],
+         ev->file, ev->line);
+ #else
+-    fprintf(
+-        ev->udata, "%s %-5s %s:%d: ",
+-        buf, level_strings[ev->level], ev->file, ev->line);
++    snprintf(
++        msg, sizeof(msg), "%s %d [%-5s] %s:%d: ",
++        timestamp, proc_pid, level_strings[ev->level], ev->file, ev->line);
+ #endif
+-    vfprintf(ev->udata, ev->fmt, ev->ap);
+-    fprintf(ev->udata, "\n");
++    vsnprintf(msg + strlen(msg), sizeof(msg) - strlen(msg), ev->fmt, ev->ap);
++    strcat(msg, "\n");
++    fputs(msg, ev->udata);
+     fflush(ev->udata);
+ }
+ 
+ 
+ static void file_callback(log_Event *ev) {
+-    char buf[64];
+-    buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", ev->time)] = '\0';
+-    fprintf(
+-        ev->udata, "%s %-5s %s:%d: ",
+-        buf, level_strings[ev->level], ev->file, ev->line);
+-    vfprintf(ev->udata, ev->fmt, ev->ap);
+-    fprintf(ev->udata, "\n");
++    struct timeval now;
++
++    char timestamp[32];
++    char msg[512];
++
++    gettimeofday(&now, NULL);
++    get_timestamp(&now, timestamp, sizeof(timestamp));
++
++    snprintf(
++        msg, sizeof(msg), "%s %d [%-5s] %s:%d: ",
++        timestamp, proc_pid, level_strings[ev->level], ev->file, ev->line);
++    vsnprintf(msg + strlen(msg), sizeof(msg) - strlen(msg), ev->fmt, ev->ap);
++    strcat(msg, "\n");
++    fputs(msg, ev->udata);
+     fflush(ev->udata);
+ }
+ 
+@@ -115,8 +149,8 @@
+ int log_add_callback(log_LogFn fn, void *udata, int level) {
+     for (int i = 0; i < MAX_CALLBACKS; i++) {
+         if (!L.callbacks[i].fn) {
+-        L.callbacks[i] = (Callback) { fn, udata, level };
+-        return 0;
++            L.callbacks[i] = (Callback) { fn, udata, level };
++            return 0;
+         }
+     }
+     return -1;
+@@ -157,10 +191,10 @@
++    // Initialize proc_pid if not already set
++    if (proc_pid == 0)
++        proc_pid = getpid();
++
+     log_Event ev = {
+         .fmt   = fmt,
+         .file  = file,
+         .line  = line,
+         .level = level,
+     };
+
+     lock();
+
+     if (!L.quiet && level >= L.level) {
+         init_event(&ev, stderr);
+         va_start(ev.ap, fmt);
+         stdout_callback(&ev);
+         va_end(ev.ap);
+     }
+
+     for (int i = 0; i < MAX_CALLBACKS && L.callbacks[i].fn; i++) {
+         Callback *cb = &L.callbacks[i];
+         if (level >= cb->level) {
+-        init_event(&ev, cb->udata);
+-        va_start(ev.ap, fmt);
+-        cb->fn(&ev);
+-        va_end(ev.ap);
++            init_event(&ev, cb->udata);
++            va_start(ev.ap, fmt);
++            cb->fn(&ev);
++            va_end(ev.ap);
+         }
+     }
+ }
