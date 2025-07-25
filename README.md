@@ -1,6 +1,7 @@
 # Progetto-SO_24-25_Network
 
 ![CI](https://github.com/seintian/post-office/actions/workflows/ci.yml/badge.svg)
+[![Maintainability](https://qlty.sh/gh/Seintian/projects/post-office/maintainability.svg)](https://qlty.sh/gh/Seintian/projects/post-office)
 
 ```txt
 <project-root>
