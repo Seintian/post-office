@@ -27,7 +27,7 @@ BIN_DIR             = bin
 TESTS_DIR           = tests
 LIBS_DIR            = libs
 SRC_DIR             = src
-SIMULATION_DIR      = $(SRC_DIR)/simulation
+CORE_DIR            = $(SRC_DIR)/core
 UTILS_DIR           = $(SRC_DIR)/utils
 
 # Libraries Directories
@@ -39,12 +39,13 @@ LOG_C_DIR           = $(LIBS_DIR)/log_c
 LIBFORT_DIR         = $(LIBS_DIR)/libfort
 
 # Processes' sources directories
-MAIN_DIR            = $(SRC_DIR)/main
-DIRECTOR_DIR        = $(SRC_DIR)/simulation/director
-TICKET_ISSUER_DIR   = $(SRC_DIR)/simulation/ticket_issuer
-USERS_MANAGER_DIR   = $(SRC_DIR)/simulation/users_manager
-WORKER_DIR          = $(SRC_DIR)/simulation/worker
-USER_DIR            = $(SRC_DIR)/simulation/user
+MAIN_DIR            = $(CORE_DIR)/main
+SIMULATION_DIR      = $(CORE_DIR)/simulation
+DIRECTOR_DIR        = $(SIMULATION_DIR)/director
+TICKET_ISSUER_DIR   = $(SIMULATION_DIR)/ticket_issuer
+USERS_MANAGER_DIR   = $(SIMULATION_DIR)/users_manager
+WORKER_DIR          = $(SIMULATION_DIR)/worker
+USER_DIR            = $(SIMULATION_DIR)/user
 
 # Configuration files
 TIMEOUT_INI_PATH    = $(CONFIG_DIR)/timeout.ini
