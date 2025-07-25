@@ -19,9 +19,9 @@ jobs:
 
       - name: Build with coverage flags
         run: |
-          mkdir -p build
-          cd build
-          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="--coverage -O0 -g" ..
+          mkdir -p app/build
+          cd app/build
+          make all
           make
 
       - name: Run Unity Tests
@@ -29,7 +29,7 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          cd build
+          cd app/build
           lcov --capture --directory . --output-file coverage.info
           lcov --remove coverage.info '/usr/*' --output-file coverage.info
           lcov --remove coverage.info '*/main.c' '*/unity.c' --output-file coverage.info
