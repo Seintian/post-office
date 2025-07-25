@@ -33,7 +33,7 @@ jobs:
           cd app
           lcov --capture --directory . --output-file build/coverage.info
           lcov --remove build/coverage.info '/usr/*' --output-file build/coverage.info
-          lcov --remove build/coverage.info '*/main.c' '*/unity.c' --output-file build/coverage.info
+          lcov --remove build/coverage.info '*/main.c' '*/director.c' '*/ticket_issuer.c' '*/worker.c' '*/user.c' '*/users_manager.c' '*/unity.c' --output-file build/coverage.info
           lcov --list build/coverage.info
 
       - name: Install qlty CLI
