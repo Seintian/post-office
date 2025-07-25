@@ -43,4 +43,4 @@ jobs:
         uses: qltysh/qlty-action/coverage@v1
         with:
           oidc: true
-          files: build/coverage.info
+          files: app/build/coverage.info
