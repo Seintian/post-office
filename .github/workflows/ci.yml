@@ -38,7 +38,7 @@ jobs:
       - name: Install qlty CLI
         run: |
           curl https://qlty.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          source /home/runner/.config/.bashrc 
 
       - name: Upload to Qlty
         env:
