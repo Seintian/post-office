@@ -36,7 +36,9 @@ jobs:
           lcov --list build/coverage.info
 
       - name: Install qlty CLI
-        run: curl https://qlty.sh | sh
+        run: |
+          curl https://qlty.sh | sh
+          source ~/.config/.bashrc 
 
       - name: Upload to Qlty
         env:
