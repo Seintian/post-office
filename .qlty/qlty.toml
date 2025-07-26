@@ -40,7 +40,7 @@ mode = "comment"
 [[source]]
 name    = "default"
 default = true
-branch = ["master", "dev"]
+branch  = ["master", "dev"]
 
 # -------------------------------------------------------------------
 # 5) Enable (or disable) specific plugins
