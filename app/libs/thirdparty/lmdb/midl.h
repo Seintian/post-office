@@ -27,7 +27,7 @@
 #ifndef _MDB_MIDL_H_
 #define _MDB_MIDL_H_
 
-#include "lmdb.h"
+#include "lmdb/lmdb.h"
 
 #ifdef __cplusplus
 extern "C" {

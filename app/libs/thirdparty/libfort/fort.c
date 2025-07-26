@@ -2137,7 +2137,7 @@ f_string_buffer_t *cell_get_string_buffer(f_cell_t *cell);
 #define ROW_H
 
 /* #include "fort_utils.h" */ /* Commented by amalgamation script */
-#include "fort.h"
+#include "libfort/fort.h"
 #include <stdarg.h>
 /* #include "properties.h" */ /* Commented by amalgamation script */
 #ifdef FT_HAVE_WCHAR
@@ -2623,7 +2623,7 @@ SOFTWARE.
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include "fort.h"
+#include "libfort/fort.h"
 #include <assert.h>
 #include <string.h>
 #include <wchar.h>

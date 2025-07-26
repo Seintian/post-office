@@ -1,5 +1,5 @@
-MAKE                = make
-CC                  = gcc
+MAKE                   = make
+CC                     = gcc
 
 # Try to find bash; if not found, fall back to /bin/sh
 BASH := $(shell command -v bash 2>/dev/null)
@@ -15,49 +15,50 @@ endif
 # *** Directories *** #
 
 # Generated Directories
-DOCS_DIR            = docs
-LOGS_DIR            = logs
-CRASH_REPORTS_DIR   = crash_reports
+DOCS_DIR               = docs
+LOGS_DIR               = logs
+CRASH_REPORTS_DIR      = crash_reports
 
 # Work Directories
-CONFIG_DIR          = config
-INCLUDE_DIR         = include
-BUILD_DIR           = build
-BIN_DIR             = bin
-TESTS_DIR           = tests
-LIBS_DIR            = libs
-POSTOFFICE_LIBS_DIR = $(LIBS_DIR)/postoffice
-THIRDPARTY_LIBS_DIR = $(LIBS_DIR)/thirdparty
-SRC_DIR             = src
-CORE_DIR            = $(SRC_DIR)/core
-UTILS_DIR           = $(SRC_DIR)/utils
+CONFIG_DIR             = config
+BUILD_DIR              = build
+BIN_DIR                = bin
+TESTS_DIR              = tests
+INCLUDE_DIR            = include
+POSTOFFICE_INCLUDE_DIR = $(INCLUDE_DIR)/postoffice
+THIRDPARTY_INCLUDE_DIR = $(INCLUDE_DIR)/thirdparty
+LIBS_DIR               = libs
+POSTOFFICE_LIBS_DIR    = $(LIBS_DIR)/postoffice
+THIRDPARTY_LIBS_DIR    = $(LIBS_DIR)/thirdparty
+SRC_DIR                = src
+CORE_DIR               = $(SRC_DIR)/core
+UTILS_DIR              = $(SRC_DIR)/utils
 
 # Libraries Directories
-INIH_DIR            = $(THIRDPARTY_LIBS_DIR)/inih
-UNITY_DIR           = $(THIRDPARTY_LIBS_DIR)/unity
-LOG_C_DIR           = $(THIRDPARTY_LIBS_DIR)/log_c
-LIBFORT_DIR         = $(THIRDPARTY_LIBS_DIR)/libfort
-LMDB_DIR            = $(THIRDPARTY_LIBS_DIR)/lmdb
-MBEDTLS_DIR         = $(THIRDPARTY_LIBS_DIR)/mbedtls
-HASHTABLE_DIR       = $(POSTOFFICE_LIBS_DIR)/hashtable
-PRIME_DIR           = $(POSTOFFICE_LIBS_DIR)/prime
+INIH_DIR               = $(THIRDPARTY_LIBS_DIR)/inih
+UNITY_DIR              = $(THIRDPARTY_LIBS_DIR)/unity
+LOG_C_DIR              = $(THIRDPARTY_LIBS_DIR)/log_c
+LIBFORT_DIR            = $(THIRDPARTY_LIBS_DIR)/libfort
+LMDB_DIR               = $(THIRDPARTY_LIBS_DIR)/lmdb
+HASHTABLE_DIR          = $(POSTOFFICE_LIBS_DIR)/hashtable
+PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
 
 # Processes' sources directories
-MAIN_DIR            = $(CORE_DIR)/main
-SIMULATION_DIR      = $(CORE_DIR)/simulation
-DIRECTOR_DIR        = $(SIMULATION_DIR)/director
-TICKET_ISSUER_DIR   = $(SIMULATION_DIR)/ticket_issuer
-USERS_MANAGER_DIR   = $(SIMULATION_DIR)/users_manager
-WORKER_DIR          = $(SIMULATION_DIR)/worker
-USER_DIR            = $(SIMULATION_DIR)/user
+MAIN_DIR               = $(CORE_DIR)/main
+SIMULATION_DIR         = $(CORE_DIR)/simulation
+DIRECTOR_DIR           = $(SIMULATION_DIR)/director
+TICKET_ISSUER_DIR      = $(SIMULATION_DIR)/ticket_issuer
+USERS_MANAGER_DIR      = $(SIMULATION_DIR)/users_manager
+WORKER_DIR             = $(SIMULATION_DIR)/worker
+USER_DIR               = $(SIMULATION_DIR)/user
 
 # Configuration files
-TIMEOUT_INI_PATH    = $(CONFIG_DIR)/timeout.ini
-EXPLODE_INI_PATH    = $(CONFIG_DIR)/explode.ini
+TIMEOUT_INI_PATH       = $(CONFIG_DIR)/timeout.ini
+EXPLODE_INI_PATH       = $(CONFIG_DIR)/explode.ini
 
 # *** Compiler flags *** #
 
-INCLUDES = -I$(INCLUDE_DIR) -I$(POSTOFFICE_LIBS_DIR) \
+INCLUDES = -I$(POSTOFFICE_INCLUDE_DIR) -I$(THIRDPARTY_INCLUDE_DIR) -I$(POSTOFFICE_LIBS_DIR) \
 -I$(THIRDPARTY_LIBS_DIR) -I$(SRC_DIR) -I$(SIMULATION_DIR)
 
 #! set to `true` to enable debug flags
@@ -170,6 +171,7 @@ PRIME_SRC       = $(wildcard $(PRIME_DIR)/*.c)
 LIBFORT_SRC	    = $(wildcard $(LIBFORT_DIR)/*.c)
 LMDB_SRC	    = $(wildcard $(LMDB_DIR)/*.c)
 MBEDTLS_SRC     = $(wildcard $(MBEDTLS_DIR)/*.c)
+TFPSACRYPTO_SRC = $(wildcard $(TFPSACRYPTO_DIR)/*.c)
 
 # Source Files for each process
 MAIN_SRC            = $(wildcard $(MAIN_DIR)/modules/src/*.c)
@@ -196,11 +198,9 @@ INIH_OBJS           = $(INIH_SRC:$(INIH_DIR)/%.c=$(BUILD_DIR)/%.o)
 VALIDATION_OBJS     = $(VALIDATION_SRC:$(VALIDATION_DIR)/%.c=$(BUILD_DIR)/%.o)
 HASHTABLE_OBJS      = $(HASHTABLE_SRC:$(HASHTABLE_DIR)/%.c=$(BUILD_DIR)/%.o)
 PRIME_OBJS          = $(PRIME_SRC:$(PRIME_DIR)/%.c=$(BUILD_DIR)/%.o)
-MBEDTLS_OBJS        = $(MBEDTLS_SRC:$(MBEDTLS_DIR)/%.c=$(BUILD_DIR)/%.o)
 UTILS_OBJS          = $(UTILS_SRC:$(UTILS_DIR)/%.c=$(BUILD_DIR)/%.o)
 DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(VALIDATION_OBJS) \
-                      $(HASHTABLE_OBJS) $(PRIME_OBJS) $(LOG_C_OBJS) \
-                      $(MBEDTLS_OBJS)
+                      $(HASHTABLE_OBJS) $(PRIME_OBJS) $(LOG_C_OBJS)
 
 UNITY_OBJS          = $(UNITY_SRC:$(UNITY_DIR)/%.c=$(BUILD_DIR)/%.o)
 LMDB_OBJS			= $(LMDB_SRC:$(LMDB_DIR)/%.c=$(BUILD_DIR)/%.o)
@@ -417,6 +417,10 @@ $(BUILD_DIR)/%.o: $(PRIME_DIR)/%.c
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(LIBFORT_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(LMDB_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(INCLUDES) -c $< -o $@
 

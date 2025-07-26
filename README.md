@@ -20,7 +20,6 @@
 │   │   ├── postoffice            # Public API headers
 │   │   │   ├── core.h            # core business logic API
 │   │   │   ├── net.h             # networking API
-│   │   │   ├── crypto.h          # TLS/auth API
 │   │   │   ├── storage.h         # persistence API
 │   │   │   └── perf.h            # performance API
 │   │   └── thirdparty            # bundled library headers
@@ -43,10 +42,6 @@
 │   │   │   ├── framing.c         # message framing/parsing
 │   │   │   ├── poller.c          # epoll/kqueue wrapper
 │   │   │   └── protocol.c        # PostOffice protocol encode/decode
-│   │   ├── crypto                # Security and authentication
-│   │   │   ├── tls.c             # TLS handshake & context
-│   │   │   ├── auth.c            # user authentication
-│   │   │   └── rng.c             # secure RNG wrappers
 │   │   ├── storage               # Persistence layer
 │   │   │   ├── db_lmdb.c         # LMDB integration
 │   │   │   ├── logstore.c        # append‑only log impl
@@ -63,7 +58,6 @@
 ├── tests                         # Unit & integration tests
 │   ├── core                      # tests for director/user/worker/etc.
 │   ├── net                       # echo server/client, framing tests
-│   ├── crypto                    # TLS handshake & auth edge cases
 │   ├── storage                   # DB recovery & compaction tests
 │   ├── perf                      # throughput/latency benchmarks
 │   └── utils                     # config, logging, file utils tests
