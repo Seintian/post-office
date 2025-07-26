@@ -26,17 +26,21 @@ BUILD_DIR           = build
 BIN_DIR             = bin
 TESTS_DIR           = tests
 LIBS_DIR            = libs
+POSTOFFICE_LIBS_DIR = $(LIBS_DIR)/postoffice
+THIRDPARTY_LIBS_DIR = $(LIBS_DIR)/thirdparty
 SRC_DIR             = src
 CORE_DIR            = $(SRC_DIR)/core
 UTILS_DIR           = $(SRC_DIR)/utils
 
 # Libraries Directories
-INIH_DIR            = $(LIBS_DIR)/inih
-UNITY_DIR           = $(LIBS_DIR)/unity
-HASHTABLE_DIR       = $(LIBS_DIR)/hashtable
-PRIME_DIR           = $(LIBS_DIR)/prime
-LOG_C_DIR           = $(LIBS_DIR)/log_c
-LIBFORT_DIR         = $(LIBS_DIR)/libfort
+INIH_DIR            = $(THIRDPARTY_LIBS_DIR)/inih
+UNITY_DIR           = $(THIRDPARTY_LIBS_DIR)/unity
+LOG_C_DIR           = $(THIRDPARTY_LIBS_DIR)/log_c
+LIBFORT_DIR         = $(THIRDPARTY_LIBS_DIR)/libfort
+LMDB_DIR            = $(THIRDPARTY_LIBS_DIR)/lmdb
+MBEDTLS_DIR         = $(THIRDPARTY_LIBS_DIR)/mbedtls
+HASHTABLE_DIR       = $(POSTOFFICE_LIBS_DIR)/hashtable
+PRIME_DIR           = $(POSTOFFICE_LIBS_DIR)/prime
 
 # Processes' sources directories
 MAIN_DIR            = $(CORE_DIR)/main
@@ -53,7 +57,8 @@ EXPLODE_INI_PATH    = $(CONFIG_DIR)/explode.ini
 
 # *** Compiler flags *** #
 
-INCLUDES            = -I$(INCLUDE_DIR) -I$(LIBS_DIR) -I$(SRC_DIR) -I$(SIMULATION_DIR)
+INCLUDES = -I$(INCLUDE_DIR) -I$(POSTOFFICE_LIBS_DIR) \
+-I$(THIRDPARTY_LIBS_DIR) -I$(SRC_DIR) -I$(SIMULATION_DIR)
 
 #! set to `true` to enable debug flags
 DEV = true
@@ -163,6 +168,8 @@ INIH_SRC        = $(wildcard $(INIH_DIR)/*.c)
 HASHTABLE_SRC   = $(wildcard $(HASHTABLE_DIR)/*.c)
 PRIME_SRC       = $(wildcard $(PRIME_DIR)/*.c)
 LIBFORT_SRC	    = $(wildcard $(LIBFORT_DIR)/*.c)
+LMDB_SRC	    = $(wildcard $(LMDB_DIR)/*.c)
+MBEDTLS_SRC     = $(wildcard $(MBEDTLS_DIR)/*.c)
 
 # Source Files for each process
 MAIN_SRC            = $(wildcard $(MAIN_DIR)/modules/src/*.c)
@@ -184,22 +191,25 @@ TEST_MAIN_SRC      += $(wildcard $(TESTS_DIR)/*.c)
 # *** Object Files *** #
 
 # Object Files
-LOG_C_OBJS             = $(LOG_C_SRC:$(LOG_C_DIR)/%.c=$(BUILD_DIR)/%.o)
-INIH_OBJS              = $(INIH_SRC:$(INIH_DIR)/%.c=$(BUILD_DIR)/%.o)
-VALIDATION_OBJS        = $(VALIDATION_SRC:$(VALIDATION_DIR)/%.c=$(BUILD_DIR)/%.o)
-HASHTABLE_OBJS         = $(HASHTABLE_SRC:$(HASHTABLE_DIR)/%.c=$(BUILD_DIR)/%.o)
-PRIME_OBJS             = $(PRIME_SRC:$(PRIME_DIR)/%.c=$(BUILD_DIR)/%.o)
-UTILS_OBJS             = $(UTILS_SRC:$(UTILS_DIR)/%.c=$(BUILD_DIR)/%.o)
-DEFAULTS_OBJS          = $(INIH_OBJS) $(UTILS_OBJS) $(VALIDATION_OBJS) \
-                         $(HASHTABLE_OBJS) $(PRIME_OBJS) $(LOG_C_OBJS)
+LOG_C_OBJS          = $(LOG_C_SRC:$(LOG_C_DIR)/%.c=$(BUILD_DIR)/%.o)
+INIH_OBJS           = $(INIH_SRC:$(INIH_DIR)/%.c=$(BUILD_DIR)/%.o)
+VALIDATION_OBJS     = $(VALIDATION_SRC:$(VALIDATION_DIR)/%.c=$(BUILD_DIR)/%.o)
+HASHTABLE_OBJS      = $(HASHTABLE_SRC:$(HASHTABLE_DIR)/%.c=$(BUILD_DIR)/%.o)
+PRIME_OBJS          = $(PRIME_SRC:$(PRIME_DIR)/%.c=$(BUILD_DIR)/%.o)
+MBEDTLS_OBJS        = $(MBEDTLS_SRC:$(MBEDTLS_DIR)/%.c=$(BUILD_DIR)/%.o)
+UTILS_OBJS          = $(UTILS_SRC:$(UTILS_DIR)/%.c=$(BUILD_DIR)/%.o)
+DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(VALIDATION_OBJS) \
+                      $(HASHTABLE_OBJS) $(PRIME_OBJS) $(LOG_C_OBJS) \
+                      $(MBEDTLS_OBJS)
 
-UNITY_OBJS = $(UNITY_SRC:$(UNITY_DIR)/%.c=$(BUILD_DIR)/%.o)
-LIBFORT_OBJS = $(LIBFORT_SRC:$(LIBFORT_DIR)/%.c=$(BUILD_DIR)/%.o)
+UNITY_OBJS          = $(UNITY_SRC:$(UNITY_DIR)/%.c=$(BUILD_DIR)/%.o)
+LMDB_OBJS			= $(LMDB_SRC:$(LMDB_DIR)/%.c=$(BUILD_DIR)/%.o)
+LIBFORT_OBJS        = $(LIBFORT_SRC:$(LIBFORT_DIR)/%.c=$(BUILD_DIR)/%.o)
 
 MAIN_OBJS 			= $(MAIN_SRC:$(MAIN_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
-DIRECTOR_OBJS 		= $(DIRECTOR_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS)
-TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS)
-USERS_MANAGER_OBJS 	= $(USERS_MANAGER_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS)
+DIRECTOR_OBJS 		= $(DIRECTOR_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS) $(LMDB_OBJS)
+TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS) $(LMDB_OBJS)
+USERS_MANAGER_OBJS 	= $(USERS_MANAGER_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 WORKER_OBJS 		= $(WORKER_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS)
 USER_OBJS 			= $(USER_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS)
 TEST_MAIN_OBJS 		= $(TEST_MAIN_SRC:$(TESTS_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS) $(UNITY_OBJS)
