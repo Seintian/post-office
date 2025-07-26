@@ -83,13 +83,10 @@ WARNING_FLAGS = -Wall -Wextra -Werror -Wvla -Wshadow -Wconversion -Wformat=2 \
 -Wformat-security -Wformat-nonliteral
 
 # Debugging and sanitizer flags (only for debug builds)
-DEBUGGING_FLAGS = -O1 -fsanitize=address,alignment,shift,null,object-size,undefined,float-divide-by-zero,signed-integer-overflow
+DEBUGGING_FLAGS = --coverage -O1 -fsanitize=address,alignment,shift,null,object-size,undefined,float-divide-by-zero,signed-integer-overflow
 
 # Production flags
 PRODUCTION_FLAGS = -O3 -DNDEBUG
-
-# Testing flags (for test builds)
-TESTING_FLAGS = --coverage
 
 # Set CFLAGS: Production always gets utility + optimization + security.
 CFLAGS = $(UTILITY_FLAGS) $(OPT_FLAGS) $(SECURITY_FLAGS)
@@ -426,7 +423,7 @@ $(BUILD_DIR)/%.o: $(LMDB_DIR)/%.c
 
 $(BUILD_DIR)/%.o: $(TESTS_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(TESTING_FLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # Include dependencies
 -include $(BUILD_DIR)/*.d
