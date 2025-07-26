@@ -1,0 +1,93 @@
+# Qlty project config—see https://docs.qlty.sh/analysis-configuration
+
+# Config file version (always "0" for now)
+config_version = "0"
+
+# -------------------------------------------------------------------
+# 1) Paths & files to ignore completely (on top of .gitignore)
+# -------------------------------------------------------------------
+# Don't scan test harness files or generated code:
+exclude_patterns = [
+  # never scan Unity internals
+  "**/libs/unity/**",
+  # never scan generated files
+  "**/build/**",
+]
+
+# -------------------------------------------------------------------
+# 2) How we detect tests (so Qlty can skip unit test code)
+# -------------------------------------------------------------------
+# Tell Qlty which files are tests so you don't get lint comments in them
+test_patterns = [
+  "**/tests/**",        # any file under tests/
+  "**/*_test.c",        # any _test.c file
+  "**/test_*.c",        # or test_*.c
+]
+
+# -------------------------------------------------------------------
+# 3) Global defaults for "mode" of findings
+# -------------------------------------------------------------------
+# All maintainability (structure/duplication) issues annotate as comments,
+# but do NOT fail the Quality Gate.
+[checks]
+mode = "comment"
+
+# -------------------------------------------------------------------
+# 4) Plugin sources
+# -------------------------------------------------------------------
+# You almost always want the "default" source of linters & scanners.
+# You can add more [[source]] blocks if you have custom plugin repos.
+[[source]]
+name    = "default"
+default = true
+branch = ["master", "dev"]
+
+# -------------------------------------------------------------------
+# 5) Enable (or disable) specific plugins
+# -------------------------------------------------------------------
+# By default Qlty enables a broad set of C/C++ linters (clang‑tidy, cppcheck).
+# Here's how to turn off a plugin or pin its version.
+#
+# Example: disable the "clang-format" plugin if you want to run it yourself:
+#[[plugin]]
+#name    = "clang-format"
+#mode    = "disabled"
+#
+# Example: lock cppcheck to v2.6:
+#[[plugin]]
+#name    = "cppcheck"
+#version = "2.6.0"
+
+# -------------------------------------------------------------------
+# 6) Per‑language overrides and thresholds
+# -------------------------------------------------------------------
+# If you want fancier control over, say, complexity thresholds in C…
+# uncomment and customize the block below:
+#
+#[language.c.checks]
+#  # Allow up to 5 parameters per function instead of the default 4
+#  function_parameters.threshold = 5
+#
+#[language.c.checks.return_statements]
+#  # Don't complain about functions with too many returns
+#  enabled = false
+
+# -------------------------------------------------------------------
+# 7) Granular control: triage & severity escalation
+# -------------------------------------------------------------------
+# You can promote certain issues to "block" (fail CI) while leaving
+# the rest as comments.
+#
+#[[triage]]
+#match = "clang-tidy/bugprone-*"
+#set = { mode = "block" }
+
+# -------------------------------------------------------------------
+# 8) (Optional) Coverage upload settings
+# -------------------------------------------------------------------
+# If you ever need to tweak the paths/formats used by `qlty upload`,
+# you can specify them here instead of via CLI flags.
+#
+#[coverage]
+#  format = "lcov"
+#  path   = "build/coverage.info"
