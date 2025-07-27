@@ -16,7 +16,7 @@
 #pragma pack(push,1)
 typedef struct {
     uint16_t version;      // 0x0001
-    uint8_t  msg_type;     // enum above
+    uint8_t  msg_type;     // shared enum
     uint8_t  flags;        // bitmask
     uint32_t payload_len;  // network-order
 } po_header_t;

@@ -64,8 +64,11 @@ EXPLODE_INI_PATH       = $(CONFIG_DIR)/explode.ini
 
 # *** Compiler flags *** #
 
-INCLUDES = -I$(POSTOFFICE_INCLUDE_DIR) -I$(THIRDPARTY_INCLUDE_DIR) -I$(POSTOFFICE_LIBS_DIR) \
--I$(THIRDPARTY_LIBS_DIR) -I$(SRC_DIR) -I$(SIMULATION_DIR)
+INCLUDES_I = -I$(POSTOFFICE_INCLUDE_DIR) -I$(THIRDPARTY_INCLUDE_DIR)
+LIBS_I     = -I$(POSTOFFICE_LIBS_DIR) -I$(THIRDPARTY_LIBS_DIR)
+CORE_I     = -I$(SRC_DIR)/core -I$(SIMULATION_DIR)
+
+ALL_I      = $(INCLUDES_I) $(LIBS_I) $(CORE_I)
 
 #! set to `true` to enable debug flags
 DEV = true
@@ -370,89 +373,91 @@ help:
 
 # Create executables
 $(MAIN_EXEC): $(MAIN_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
 
 $(DIRECTOR_EXEC): $(DIRECTOR_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
 
 $(TICKET_ISSUER_EXEC): $(TICKET_ISSUER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
 
 $(USERS_MANAGER_EXEC): $(USERS_MANAGER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
 
 $(WORKER_EXEC): $(WORKER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
 
 $(USER_EXEC): $(USER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
 
-$(TEST_MAIN_EXEC): $(TEST_MAIN_OBJS) $(UNITY_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(TESTING_FLAGS) $(LDFLAGS) $(INCLUDES) -o $@ $^
+$(TEST_MAIN_EXEC): $(TEST_MAIN_OBJS) | $(BIN_DIR)
+	$(CC) $(CFLAGS) $(TESTING_FLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
 
 # Compile object files (create *subdirectories* if not exist)
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(MAIN_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(CORE_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(HASHTABLE_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(NET_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(PERF_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(PRIME_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(STORAGE_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(UTILS_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(INIH_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@ -DINI_ALLOW_NO_VALUE -DINI_STOP_ON_FIRST_ERROR
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@ -DINI_ALLOW_NO_VALUE -DINI_STOP_ON_FIRST_ERROR
 
 $(BUILD_DIR)/%.o: $(LIBFORT_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(INCLUDES_I) $(LIBS_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(LMDB_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(INCLUDES_I) $(LIBS_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(LOG_C_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@ -DLOG_USE_COLOR
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@ -DLOG_USE_COLOR
 
 $(BUILD_DIR)/%.o: $(UNITY_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@ -DUNITY_FIXTURE_NO_EXTRAS
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@ -DUNITY_FIXTURE_NO_EXTRAS
 
 $(BUILD_DIR)/%.o: $(TESTS_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@ -DUNITY_FIXTURE_NO_EXTRAS
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@ -DUNITY_FIXTURE_NO_EXTRAS
 
 # Include dependencies
 -include $(BUILD_DIR)/*.d
+-include $(BUILD_DIR)/**/*.d
+-include $(BUILD_DIR)/**/**/*.d
 
 # Create directories if not exist
 $(BIN_DIR):
