@@ -35,7 +35,7 @@ jobs:
       - name: Generate coverage report
         run: |
           cd app
-          lcov --capture --directory . --output-file build/coverage.info
+          lcov --capture --directory . --output-file build/coverage.info --ignore-errors mismatch
           lcov --remove build/coverage.info '/usr/*' --output-file build/coverage.info
           lcov --list build/coverage.info
 
