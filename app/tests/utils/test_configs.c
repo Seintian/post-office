@@ -50,7 +50,7 @@ TEST(Configs, LoadSuccess) {
 TEST(Configs, LoadFailureMalformed) {
     char *path = mktempfile(bad_ini);
     po_config_t *cfg;
-    int rc = po_config_load(path, &cfg);
+    int rc = po_config_load_strict(path, &cfg);
     TEST_ASSERT_NOT_EQUAL(0, rc);
     free(path);
 }
