@@ -30,60 +30,114 @@ typedef struct {
 ```txt
 <project-root>
 ├── app
-│   ├── config                    # Configuration files (.ini, .yaml)
+│   ├── config/
 │   │   ├── explode.ini
-│   │   ├── timeout.ini
-│   │   └── ssl_cert.pem          # future SSL certs/keys
-│   ├── docs                      # Design docs, usage, protocol specs
+│   │   └── timeout.ini
+│   │
+│   ├── docs/
 │   │   ├── design_report.md
-│   │   ├── protocol_spec.md
-│   │   ├── ssl_key_management.md
-│   │   └── tuning_guide.md
-│   ├── include
-│   │   ├── postoffice            # Public API headers
-│   │   │   ├── core.h            # core business logic API
-│   │   │   ├── net.h             # networking API
-│   │   │   ├── storage.h         # persistence API
-│   │   │   └── perf.h            # performance API
-│   │   └── thirdparty            # bundled library headers
-│   ├── libs                      # Embedded third‑party code
-│   │   ├── hashtable
-│   │   ├── inih
-│   │   ├── log_c
-│   │   ├── libfort
-│   │   └── unity
-│   ├── src
-│   │   ├── core                  # Business logic processes
-│   │   │   ├── main.c            # Simulation dashboard (Main)
-│   │   │   ├── director.c        # Director (Server)
-│   │   │   ├── user.c            # User client
-│   │   │   ├── worker.c          # Worker client
-│   │   │   ├── ticket_issuer.c   # Ticket Issuer client
-│   │   │   └── users_manager.c   # Users Manager service/client
-│   │   ├── net                   # Networking layer
-│   │   │   ├── socket.c          # socket setup & teardown
-│   │   │   ├── framing.c         # message framing/parsing
-│   │   │   ├── poller.c          # epoll/kqueue wrapper
-│   │   │   └── protocol.c        # PostOffice protocol encode/decode
-│   │   ├── storage               # Persistence layer
-│   │   │   ├── db_lmdb.c         # LMDB integration
-│   │   │   ├── logstore.c        # append‑only log impl
-│   │   │   └── index.c           # index & compaction
-│   │   ├── perf                  # Performance optimizations
-│   │   │   ├── ringbuf.c         # lock‑free ring buffer
-│   │   │   ├── batcher.c         # message batching
-│   │   │   └── zerocopy.c        # zero‑copy routines
-│   │   └── utils                 # Shared helpers
-│   │       ├── configs.c         # config parsing
-│   │   │   ├── logger.c          # logging wrapper
-│   │   │   └── files.c           # file utilities
-│   └── Makefile                  # Build targets: core/demo/tests/docs
-├── tests                         # Unit & integration tests
-│   ├── core                      # tests for director/user/worker/etc.
-│   ├── net                       # echo server/client, framing tests
-│   ├── storage                   # DB recovery & compaction tests
-│   ├── perf                      # throughput/latency benchmarks
-│   └── utils                     # config, logging, file utils tests
+│   │   ├── statistics_format.md
+│   │   ├── tuning_guide.md
+│   │   ├── usage_instructions.md
+│   │   └── … (other docs)
+│   │
+│   ├── include/
+│   │   └── postoffice/
+│   │       ├── core/
+│   │       │   ├── director.h
+│   │       │   ├── main.h
+│   │       │   ├── shared.h
+│   │       │   ├── ticket_issuer.h
+│   │       │   ├── user.h
+│   │       │   ├── users_manager.h
+│   │       │   └── worker.h
+│   │       │
+│   │       ├── net.h
+│   │       ├── storage.h
+│   │       ├── perf.h
+│   │       └── utils/
+│   │           ├── configs.h
+│   │           ├── files.h
+│   │           ├── logging.h
+│   │           └── random.h
+│   │
+│   ├── libs/                       ← vendored third‑party code
+│   │   ├── postoffice/            ← your implementation modules
+│   │   │   ├── net/
+│   │   │   │   ├── framing.c
+│   │   │   │   ├── framing.h       ← internal parser header
+│   │   │   │   ├── net.c
+│   │   │   │   ├── poller.c
+│   │   │   │   ├── poller.h
+│   │   │   │   ├── protocol.c
+│   │   │   │   ├── protocol.h
+│   │   │   │   ├── socket.c
+│   │   │   │   └── socket.h
+│   │   │   │
+│   │   │   ├── perf/
+│   │   │   │   ├── batcher.c
+│   │   │   │   ├── batcher.h
+│   │   │   │   ├── ringbuf.c
+│   │   │   │   ├── ringbuf.h
+│   │   │   │   ├── zerocopy.c
+│   │   │   │   └── zerocopy.h
+│   │   │   │
+│   │   │   ├── storage/
+│   │   │   │   ├── db_lmdb.c
+│   │   │   │   ├── db_lmdb.h
+│   │   │   │   ├── index.c
+│   │   │   │   ├── index.h
+│   │   │   │   ├── logstore.c
+│   │   │   │   ├── logstore.h
+│   │   │   │   └── storage.c
+│   │   │   │
+│   │   │   └── utils/
+│   │   │       ├── configs.c
+│   │   │       ├── files.c
+│   │   │       ├── logging.c
+│   │   │       ├── random.c
+│   │   │       └── (any internal headers)
+│   │   │
+│   │   └── thirdparty/            ← all vendored external libs
+│   │       ├── inih/              ← ini.c, ini.h
+│   │       ├── libfort/           ← fort.c, fort.h
+│   │       ├── lmdb/              ← mdb.c, mdb.h, midl.c, midl.h
+│   │       ├── log_c/             ← log.c, log.h
+│   │       └── unity/             ← unity.c, unity.h, unity_internals.h
+│   │
+│   ├── src/                       ← "your" executables entrypoints
+│   │   ├── core/
+│   │   │   ├── main/              ← simulation dashboard
+│   │   │   │   └── main.c
+│   │   │   │
+│   │   │   └── simulation/
+│   │   │       ├── director/      ← Director process
+│   │   │       │   └── director.c
+│   │   │       │
+│   │   │       ├── ticket_issuer/
+│   │   │       │   └── ticket_issuer.c
+│   │   │       │
+│   │   │       ├── user/
+│   │   │       │   └── user.c
+│   │   │       │
+│   │   │       ├── users_manager/
+│   │   │       │   └── users_manager.c
+│   │   │       │
+│   │   │       └── worker/
+│   │   │           └── worker.c
+│   │   │
+│   │   └── (no modules/ stubs here—tests should go under `tests/`)  
+│   │
+│   ├── tests/                     ← unit & integration tests
+│   │   ├── core/                  ← tests for main, director, user, etc.
+│   │   ├── net/                   ← echo server/client, framing tests
+│   │   ├── perf/                  ← ringbuf, batcher, zerocopy tests
+│   │   ├── storage/               ← LMDB & logstore tests
+│   │   └── utils/                 ← configs, files, logging, random tests
+│   │
+│   ├── Makefile                   ← builds all src/core executables + libs + tests
+│   └── Doxyfile
+│  
 └── project                       # Project paperwork, drafts, PDFs
     └── 20241126-Draft-Progetto_SO_2024_25.pdf
 ```
