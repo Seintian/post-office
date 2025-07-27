@@ -6,14 +6,13 @@
 
 ## Network Protocol
 
-```txt
+```c
+/*
 ┌──────────────────────────────────────────────────────────┐
 │  2B: Version │ 1B: MsgType │ 1B: Flags │ 4B: PayloadLen  │
 └──────────────────────────────────────────────────────────┘
-⟨PayloadLen⟩ bytes of payload (binary or JSON)
-```
+*/
 
-```c
 #pragma pack(push,1)
 typedef struct {
     uint16_t version;      // 0x0001
@@ -23,6 +22,8 @@ typedef struct {
 } po_header_t;
 #pragma pack(pop)
 ```
+
+⟨PayloadLen⟩ bytes of payload (binary or JSON)
 
 ## Project Structure
 
