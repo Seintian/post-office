@@ -31,21 +31,27 @@ LIBS_DIR               = libs
 POSTOFFICE_LIBS_DIR    = $(LIBS_DIR)/postoffice
 THIRDPARTY_LIBS_DIR    = $(LIBS_DIR)/thirdparty
 SRC_DIR                = src
-CORE_DIR               = $(SRC_DIR)/core
-UTILS_DIR              = $(SRC_DIR)/utils
 
 # Libraries Directories
+## Post Office Libraries
+CORE_DIR               = $(POSTOFFICE_LIBS_DIR)/core
+HASHTABLE_DIR          = $(POSTOFFICE_LIBS_DIR)/hashtable
+NET_DIR                = $(POSTOFFICE_LIBS_DIR)/net
+PERF_DIR			   = $(POSTOFFICE_LIBS_DIR)/perf
+PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
+STORAGE_DIR			   = $(POSTOFFICE_LIBS_DIR)/storage
+UTILS_DIR			   = $(POSTOFFICE_LIBS_DIR)/utils
+
+## Third-party Libraries
 INIH_DIR               = $(THIRDPARTY_LIBS_DIR)/inih
-UNITY_DIR              = $(THIRDPARTY_LIBS_DIR)/unity
-LOG_C_DIR              = $(THIRDPARTY_LIBS_DIR)/log_c
 LIBFORT_DIR            = $(THIRDPARTY_LIBS_DIR)/libfort
 LMDB_DIR               = $(THIRDPARTY_LIBS_DIR)/lmdb
-HASHTABLE_DIR          = $(POSTOFFICE_LIBS_DIR)/hashtable
-PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
+LOG_C_DIR              = $(THIRDPARTY_LIBS_DIR)/log_c
+UNITY_DIR              = $(THIRDPARTY_LIBS_DIR)/unity
 
 # Processes' sources directories
-MAIN_DIR               = $(CORE_DIR)/main
-SIMULATION_DIR         = $(CORE_DIR)/simulation
+MAIN_DIR               = $(SRC_DIR)/core/main
+SIMULATION_DIR         = $(SRC_DIR)/core/simulation
 DIRECTOR_DIR           = $(SIMULATION_DIR)/director
 TICKET_ISSUER_DIR      = $(SIMULATION_DIR)/ticket_issuer
 USERS_MANAGER_DIR      = $(SIMULATION_DIR)/users_manager
@@ -159,30 +165,29 @@ INIH_FLAGS = -DINI_ALLOW_NO_VALUE -DINI_STOP_ON_FIRST_ERROR
 # *** Source Files *** #
 
 # Libraries Files
-UTILS_SRC       = $(wildcard $(UTILS_DIR)/src/*.c)
-LOG_C_SRC       = $(wildcard $(LOG_C_DIR)/*.c)
-UNITY_SRC       = $(wildcard $(UNITY_DIR)/*.c)
-INIH_SRC        = $(wildcard $(INIH_DIR)/*.c)
+## Post Office Libraries
+CORE_SRC        = $(wildcard $(CORE_DIR)/*.c)
 HASHTABLE_SRC   = $(wildcard $(HASHTABLE_DIR)/*.c)
+NET_SRC         = $(wildcard $(NET_DIR)/*.c)
+PERF_SRC        = $(wildcard $(PERF_DIR)/*.c)
 PRIME_SRC       = $(wildcard $(PRIME_DIR)/*.c)
+STORAGE_SRC     = $(wildcard $(STORAGE_DIR)/*.c)
+UTILS_SRC       = $(wildcard $(UTILS_DIR)/*.c)
+
+## Third-party Libraries
+INIH_SRC        = $(wildcard $(INIH_DIR)/*.c)
 LIBFORT_SRC	    = $(wildcard $(LIBFORT_DIR)/*.c)
 LMDB_SRC	    = $(wildcard $(LMDB_DIR)/*.c)
-MBEDTLS_SRC     = $(wildcard $(MBEDTLS_DIR)/*.c)
-TFPSACRYPTO_SRC = $(wildcard $(TFPSACRYPTO_DIR)/*.c)
+LOG_C_SRC       = $(wildcard $(LOG_C_DIR)/*.c)
+UNITY_SRC       = $(wildcard $(UNITY_DIR)/*.c)
 
 # Source Files for each process
-MAIN_SRC            = $(wildcard $(MAIN_DIR)/modules/src/*.c)
-MAIN_SRC           += $(wildcard $(MAIN_DIR)/*.c)
-DIRECTOR_SRC   	    = $(wildcard $(DIRECTOR_DIR)/modules/src/*.c)
-DIRECTOR_SRC       += $(wildcard $(DIRECTOR_DIR)/*.c)
-TICKET_ISSUER_SRC   = $(wildcard $(TICKET_ISSUER_DIR)/modules/src/*.c)
-TICKET_ISSUER_SRC  += $(wildcard $(TICKET_ISSUER_DIR)/*.c)
-USERS_MANAGER_SRC   = $(wildcard $(USERS_MANAGER_DIR)/modules/src/*.c)
-USERS_MANAGER_SRC  += $(wildcard $(USERS_MANAGER_DIR)/*.c)
-WORKER_SRC          = $(wildcard $(WORKER_DIR)/modules/src/*.c)
-WORKER_SRC         += $(wildcard $(WORKER_DIR)/*.c)
-USER_SRC            = $(wildcard $(USER_DIR)/modules/src/*.c)
-USER_SRC           += $(wildcard $(USER_DIR)/*.c)
+MAIN_SRC            = $(wildcard $(MAIN_DIR)/*.c)
+DIRECTOR_SRC        = $(wildcard $(DIRECTOR_DIR)/*.c)
+TICKET_ISSUER_SRC   = $(wildcard $(TICKET_ISSUER_DIR)/*.c)
+USERS_MANAGER_SRC   = $(wildcard $(USERS_MANAGER_DIR)/*.c)
+WORKER_SRC          = $(wildcard $(WORKER_DIR)/*.c)
+USER_SRC            = $(wildcard $(USER_DIR)/*.c)
 TEST_MAIN_SRC       = $(wildcard $(TESTS_DIR)/**/**/*.c)
 TEST_MAIN_SRC      += $(wildcard $(TESTS_DIR)/**/*.c)
 TEST_MAIN_SRC      += $(wildcard $(TESTS_DIR)/*.c)
@@ -190,14 +195,21 @@ TEST_MAIN_SRC      += $(wildcard $(TESTS_DIR)/*.c)
 # *** Object Files *** #
 
 # Object Files
-LOG_C_OBJS          = $(LOG_C_SRC:$(LOG_C_DIR)/%.c=$(BUILD_DIR)/%.o)
-INIH_OBJS           = $(INIH_SRC:$(INIH_DIR)/%.c=$(BUILD_DIR)/%.o)
-VALIDATION_OBJS     = $(VALIDATION_SRC:$(VALIDATION_DIR)/%.c=$(BUILD_DIR)/%.o)
+## Post Office Libraries
+CORE_OBJS           = $(CORE_SRC:$(CORE_DIR)/%.c=$(BUILD_DIR)/%.o)
 HASHTABLE_OBJS      = $(HASHTABLE_SRC:$(HASHTABLE_DIR)/%.c=$(BUILD_DIR)/%.o)
+NET_OBJS            = $(NET_SRC:$(NET_DIR)/%.c=$(BUILD_DIR)/%.o)
+PERF_OBJS           = $(PERF_SRC:$(PERF_DIR)/%.c=$(BUILD_DIR)/%.o)
 PRIME_OBJS          = $(PRIME_SRC:$(PRIME_DIR)/%.c=$(BUILD_DIR)/%.o)
+STORAGE_OBJS        = $(STORAGE_SRC:$(STORAGE_DIR)/%.c=$(BUILD_DIR)/%.o)
 UTILS_OBJS          = $(UTILS_SRC:$(UTILS_DIR)/%.c=$(BUILD_DIR)/%.o)
-DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(VALIDATION_OBJS) \
-                      $(HASHTABLE_OBJS) $(PRIME_OBJS) $(LOG_C_OBJS)
+
+## Third-party Libraries
+INIH_OBJS           = $(INIH_SRC:$(INIH_DIR)/%.c=$(BUILD_DIR)/%.o)
+LOG_C_OBJS          = $(LOG_C_SRC:$(LOG_C_DIR)/%.c=$(BUILD_DIR)/%.o)
+DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(HASHTABLE_OBJS) \
+                      $(PRIME_OBJS) $(LOG_C_OBJS) $(CORE_OBJS) \
+					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS)
 
 UNITY_OBJS          = $(UNITY_SRC:$(UNITY_DIR)/%.c=$(BUILD_DIR)/%.o)
 LMDB_OBJS			= $(LMDB_SRC:$(LMDB_DIR)/%.c=$(BUILD_DIR)/%.o)
@@ -389,29 +401,37 @@ $(BUILD_DIR)/%.o: $(MAIN_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(UTILS_DIR)/%.c
+$(BUILD_DIR)/%.o: $(CORE_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
-
-$(BUILD_DIR)/%.o: $(UNITY_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
-
-$(BUILD_DIR)/%.o: $(INIH_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(INIH_FLAGS) $(CFLAGS) $(INCLUDES) -c $< -o $@
-
-$(BUILD_DIR)/%.o: $(LOG_C_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@ -DLOG_USE_COLOR
 
 $(BUILD_DIR)/%.o: $(HASHTABLE_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(NET_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(PERF_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(PRIME_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(STORAGE_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(UTILS_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(INIH_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(INIH_FLAGS) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(LIBFORT_DIR)/%.c
 	@mkdir -p $(dir $@)
@@ -420,6 +440,14 @@ $(BUILD_DIR)/%.o: $(LIBFORT_DIR)/%.c
 $(BUILD_DIR)/%.o: $(LMDB_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(LOG_C_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@ -DLOG_USE_COLOR
+
+$(BUILD_DIR)/%.o: $(UNITY_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(TESTS_DIR)/%.c
 	@mkdir -p $(dir $@)

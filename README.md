@@ -1,8 +1,28 @@
-# Progetto-SO_24-25_Network
+# Post Office
 
 ![CI](https://github.com/seintian/post-office/actions/workflows/ci.yml/badge.svg)
 [![Maintainability](https://qlty.sh/gh/Seintian/projects/post-office/maintainability.svg)](https://qlty.sh/gh/Seintian/projects/post-office)
 [![Code Coverage](https://qlty.sh/gh/Seintian/projects/post-office/coverage.svg)](https://qlty.sh/gh/Seintian/projects/post-office)
+
+## Network Protocol
+
+┌──────────────────────────────────────────────────────────┐
+│  2B: Version │ 1B: MsgType │ 1B: Flags │ 4B: PayloadLen  │
+└──────────────────────────────────────────────────────────┘
+⟨PayloadLen⟩ bytes of payload (binary or JSON)
+
+```c
+#pragma pack(push,1)
+typedef struct {
+    uint16_t version;      // 0x0001
+    uint8_t  msg_type;     // enum above
+    uint8_t  flags;        // bitmask
+    uint32_t payload_len;  // network-order
+} po_header_t;
+#pragma pack(pop)
+```
+
+## Project Structure
 
 ```txt
 <project-root>

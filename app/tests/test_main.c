@@ -4,9 +4,9 @@
 // #include "utils/test_signals_utils.h"
 // #include "utils/test_timers_utils.h"
 // #include "utils/test_configs_utils.h"
-#include "libs/prime/test_prime.h"
-#include "libs/hashtable/test_hashtable.h"
-#include "libs/inih/test_inih.h"
+#include "prime/test_prime.h"
+#include "hashtable/test_hashtable.h"
+#include "inih/test_inih.h"
 
 
 void setUp(void) {
