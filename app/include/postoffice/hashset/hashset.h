@@ -1,0 +1,145 @@
+// include/utils/hashset.h
+#ifndef _HASHSET_H
+#define _HASHSET_H
+
+/**
+ * @file hashset.h
+ * @brief Declares the HashSet API for storing unique keys.
+ *
+ * A HashSet stores only keys and ensures uniqueness. It uses open addressing
+ * with linear probing (in implementation) and resizes when load factor thresholds
+ * are crossed. Keys are compared via a user-supplied compare function and hashed
+ * by a user-supplied hash function.
+ *
+ * @note The caller is responsible for managing key memory (insertion expects
+ *       ownership transfer or persistent storage of keys).
+ * @note The default initial capacity is 17 (a prime number).
+ */
+
+#include <stdlib.h>
+#include <sys/types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/// Opaque HashSet type
+typedef struct _hashset_t hashset_t;
+
+/**
+ * @brief Create a new HashSet with default capacity.
+ *
+ * @param[in] compare   Function to compare keys: returns 0 if equal.
+ * @param[in] hash_func Function to hash keys: returns unsigned long hash.
+ * @return Pointer to the new set, or NULL on failure.
+ */
+hashset_t *hashset_create(
+    int (*compare)(const void*, const void*),
+    unsigned long (*hash_func)(const void*)
+) __attribute_malloc__ __nonnull((1,2));
+
+/**
+ * @brief Create a new HashSet with specified initial capacity.
+ *
+ * @param[in] compare        Function to compare keys.
+ * @param[in] hash_func      Function to hash keys.
+ * @param[in] initial_capacity Prime number initial capacity.
+ * @return Pointer to the new set, or NULL on failure.
+ */
+hashset_t *hashset_create_sized(
+    int (*compare)(const void*, const void*),
+    unsigned long (*hash_func)(const void*),
+    size_t initial_capacity
+) __attribute_malloc__ __nonnull((1,2));
+
+/**
+ * @brief Insert a key into the set.
+ *
+ * If the key already exists, no action is taken.
+ * Resizes the set if load factor exceeds threshold.
+ *
+ * @param[in] set  The set to add to.
+ * @param[in] key  The key to insert.
+ * @return 1 if inserted, 0 if already present, -1 on error.
+ */
+int hashset_add(hashset_t *set, void *key) __nonnull((1,2));
+
+/**
+ * @brief Remove a key from the set.
+ *
+ * @param[in] set  The set to remove from.
+ * @param[in] key  The key to remove.
+ * @return 1 if removed, 0 if not found.
+ */
+int hashset_remove(hashset_t *set, const void *key) __nonnull((1,2));
+
+/**
+ * @brief Check if a key exists in the set.
+ *
+ * @param[in] set  The set to check.
+ * @param[in] key  The key to find.
+ * @return 1 if present, 0 otherwise.
+ */
+int hashset_contains(const hashset_t *set, const void *key) __nonnull((1,2));
+
+/**
+ * @brief Get the number of keys in the set.
+ *
+ * @param[in] set The set to query.
+ * @return Number of keys, or 0 if set is NULL.
+ */
+size_t hashset_size(const hashset_t *set) __nonnull((1));
+
+/**
+ * @brief Get the current capacity (bucket count) of the set.
+ *
+ * @param[in] set The set to query.
+ * @return Current capacity, or 0 on error.
+ */
+size_t hashset_capacity(const hashset_t *set) __nonnull((1));
+
+/**
+ * @brief Get all keys in the set.
+ *
+ * Returns a NULL-terminated array of key pointers. The caller must free the array
+ * but not the keys themselves.
+ *
+ * @param[in] set The set to extract keys from.
+ * @return NULL-terminated array of keys, or NULL on error.
+ */
+void **hashset_keys(const hashset_t *set) __attribute_malloc__ __nonnull((1));
+
+/**
+ * @brief Clear all keys from the set.
+ *
+ * After clearing, size() == 0 but capacity remains unchanged.
+ * Does NOT free keys.
+ *
+ * @param[in] set The set to clear.
+ */
+void hashset_clear(hashset_t *set) __nonnull((1));
+
+/**
+ * @brief Free the HashSet.
+ *
+ * Frees internal structures. Does NOT free keys.
+ *
+ * @param[in] set The set to free.
+ */
+void hashset_free(hashset_t *set) __nonnull((1));
+
+/**
+ * @brief Get the current load factor of the set.
+ *
+ * Load factor = size / capacity. Returns 0 if set is NULL.
+ *
+ * @param[in] set The set to query.
+ * @return Current load factor, or 0 on error.
+ */
+float hashset_load_factor(const hashset_t *set) __nonnull((1));
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // _HASHSET_H

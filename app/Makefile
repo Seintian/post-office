@@ -36,6 +36,7 @@ SRC_DIR                = src
 ## Post Office Libraries
 CORE_DIR               = $(POSTOFFICE_LIBS_DIR)/core
 HASHTABLE_DIR          = $(POSTOFFICE_LIBS_DIR)/hashtable
+HASHSET_DIR            = $(POSTOFFICE_LIBS_DIR)/hashset
 NET_DIR                = $(POSTOFFICE_LIBS_DIR)/net
 PERF_DIR			   = $(POSTOFFICE_LIBS_DIR)/perf
 PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
@@ -169,6 +170,7 @@ TEST_MAIN_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)test_main
 ## Post Office Libraries
 CORE_SRC        = $(wildcard $(CORE_DIR)/**/*.c)
 HASHTABLE_SRC   = $(wildcard $(HASHTABLE_DIR)/*.c)
+HASHSET_SRC     = $(wildcard $(HASHSET_DIR)/*.c)
 NET_SRC         = $(wildcard $(NET_DIR)/*.c)
 PERF_SRC        = $(wildcard $(PERF_DIR)/*.c)
 PRIME_SRC       = $(wildcard $(PRIME_DIR)/*.c)
@@ -199,6 +201,7 @@ TEST_MAIN_SRC      += $(wildcard $(TESTS_DIR)/*.c)
 ## Post Office Libraries
 CORE_OBJS           = $(CORE_SRC:$(CORE_DIR)/%.c=$(BUILD_DIR)/%.o)
 HASHTABLE_OBJS      = $(HASHTABLE_SRC:$(HASHTABLE_DIR)/%.c=$(BUILD_DIR)/%.o)
+HASHSET_OBJS        = $(HASHSET_SRC:$(HASHSET_DIR)/%.c=$(BUILD_DIR)/%.o)
 NET_OBJS            = $(NET_SRC:$(NET_DIR)/%.c=$(BUILD_DIR)/%.o)
 PERF_OBJS           = $(PERF_SRC:$(PERF_DIR)/%.c=$(BUILD_DIR)/%.o)
 PRIME_OBJS          = $(PRIME_SRC:$(PRIME_DIR)/%.c=$(BUILD_DIR)/%.o)
@@ -210,7 +213,7 @@ INIH_OBJS           = $(INIH_SRC:$(INIH_DIR)/%.c=$(BUILD_DIR)/%.o)
 LOG_C_OBJS          = $(LOG_C_SRC:$(LOG_C_DIR)/%.c=$(BUILD_DIR)/%.o)
 DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(HASHTABLE_OBJS) \
                       $(PRIME_OBJS) $(LOG_C_OBJS) $(CORE_OBJS) \
-					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS)
+					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) $(HASHSET_OBJS)
 
 UNITY_OBJS          = $(UNITY_SRC:$(UNITY_DIR)/%.c=$(BUILD_DIR)/%.o)
 LMDB_OBJS			= $(LMDB_SRC:$(LMDB_DIR)/%.c=$(BUILD_DIR)/%.o)
@@ -407,6 +410,10 @@ $(BUILD_DIR)/%.o: $(CORE_DIR)/%.c
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(HASHTABLE_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(HASHSET_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
 

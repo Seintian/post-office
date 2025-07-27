@@ -17,6 +17,7 @@ static const char *inih_strerror(int err) {
         case INIH_EDUPKEY: return "Duplicate key";
         case INIH_EUNKKEY: return "Unknown key";
         case INIH_EUNKSECTION: return "Unknown section";
+        case INIH_NOTFOUND: return "Key or section not found";
         default: return "Unknown inih error code";
     }
 }

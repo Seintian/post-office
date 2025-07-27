@@ -23,6 +23,7 @@ const char *po_strerror(int err);
 #define INIH_EDUPKEY (INIH_EBASE + 8)
 #define INIH_EUNKKEY (INIH_EBASE + 9)
 #define INIH_EUNKSECTION (INIH_EBASE + 10)
+#define INIH_NOTFOUND (INIH_EBASE + 11)
 #define INIH_ETOP INIH_EUNKSECTION
 
 // - libfort 

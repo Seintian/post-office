@@ -42,7 +42,6 @@ TEST(Configs, LoadSuccess) {
     po_config_t *cfg;
     int rc = po_config_load(path, &cfg);
     TEST_ASSERT_EQUAL_INT(0, rc);
-    // free
     po_config_free(cfg);
     free(path);
 }
