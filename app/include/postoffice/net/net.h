@@ -4,12 +4,15 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // High‑level connection handle
 typedef struct po_conn po_conn_t;
 
 // Initialize networking (sets up epoll, etc.)
-int  po_net_init(void);
+int po_net_init(void);
 
 // Listen on a Unix‑domain or TCP socket
 //   path: "unix:/tmp/po.sock"  or "127.0.0.1"
@@ -38,5 +41,9 @@ int po_poll(int timeout_ms);
 
 // Close a connection
 void po_close(po_conn_t *c);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // PO_NET_H

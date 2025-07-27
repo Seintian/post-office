@@ -157,10 +157,8 @@ USER_ARGS =
 USER_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)user
 
 # Arguments for test main process
-TEST_MAIN_ARGS =
+TEST_MAIN_ARGS = -v # Unity verbose
 TEST_MAIN_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)test_main
-
-INIH_FLAGS = -DINI_ALLOW_NO_VALUE -DINI_STOP_ON_FIRST_ERROR
 
 # *** Source Files *** #
 
@@ -431,7 +429,7 @@ $(BUILD_DIR)/%.o: $(UTILS_DIR)/%.c
 
 $(BUILD_DIR)/%.o: $(INIH_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(INIH_FLAGS) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@ -DINI_ALLOW_NO_VALUE -DINI_STOP_ON_FIRST_ERROR
 
 $(BUILD_DIR)/%.o: $(LIBFORT_DIR)/%.c
 	@mkdir -p $(dir $@)
@@ -447,11 +445,11 @@ $(BUILD_DIR)/%.o: $(LOG_C_DIR)/%.c
 
 $(BUILD_DIR)/%.o: $(UNITY_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@ -DUNITY_FIXTURE_NO_EXTRAS
 
 $(BUILD_DIR)/%.o: $(TESTS_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES) -c $< -o $@ -DUNITY_FIXTURE_NO_EXTRAS
 
 # Include dependencies
 -include $(BUILD_DIR)/*.d
