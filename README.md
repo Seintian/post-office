@@ -6,10 +6,12 @@
 
 ## Network Protocol
 
+```txt
 ┌──────────────────────────────────────────────────────────┐
 │  2B: Version │ 1B: MsgType │ 1B: Flags │ 4B: PayloadLen  │
 └──────────────────────────────────────────────────────────┘
 ⟨PayloadLen⟩ bytes of payload (binary or JSON)
+```
 
 ```c
 #pragma pack(push,1)
