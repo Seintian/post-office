@@ -2,6 +2,7 @@
 #include "prime/prime.h"
 #include <stdlib.h>
 #include <errno.h>
+#include <stdio.h>
 
 
 // *** MACROS *** //
@@ -60,7 +61,7 @@ struct _hashset_t {
  * @note The caller is responsible for freeing the memory allocated for the node.
  */
 static hashset_node_t* hashset_node_create(void* key) {
-    hashset_node_t* node = malloc(sizeof(*node));
+    hashset_node_t* node = malloc(sizeof(hashset_node_t));
     if (!node)
         return NULL;
 
@@ -227,16 +228,16 @@ size_t hashset_capacity(const hashset_t *set) {
     return set->capacity;
 }
 
-void **hashset_get_keys(const hashset_t *set) {
+void **hashset_keys(const hashset_t *set) {
     if (set->size == 0)
         return NULL;
 
-    void **keys = malloc((set->size + 1) * sizeof(void*));
+    void **keys = malloc(set->size * sizeof(void*));
     if (!keys)
         return NULL;
 
     size_t index = 0;
-    for (size_t i = 0; i < set->capacity; i++) {
+    for (size_t i = 0; i < set->capacity && index < set->size; i++) {
         hashset_node_t* node = set->buckets[i];
 
         while (node) {
@@ -244,7 +245,6 @@ void **hashset_get_keys(const hashset_t *set) {
             node = node->next;
         }
     }
-    keys[index] = NULL; // Null-terminate the array
 
     return keys;
 }

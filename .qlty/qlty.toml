@@ -37,10 +37,18 @@ mode = "comment"
 # -------------------------------------------------------------------
 # You almost always want the "default" source of linters & scanners.
 # You can add more [[source]] blocks if you have custom plugin repos.
+
+# Track master
 [[source]]
 name    = "default"
 default = true
-branch  = ["master", "dev"]
+branch  = "master"
+
+# Track dev as well
+[[source]]
+name    = "default"
+default = true
+branch  = "dev"
 
 # -------------------------------------------------------------------
 # 5) Enable (or disable) specific plugins

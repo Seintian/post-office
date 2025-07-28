@@ -262,12 +262,15 @@ size_t hashtable_capacity(const hashtable_t* table) {
 }
 
 void** hashtable_keyset(const hashtable_t* table) {
+    if (table->size == 0)
+        return NULL;
+
     void** keys = calloc(table->size, sizeof(void*));
     if (!keys)
         return NULL;
 
     size_t index = 0;
-    for (size_t i = 0; i < table->capacity; i++) {
+    for (size_t i = 0; i < table->capacity && index < table->size; i++) {
         hashtable_node_t* node = table->buckets[i];
 
         while (node) {

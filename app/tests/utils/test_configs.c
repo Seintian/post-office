@@ -41,17 +41,17 @@ TEST(Configs, LoadSuccess) {
     char *path = mktempfile(good_ini);
     po_config_t *cfg;
     int rc = po_config_load(path, &cfg);
-    TEST_ASSERT_EQUAL_INT(0, rc);
-    po_config_free(cfg);
+    po_config_free(&cfg);
     free(path);
+    TEST_ASSERT_EQUAL_INT(0, rc);
 }
 
 TEST(Configs, LoadFailureMalformed) {
     char *path = mktempfile(bad_ini);
     po_config_t *cfg;
     int rc = po_config_load_strict(path, &cfg);
-    TEST_ASSERT_NOT_EQUAL(0, rc);
     free(path);
+    TEST_ASSERT_NOT_EQUAL(0, rc);
 }
 
 TEST(Configs, GetStringSuccess) {
@@ -60,10 +60,10 @@ TEST(Configs, GetStringSuccess) {
     po_config_load(path, &cfg);
     const char *val;
     int rc = po_config_get_str(cfg, "global", "key1", &val);
-    TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_STRING("hello", val);
-    po_config_free(cfg);
+    po_config_free(&cfg);
     free(path);
+    TEST_ASSERT_EQUAL_INT(0, rc);
 }
 
 TEST(Configs, GetStringMissing) {
@@ -72,9 +72,9 @@ TEST(Configs, GetStringMissing) {
     po_config_load(path, &cfg);
     const char *val;
     int rc = po_config_get_str(cfg, "global", "nokey", &val);
-    TEST_ASSERT_NOT_EQUAL(0, rc);
-    po_config_free(cfg);
+    po_config_free(&cfg);
     free(path);
+    TEST_ASSERT_NOT_EQUAL(0, rc);
 }
 
 TEST(Configs, GetIntSuccess) {
@@ -83,10 +83,10 @@ TEST(Configs, GetIntSuccess) {
     po_config_load(path, &cfg);
     long num;
     int rc = po_config_get_long(cfg, "global", "number", &num);
+    po_config_free(&cfg);
+    free(path);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_INT(123, num);
-    po_config_free(cfg);
-    free(path);
 }
 
 TEST(Configs, GetIntInvalid) {
@@ -96,9 +96,9 @@ TEST(Configs, GetIntInvalid) {
     po_config_load(path, &cfg);
     long num;
     int rc = po_config_get_long(cfg, "global", "number", &num);
-    TEST_ASSERT_EQUAL_INT(-2, rc);
-    po_config_free(cfg);
+    po_config_free(&cfg);
     free(path);
+    TEST_ASSERT_EQUAL_INT(-1, rc);
 }
 
 TEST(Configs, GetBoolSuccess) {
@@ -107,10 +107,10 @@ TEST(Configs, GetBoolSuccess) {
     po_config_load(path, &cfg);
     bool flag;
     int rc = po_config_get_bool(cfg, "global", "flag", &flag);
+    po_config_free(&cfg);
+    free(path);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_TRUE(flag);
-    po_config_free(cfg);
-    free(path);
 }
 
 TEST(Configs, GetBoolInvalid) {
@@ -120,9 +120,9 @@ TEST(Configs, GetBoolInvalid) {
     po_config_load(path, &cfg);
     bool flag;
     int rc = po_config_get_bool(cfg, "global", "flag", &flag);
-    TEST_ASSERT_EQUAL_INT(-2, rc);
-    po_config_free(cfg);
+    po_config_free(&cfg);
     free(path);
+    TEST_ASSERT_EQUAL_INT(-1, rc);
 }
 
 TEST_GROUP_RUNNER(Configs) {

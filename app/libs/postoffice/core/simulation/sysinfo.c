@@ -37,7 +37,7 @@ static int load_cpuinfo(po_sysinfo_t *info) {
     const char *value;
     if (po_config_get_str(cfg, NULL, "cpu cores", &value) != 0) {
         fprintf(stderr, "Missing 'cpu cores' in '%s'\n", CPUINFO_FILE);
-        po_config_free(cfg);
+        po_config_free(&cfg);
         return -1; // Missing key
     }
 
@@ -45,11 +45,11 @@ static int load_cpuinfo(po_sysinfo_t *info) {
     info->physical_cores = (int) strtoul(value, &end, 10);
     if (*end != '\0') {
         fprintf(stderr, "Invalid 'cpu cores' value in %s\n", CPUINFO_FILE);
-        po_config_free(cfg);
+        po_config_free(&cfg);
         return -1; // Invalid value
     }
 
-    po_config_free(cfg);
+    po_config_free(&cfg);
     return 0;
 }
 
