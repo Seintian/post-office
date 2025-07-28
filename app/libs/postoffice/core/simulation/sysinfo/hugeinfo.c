@@ -49,7 +49,7 @@ int list_hugepage_sizes(unsigned long *sizes_kB, size_t max, size_t *count) {
     return 0;
 }
 
-int get_hugepage_info(unsigned long size_kB, struct hugepage_info *info) {
+int get_hugepage_info(unsigned long size_kB, hugepage_info_t *info) {
     char path[256];
 
     #define SAFE_SNPRINTF(buf, size, fmt, ...)                      \

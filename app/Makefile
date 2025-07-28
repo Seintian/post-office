@@ -408,7 +408,7 @@ $(BUILD_DIR)/%.o: $(MAIN_DIR)/%.c
 
 $(BUILD_DIR)/%.o: $(CORE_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(HASHTABLE_DIR)/%.c
 	@mkdir -p $(dir $@)
@@ -440,9 +440,7 @@ $(BUILD_DIR)/%.o: $(UTILS_DIR)/%.c
 
 $(BUILD_DIR)/%.o: $(INIH_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@ \
-	-DINI_ALLOW_NO_VALUE -DINI_STOP_ON_FIRST_ERROR -DINI_ALLOW_MULTILINE \
-	-DINI_ALLOW_REALLOC -DINI_USE_STACK=0 -DINI_MAX_LINE=1024
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@ -DINI_ALLOW_NO_VALUE -DINI_STOP_ON_FIRST_ERROR -DINI_ALLOW_MULTILINE -DINI_ALLOW_REALLOC -DINI_USE_STACK=0 -DINI_MAX_LINE=1024
 
 $(BUILD_DIR)/%.o: $(LIBFORT_DIR)/%.c
 	@mkdir -p $(dir $@)

@@ -19,42 +19,51 @@ extern "C" {
  * availability.
  */
 
+typedef struct {
+    unsigned long size_kB;  // page size in kB - more useful than it would in bytes
+    long nr;                // nr_hugepages
+    long free;              // free_hugepages
+    long overcommit;        // nr_overcommit_hugepages
+    long surplus;           // surplus_hugepages
+    long reserved;          // resv_hugepages
+} hugepage_info_t;
+
 /**
  * @struct po_sysinfo
  * @brief Aggregated system information.
  */
 typedef struct {
     /* CPU topology */
-    int      physical_cores;      /**< Number of physical CPU cores */
-    long     logical_processors;  /**< Number of logical processors (threads) */
+    int32_t         physical_cores;         /**< Number of physical CPU cores */
+    int64_t         logical_processors;     /**< Number of logical processors (threads) */
 
     /* Cache sizes (bytes) */
-    long     cache_l1;            /**< L1 cache size per core */
-    long     dcache_l1;           /**< Data cache size per core */
-    long     cache_l2;            /**< L2 cache size per core */
-    long     cache_l3;            /**< L3 cache size per NUMA node */
+    int64_t         cache_l1;               /**< L1 cache size per core */
+    int64_t         dcache_l1;              /**< Data cache size per core */
+    int64_t         cache_l2;               /**< L2 cache size per core */
+    int64_t         cache_l3;               /**< L3 cache size per NUMA node */
 
     /* Memory */
-    long     total_ram;           /**< Total physical RAM (bytes) */
-    long     free_ram;            /**< Free RAM at startup (bytes) */
-    long     page_size;           /**< System page size (bytes) */
-    size_t   hugepage_size;       /**< Default huge page size (bytes), 0 if unsupported */
+    int64_t         total_ram;              /**< Total physical RAM (bytes) */
+    int64_t         free_ram;               /**< Free RAM at startup (bytes) */
+    int64_t         page_size;              /**< System page size (bytes) */
+    hugepage_info_t hugepage_info;          /**< Huge page information */
 
     /* Limits */
-    long     max_open_files;      /**< RLIMIT_NOFILE soft limit */
-    long     max_processes;       /**< RLIMIT_NPROC soft limit */
-    long     max_stack_size;      /**< RLIMIT_STACK soft limit (bytes) */
+    uint64_t        max_open_files;         /**< RLIMIT_NOFILE soft limit */
+    uint64_t        max_processes;          /**< RLIMIT_NPROC soft limit */
+    uint64_t        max_stack_size;         /**< RLIMIT_STACK soft limit (bytes) */
 
     /* Disk */
-    uint64_t disk_free;           /**< Free disk space at data directory (bytes) */
-    char     fs_type[16];         /**< Filesystem type (e.g., "ext4", "xfs") */
+    uint64_t        disk_free;              /**< Free disk space at data directory (bytes) */
+    char            fs_type[16];            /**< Filesystem type (e.g., "ext4", "xfs") */
 
     /* Network */
-    int      mtu;                 /**< MTU of primary network interface */
-    int      somaxconn;           /**< /proc/sys/net/core/somaxconn */
+    int32_t         mtu;                    /**< MTU of primary network interface */
+    int32_t         somaxconn;              /**< /proc/sys/net/core/somaxconn */
 
     /* OS */
-    int      is_little_endian;    /**< 1 if little-endian, 0 if big-endian */
+    int32_t         is_little_endian;       /**< 1 if little-endian, 0 if big-endian */
 } po_sysinfo_t;
 
 /**
