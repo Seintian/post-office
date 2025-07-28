@@ -12,8 +12,8 @@ static const char good_ini[] =
 
 static const char bad_ini[] =
     "[global]\n"
-    "key1 hello\n"  // missing '='
-;
+    "key1 hello\n";  // missing '='
+
 
 TEST_GROUP(Configs);
 
@@ -50,8 +50,10 @@ TEST(Configs, LoadFailureMalformed) {
     char *path = mktempfile(bad_ini);
     po_config_t *cfg;
     int rc = po_config_load_strict(path, &cfg);
+    po_config_free(&cfg);
     free(path);
     TEST_ASSERT_NOT_EQUAL(0, rc);
+    TEST_ASSERT_NULL(cfg);
 }
 
 TEST(Configs, GetStringSuccess) {

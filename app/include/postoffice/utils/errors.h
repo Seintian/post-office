@@ -16,7 +16,7 @@ const char *po_strerror(int err);
 #define INIH_ENOSECTION (INIH_EBASE + 1)
 #define INIH_ENOKEY (INIH_EBASE + 2)
 #define INIH_ENOVALUE (INIH_EBASE + 3)
-#define INIH_EINVALIDVALUE (INIH_EBASE + 4)
+#define INIH_EINVAL (INIH_EBASE + 4)
 #define INIH_EGENERIC (INIH_EBASE + 5)
 #define INIH_ESYNTAX (INIH_EBASE + 6)
 #define INIH_EDUPSECTION (INIH_EBASE + 7)
@@ -24,6 +24,8 @@ const char *po_strerror(int err);
 #define INIH_EUNKKEY (INIH_EBASE + 9)
 #define INIH_EUNKSECTION (INIH_EBASE + 10)
 #define INIH_NOTFOUND (INIH_EBASE + 11)
+#define INIH_ENOUSER (INIH_EBASE + 12)
+#define INIH_ERANGE (INIH_EBASE + 13)
 #define INIH_ETOP INIH_EUNKSECTION
 
 // - libfort 

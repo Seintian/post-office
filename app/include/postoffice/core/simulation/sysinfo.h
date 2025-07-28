@@ -1,6 +1,5 @@
-// include/postoffice/utils/sysinfo.h
-#ifndef PO_UTILS_SYSINFO_H
-#define PO_UTILS_SYSINFO_H
+#ifndef _SYSINFO_H
+#define _SYSINFO_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,18 +26,18 @@ extern "C" {
 typedef struct {
     /* CPU topology */
     int      physical_cores;      /**< Number of physical CPU cores */
-    int      logical_processors;  /**< Number of logical processors (threads) */
-    int      numa_nodes;          /**< Number of NUMA nodes */
+    long     logical_processors;  /**< Number of logical processors (threads) */
 
     /* Cache sizes (bytes) */
-    size_t   cache_l1;            /**< L1 cache size per core */
-    size_t   cache_l2;            /**< L2 cache size per core */
-    size_t   cache_l3;            /**< L3 cache size per NUMA node */
+    long     cache_l1;            /**< L1 cache size per core */
+    long     dcache_l1;           /**< Data cache size per core */
+    long     cache_l2;            /**< L2 cache size per core */
+    long     cache_l3;            /**< L3 cache size per NUMA node */
 
     /* Memory */
-    uint64_t total_ram;           /**< Total physical RAM (bytes) */
-    uint64_t free_ram;            /**< Free RAM at startup (bytes) */
-    size_t   page_size;           /**< System page size (bytes) */
+    long     total_ram;           /**< Total physical RAM (bytes) */
+    long     free_ram;            /**< Free RAM at startup (bytes) */
+    long     page_size;           /**< System page size (bytes) */
     size_t   hugepage_size;       /**< Default huge page size (bytes), 0 if unsupported */
 
     /* Limits */
@@ -80,4 +79,4 @@ void po_sysinfo_print(const po_sysinfo_t *info, FILE *out);
 }
 #endif
 
-#endif // PO_UTILS_SYSINFO_H
+#endif // _SYSINFO_H

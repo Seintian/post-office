@@ -37,7 +37,16 @@ int po_config_get_str(
 ) __nonnull((1, 3, 4));
 
 // Retrieve a value as int.
-//   - Returns 0 on success (valid integer), non‑zero on missing key or parse error.
+//   - Returns 0 on success (valid int), non‑zero on missing key or parse error.
+int po_config_get_int(
+    const po_config_t *cfg,
+    const char *section,
+    const char *key,
+    int *out_value
+) __nonnull((1, 3, 4));
+
+// Retrieve a value as long.
+//   - Returns 0 on success (valid long), non‑zero on missing key or parse error.
 int po_config_get_long(
     const po_config_t *cfg,
     const char *section,

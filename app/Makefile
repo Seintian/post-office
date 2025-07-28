@@ -169,6 +169,7 @@ TEST_MAIN_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)test_main
 # Libraries Files
 ## Post Office Libraries
 CORE_SRC        = $(wildcard $(CORE_DIR)/**/*.c)
+CORE_SRC       += $(wildcard $(CORE_DIR)/**/**/*.c)
 HASHTABLE_SRC   = $(wildcard $(HASHTABLE_DIR)/*.c)
 HASHSET_SRC     = $(wildcard $(HASHSET_DIR)/*.c)
 NET_SRC         = $(wildcard $(NET_DIR)/*.c)

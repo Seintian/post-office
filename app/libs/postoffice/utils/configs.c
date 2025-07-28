@@ -7,6 +7,7 @@
 #include <string.h>
 #include <errno.h>
 
+
 // djb2 string hash
 static unsigned long str_hash(const void *s) {
     const unsigned char *p = s;
@@ -54,23 +55,27 @@ static int ini_handler_cb(
     const char *value
 ) {
     if (!user) {
-        errno = EINVAL;
+        errno = INIH_ENOUSER;
         return STOP_PARSING;
     }
 
     po_config_t *ctx = user;
-    if (ctx->strict && (is_empty(section) || is_empty(name) || is_empty(value))) {
-        errno = EINVAL;
-        return STOP_PARSING;
+    if (ctx->strict) {
+        int last_errno = errno;
+        errno = 0;
+
+        if (is_empty(section))              errno = INIH_ENOSECTION;
+        if (errno == 0 && is_empty(name))   errno = INIH_ENOKEY;
+        if (errno == 0 && is_empty(value))  errno = INIH_ENOVALUE;
+        if (errno != 0)
+            return STOP_PARSING;
+
+        errno = last_errno;
     }
 
     char *full_key = get_full_key(section, name);
     if (!full_key)
         return STOP_PARSING;
-
-    char full_key_backup[1024];
-    strncpy(full_key_backup, full_key, sizeof(full_key_backup));
-    full_key_backup[sizeof(full_key_backup) - 1] = '\0';
 
     char *value_copy = strdup(value);
     if (!value_copy)
@@ -78,15 +83,12 @@ static int ini_handler_cb(
 
     if (hashtable_contains_key(ctx->entries, full_key)) {
         free(full_key);
+        free(value_copy);
 
         if (ctx->strict) {
-            free(value_copy);
-            errno = EEXIST;
+            errno = INIH_EDUPKEY;
             return STOP_PARSING;
         }
-
-        free(hashtable_get(ctx->entries, full_key_backup));
-        hashtable_put(ctx->entries, full_key_backup, value_copy);
     }
     else if (hashtable_put(ctx->entries, full_key, value_copy) != 1) {
         free(value_copy);
@@ -98,17 +100,21 @@ static int ini_handler_cb(
     if (!section_key)
         return STOP_PARSING;
 
-    if (ctx->strict && hashset_contains(ctx->sections, section_key)) {
+    if (hashset_contains(ctx->sections, section_key)) {
         free(section_key);
-        errno = EEXIST;
+
+        if (ctx->strict) {
+            errno = INIH_EDUPSECTION;
+            return STOP_PARSING;
+        }
+    }
+    else if (hashset_add(ctx->sections, section_key) != 1) {
+        free(section_key);
         return STOP_PARSING;
     }
-    if (hashset_add(ctx->sections, section_key) != 1)
-        free(section_key);
 
     return CONTINUE_PARSING;
 }
-
 
 static int _po_config_load(
     const char *filename,
@@ -129,13 +135,15 @@ static int _po_config_load(
     ctx->sections = hashset_create(&str_cmp, &str_hash);
 
     if (!ctx->entries || !ctx->sections) {
-        po_config_free(&ctx);
+        if (ctx->entries) hashtable_free(ctx->entries);
+        if (ctx->sections) hashset_free(ctx->sections);
+        free(ctx);
         return -1;
     }
 
     int ret = ini_parse(filename, &ini_handler_cb, ctx);
     if (ret != 0) {
-        po_config_free(&ctx);
+        *cfg_out = ctx;
         return -1;
     }
 
@@ -149,26 +157,6 @@ int po_config_load_strict(const char *filename, po_config_t **cfg_out) {
 
 int po_config_load(const char *filename, po_config_t **cfg_out) {
     return _po_config_load(filename, cfg_out, false);
-}
-
-static void clear_keys_values(const hashtable_t *table) {
-    if (!table)
-        return;
-
-    void **keys = hashtable_keyset(table);
-    if (!keys)
-        return;
-
-    for (size_t i = 0; i < hashtable_size(table); i++) {
-        if (!keys[i])
-            continue;
-
-        free(hashtable_get(table, keys[i]));
-    }
-
-    for (size_t i = 0; i < hashtable_size(table); i++)
-        free(keys[i]);
-    free(keys);
 }
 
 static void clear_keys(const hashset_t *set) {
@@ -186,10 +174,27 @@ static void clear_keys(const hashset_t *set) {
 
 void po_config_free(po_config_t **cfg) {
     po_config_t *config = *cfg;
+    if (!config)
+        return;
+
     if (config->entries) {
-        clear_keys_values(config->entries);
+        size_t size = hashtable_size(config->entries);
+
+        void **keys = hashtable_keyset(config->entries);
+        void **values = hashtable_values(config->entries);
+
+        for (size_t i = 0; i < size; i++)
+            free(values[i]);
+
         hashtable_free(config->entries);
+
+        for (size_t i = 0; i < size; i++)
+            free(keys[i]);
+
+        free(keys);
+        free(values);
     }
+
     if (config->sections) {
         clear_keys(config->sections);
         hashset_free(config->sections);
@@ -211,10 +216,37 @@ int po_config_get_str(
 
     const char *v = hashtable_get(cfg->entries, full_key);
     free(full_key);
-    if (!v)
+    if (!v) {
+        errno = INIH_ENOKEY;
         return -1;
+    }
 
     *out_value = v;
+    return 0;
+}
+
+int po_config_get_int(
+    const po_config_t *cfg,
+    const char *section,
+    const char *key,
+    int *out_value
+) {
+    const char *v;
+    if (po_config_get_str(cfg, section, key, &v) != 0)
+        return -1;
+
+    char *endptr;
+    long value = strtol(v, &endptr, 10);
+    if (*endptr != '\0') {
+        errno = INIH_EINVAL;
+        return -1;
+    }
+    if (value < INT_MIN || value > INT_MAX) {
+        errno = INIH_ERANGE;
+        return -1;
+    }
+
+    *out_value = (int)value;
     return 0;
 }
 
@@ -231,7 +263,7 @@ int po_config_get_long(
     char *endptr;
     long value = strtol(v, &endptr, 10);
     if (*endptr != '\0') {
-        errno = EINVAL;
+        errno = INIH_EINVAL;
         return -1;
     }
 
@@ -258,6 +290,6 @@ int po_config_get_bool(
         return 0;
     }
 
-    errno = EINVAL;
+    errno = INIH_EINVAL;
     return -1;
 }
