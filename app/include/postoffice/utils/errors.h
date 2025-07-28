@@ -3,6 +3,16 @@
 
 #include "lmdb/lmdb.h"
 
+
+/**
+ * @brief Converts an error code to a human-readable string.
+ * 
+ * This function maps error codes from various subsystems (LMDB, inih, etc.)
+ * to their corresponding error messages.
+ * 
+ * @param err The error code to convert.
+ * @return A human-readable string describing the error.
+ */
 const char *po_strerror(int err);
 
 // Macros
@@ -116,7 +126,7 @@ const char *po_strerror(int err);
 ///     Opening a named DB when the unnamed DB has `MDB_DUPSORT` / `MDB_INTEGERKEY`.
 ///     Accessing a data record as a database, or vice versa.
 ///     The database was dropped and recreated with different flags.
-#define LMDB_EINCOMPATIBLE (LMDB_EBASE + 15)
+#define LMDB_EINCOMP (LMDB_EBASE + 15)
 
 /// Invalid reuse of reader slot (`MDB_BAD_RSLOT`)
 #define LMDB_EBADRSLOT (LMDB_EBASE + 16)
@@ -140,12 +150,22 @@ const char *po_strerror(int err);
 #define LMDB_ETXNREADONLY (LMDB_EBASE + 22)
 
 /// Illegal access or permission denied in LMDB operations (application-specific)
-#define LMDB_EILLACCESS (LMDB_EBASE + 23)
+#define LMDB_EILLACC (LMDB_EBASE + 23)
 
 /// Top-most error value for range checks
-#define LMDB_ETOP LMDB_EILLACCESS
+#define LMDB_ETOP LMDB_EILLACC
 
 /** @} */ // end of LMDB_ERRORS
+
+// - log_c
+
+// no errors
+
+// - logging
+
+#define LOG_EBASE (PO_EBASE + 200)
+#define LOG_EOK 0
+#define LOG_EINVAL (LOG_EBASE + 1) // Invalid log level or parameters
 
 // - storage
 
@@ -155,9 +175,25 @@ const char *po_strerror(int err);
 
 // - perf
 
+#define PERF_EBASE (PO_EBASE + 300)
+#define PERF_EOK 0
+#define PERF_EALREADY (PERF_EBASE + 1) // Already initialized
+#define PERF_ENOCOUNTER (PERF_EBASE + 2) // Counter not found
+#define PERF_ENOTIMER (PERF_EBASE + 3) // Timer not found
+#define PERF_ENOHISTOGRAM (PERF_EBASE + 4) // Histogram not found
+#define PERF_EINVAL (PERF_EBASE + 5) // Invalid parameters or state
+#define PERF_ENOTINIT (PERF_EBASE + 6) // Performance subsystem not initialized
+#define PERF_ETOP PERF_ENOTINIT // Top-most error value for range checks
+
 // - net
 
 // - hashtable
+
+// no errors
+
+// - hashset
+
+// no errors
 
 // - core
 

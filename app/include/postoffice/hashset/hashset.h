@@ -126,7 +126,7 @@ void hashset_clear(hashset_t *set) __nonnull((1));
  *
  * @param[in] set The set to free.
  */
-void hashset_free(hashset_t *set) __nonnull((1));
+void hashset_free(hashset_t *set);
 
 /**
  * @brief Get the current load factor of the set.

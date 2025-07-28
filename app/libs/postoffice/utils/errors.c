@@ -2,7 +2,7 @@
 #include <string.h>
 
 
-#define IN(x, base, top) ((x) >= (base) && (x) <= (top))
+#define BETWEEN(x, base, top) ((x) >= (base) && (x) <= (top))
 
 static const char *inih_strerror(int err) {
     switch (err) {
@@ -41,7 +41,7 @@ static const char *lmdb_strerror(int err) {
         case LMDB_ECURSORFULL: return "Cursor full";
         case LMDB_EPAGEFULL: return "Page full";
         case LMDB_EMAPRESIZED: return "Map resized";
-        case LMDB_EINCOMPATIBLE: return "Incompatible environment";
+        case LMDB_EINCOMP: return "Incompatible environment";
         case LMDB_EBADRSLOT: return "Bad reader slot";
         case LMDB_EBADTXN: return "Bad transaction";
         case LMDB_EBADVALSIZE: return "Bad value size";
@@ -49,17 +49,33 @@ static const char *lmdb_strerror(int err) {
         case LMDB_ECURSORUNINIT: return "Cursor uninitialized";
         case LMDB_ECURSORTHREAD: return "Cursor thread mismatch";
         case LMDB_ETXNREADONLY: return "Transaction read-only";
-        case LMDB_EILLACCESS: return "Illegal access";
+        case LMDB_EILLACC: return "Illegal access";
         default: return "Unknown error code";
     }
 }
 
+static const char *perf_strerror(int err) {
+    switch (err) {
+        case PERF_EOK: return "No error";
+        case PERF_EINVAL: return "Invalid argument";
+        case PERF_ENOCOUNTER: return "Counter not found";
+        case PERF_ENOTIMER: return "Timer not found";
+        case PERF_ENOHISTOGRAM: return "Histogram not found";
+        case PERF_EALREADY: return "Already initialized";
+        case PERF_ENOTINIT: return "Performance subsystem not initialized";
+        default: return "Unknown performance error code";
+    }
+}
+
 const char *po_strerror(int err) {
-    if (IN(err, LMDB_EBASE, LMDB_ETOP)) 
+    if (BETWEEN(err, LMDB_EBASE, LMDB_ETOP)) 
         return lmdb_strerror(err);
 
-    if (IN(err, INIH_EBASE, INIH_ETOP))
+    if (BETWEEN(err, INIH_EBASE, INIH_ETOP))
         return inih_strerror(err);
+
+    if (BETWEEN(err, PERF_EBASE, PERF_ETOP))
+        return perf_strerror(err);
 
     return strerror(err);
 }

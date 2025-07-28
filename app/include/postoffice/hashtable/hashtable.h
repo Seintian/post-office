@@ -13,6 +13,7 @@
 
 #include <stdlib.h>
 #include <sys/types.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,6 +22,8 @@ extern "C" {
 // *** TYPEDEFS *** //
 
 typedef struct _hashtable_t hashtable_t;
+
+typedef struct _hashtable_iter_t hashtable_iter_t;
 
 // *** API *** //
 
@@ -174,9 +177,36 @@ void** hashtable_keyset(
  * 
  * @param[in] table The hash table to free
  */
-void hashtable_free(hashtable_t* table) __nonnull((1));
+void hashtable_free(hashtable_t* table);
 
 // *** Extended hash table operations *** //
+
+/**
+ * @brief Initialize an iterator for the given hashtable.
+ *
+ * Call this to get an iterator at the start. Then repeatedly call
+ * hashtable_iter_next() until it returns false.
+ */
+hashtable_iter_t *hashtable_iterator(const hashtable_t *ht);
+
+/**
+ * @brief Advance the iterator to the next entry.
+ *
+ * @param it  Pointer to the iterator.
+ * @return true if an entry is available (node/key/value valid),
+ *         false when iteration is done.
+ */
+bool hashtable_iter_next(hashtable_iter_t *it);
+
+/**
+ * @brief Return the key at the iterator's current position.
+ */
+void *hashtable_iter_key(const hashtable_iter_t *it);
+
+/**
+ * @brief Return the value at the iterator's current position.
+ */
+void *hashtable_iter_value(const hashtable_iter_t *it);
 
 /**
  * @brief gets the current load factor of the hash table

@@ -267,8 +267,10 @@ void hashset_clear(hashset_t *set) {
 }
 
 void hashset_free(hashset_t *set) {
-    hashset_clear(set);
-    free(set->buckets);
+    if (set) {
+        hashset_clear(set);
+        free(set->buckets);
+    }
     free(set);
 }
 
