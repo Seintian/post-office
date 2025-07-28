@@ -101,11 +101,13 @@ size_t hashset_capacity(const hashset_t *set) __nonnull((1));
 /**
  * @brief Get all keys in the set.
  *
- * Returns a NULL-terminated array of key pointers. The caller must free the array
+ * Returns an array of key pointers. The caller must free the array
  * but not the keys themselves.
  *
  * @param[in] set The set to extract keys from.
- * @return NULL-terminated array of keys, or NULL on error.
+ * @return Array of keys, or NULL on error.
+ * 
+ * @note The array is NOT NULL-terminated. Use size() to determine length.
  */
 void **hashset_keys(const hashset_t *set) __attribute_malloc__ __nonnull((1));
 

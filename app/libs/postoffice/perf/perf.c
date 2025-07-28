@@ -84,29 +84,51 @@ void perf_shutdown(void) {
 
     // Destroy counters
     hashtable_iter_t *cit = hashtable_iterator(ctx.counters);
+    if (!cit) {
+        hashtable_free(ctx.counters);
+        ctx.counters = NULL;
+        return;
+    }
+
     while (hashtable_iter_next(cit)) {
-        struct perf_counter *ctr = hashtable_iter_value(cit);
-        free(ctr);
+        free(hashtable_iter_key(cit));
+        free(hashtable_iter_value(cit));
     }
     hashtable_free(ctx.counters);
+    free(cit);
 
     // Destroy timers
     hashtable_iter_t *tit = hashtable_iterator(ctx.timers);
+    if (!tit) {
+        hashtable_free(ctx.timers);
+        ctx.timers = NULL;
+        return;
+    }
+
     while (hashtable_iter_next(tit)) {
-        struct perf_timer *t = hashtable_iter_value(tit);
-        free(t);
+        free(hashtable_iter_key(tit));
+        free(hashtable_iter_value(tit));
     }
     hashtable_free(ctx.timers);
+    free(tit);
 
     // Destroy histograms
     hashtable_iter_t *hit = hashtable_iterator(ctx.histograms);
+    if (!hit) {
+        hashtable_free(ctx.histograms);
+        ctx.histograms = NULL;
+        return;
+    }
+
     while (hashtable_iter_next(hit)) {
+        free(hashtable_iter_key(hit));
         struct perf_histogram *h = hashtable_iter_value(hit);
         free(h->bins);
         free(h->counts);
         free(h);
     }
     hashtable_free(ctx.histograms);
+    free(hit);
 
     ctx.initialized = 0;
 }
@@ -127,8 +149,10 @@ perf_counter_t *perf_counter_create(const char *name) {
         return NULL;
 
     atomic_init(&ctr->value, 0);
-    if (hashtable_put(ctx.counters, strdup(name), ctr) < 0) {
+    char *name_dup = strdup(name);
+    if (!name_dup || hashtable_put(ctx.counters, name_dup, ctr) < 0) {
         free(ctr);
+        free(name_dup);
         return NULL;
     }
 
@@ -242,30 +266,41 @@ void perf_histogram_record(const perf_histogram_t *h, uint64_t value) {
 }
 
 // Reporting
-void perf_report(void)
+int perf_report(void)
 {
     printf("=== Performance Report ===\n");
     // Counters
     printf("-- Counters --\n");
     hashtable_iter_t *cit = hashtable_iterator(ctx.counters);
+    if (!cit)
+        return -1;
+
     while (hashtable_iter_next(cit)) {
         const char *name = hashtable_iter_key(cit);
         struct perf_counter *ctr = hashtable_iter_value(cit);
         printf("%s: %lu\n", name, (unsigned long)perf_counter_value(ctr));
     }
+    free(cit);
 
     // Timers
     printf("-- Timers (ns) --\n");
     hashtable_iter_t *tit = hashtable_iterator(ctx.timers);
+    if (!tit)
+        return -1;
+
     while (hashtable_iter_next(tit)) {
         const char *name = hashtable_iter_key(tit);
         struct perf_timer *t = hashtable_iter_value(tit);
         printf("%s: %lu\n", name, (unsigned long)perf_timer_ns(t));
     }
+    free(tit);
 
     // Histograms
     printf("-- Histograms --\n");
     hashtable_iter_t *hit = hashtable_iterator(ctx.histograms);
+    if (!hit)
+        return -1;
+
     while (hashtable_iter_next(hit)) {
         const char *name = hashtable_iter_key(hit);
         struct perf_histogram *h = hashtable_iter_value(hit);
@@ -275,4 +310,7 @@ void perf_report(void)
                    (unsigned long)h->bins[i], (unsigned long)h->counts[i]);
         }
     }
+    free(hit);
+
+    return 0;
 }

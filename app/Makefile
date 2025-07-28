@@ -98,8 +98,10 @@ DEBUGGING_FLAGS = --coverage -O1 -fsanitize=address,alignment,shift,null,object-
 # Production flags
 PRODUCTION_FLAGS = -O3 -DNDEBUG
 
+NON_DEBUGGING_FLAGS = $(UTILITY_FLAGS) $(OPT_FLAGS) $(SECURITY_FLAGS)
+
 # Set CFLAGS: Production always gets utility + optimization + security.
-CFLAGS = $(UTILITY_FLAGS) $(OPT_FLAGS) $(SECURITY_FLAGS)
+CFLAGS = $(NON_DEBUGGING_FLAGS)
 ifeq ($(DEV),true)
 	CFLAGS += $(WARNING_FLAGS) $(DEBUGGING_FLAGS)
 else
@@ -168,8 +170,7 @@ TEST_MAIN_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)test_main
 
 # Libraries Files
 ## Post Office Libraries
-CORE_SRC        = $(wildcard $(CORE_DIR)/**/*.c)
-CORE_SRC       += $(wildcard $(CORE_DIR)/**/**/*.c)
+CORE_SRC        = $(shell find $(CORE_DIR) -name '*.c')
 HASHTABLE_SRC   = $(wildcard $(HASHTABLE_DIR)/*.c)
 HASHSET_SRC     = $(wildcard $(HASHSET_DIR)/*.c)
 NET_SRC         = $(wildcard $(NET_DIR)/*.c)
@@ -186,47 +187,56 @@ LOG_C_SRC       = $(wildcard $(LOG_C_DIR)/*.c)
 UNITY_SRC       = $(wildcard $(UNITY_DIR)/*.c)
 
 # Source Files for each process
-MAIN_SRC            = $(wildcard $(MAIN_DIR)/*.c)
-DIRECTOR_SRC        = $(wildcard $(DIRECTOR_DIR)/*.c)
-TICKET_ISSUER_SRC   = $(wildcard $(TICKET_ISSUER_DIR)/*.c)
-USERS_MANAGER_SRC   = $(wildcard $(USERS_MANAGER_DIR)/*.c)
-WORKER_SRC          = $(wildcard $(WORKER_DIR)/*.c)
-USER_SRC            = $(wildcard $(USER_DIR)/*.c)
-TEST_MAIN_SRC       = $(wildcard $(TESTS_DIR)/**/**/*.c)
-TEST_MAIN_SRC      += $(wildcard $(TESTS_DIR)/**/*.c)
-TEST_MAIN_SRC      += $(wildcard $(TESTS_DIR)/*.c)
+MAIN_APP_SRC          = $(wildcard $(MAIN_DIR)/*.c)
+DIRECTOR_APP_SRC      = $(wildcard $(DIRECTOR_DIR)/*.c)
+TICKET_ISSUER_APP_SRC = $(wildcard $(TICKET_ISSUER_DIR)/*.c)
+USERS_MANAGER_APP_SRC = $(wildcard $(USERS_MANAGER_DIR)/*.c)
+WORKER_APP_SRC        = $(wildcard $(WORKER_DIR)/*.c)
+USER_APP_SRC          = $(wildcard $(USER_DIR)/*.c)
+TEST_SRC              = $(shell find $(TESTS_DIR) -name '*.c')
 
 # *** Object Files *** #
 
 # Object Files
 ## Post Office Libraries
-CORE_OBJS           = $(CORE_SRC:$(CORE_DIR)/%.c=$(BUILD_DIR)/%.o)
-HASHTABLE_OBJS      = $(HASHTABLE_SRC:$(HASHTABLE_DIR)/%.c=$(BUILD_DIR)/%.o)
-HASHSET_OBJS        = $(HASHSET_SRC:$(HASHSET_DIR)/%.c=$(BUILD_DIR)/%.o)
-NET_OBJS            = $(NET_SRC:$(NET_DIR)/%.c=$(BUILD_DIR)/%.o)
-PERF_OBJS           = $(PERF_SRC:$(PERF_DIR)/%.c=$(BUILD_DIR)/%.o)
-PRIME_OBJS          = $(PRIME_SRC:$(PRIME_DIR)/%.c=$(BUILD_DIR)/%.o)
-STORAGE_OBJS        = $(STORAGE_SRC:$(STORAGE_DIR)/%.c=$(BUILD_DIR)/%.o)
-UTILS_OBJS          = $(UTILS_SRC:$(UTILS_DIR)/%.c=$(BUILD_DIR)/%.o)
+CORE_OBJS           = $(patsubst $(CORE_DIR)/%.c,$(BUILD_DIR)/core/%.o,$(CORE_SRC))
+HASHTABLE_OBJS      = $(patsubst $(HASHTABLE_DIR)/%.c,$(BUILD_DIR)/hashtable/%.o,$(HASHTABLE_SRC))
+HASHSET_OBJS        = $(patsubst $(HASHSET_DIR)/%.c,$(BUILD_DIR)/hashset/%.o,$(HASHSET_SRC))
+NET_OBJS            = $(patsubst $(NET_DIR)/%.c,$(BUILD_DIR)/net/%.o,$(NET_SRC))
+PERF_OBJS           = $(patsubst $(PERF_DIR)/%.c,$(BUILD_DIR)/perf/%.o,$(PERF_SRC))
+PRIME_OBJS          = $(patsubst $(PRIME_DIR)/%.c,$(BUILD_DIR)/prime/%.o,$(PRIME_SRC))
+STORAGE_OBJS        = $(patsubst $(STORAGE_DIR)/%.c,$(BUILD_DIR)/storage/%.o,$(STORAGE_SRC))
+UTILS_OBJS          = $(patsubst $(UTILS_DIR)/%.c,$(BUILD_DIR)/utils/%.o,$(UTILS_SRC))
 
 ## Third-party Libraries
-INIH_OBJS           = $(INIH_SRC:$(INIH_DIR)/%.c=$(BUILD_DIR)/%.o)
-LOG_C_OBJS          = $(LOG_C_SRC:$(LOG_C_DIR)/%.c=$(BUILD_DIR)/%.o)
+INIH_OBJS           = $(patsubst $(INIH_DIR)/%.c,$(BUILD_DIR)/inih/%.o,$(INIH_SRC))
+LOG_C_OBJS          = $(patsubst $(LOG_C_DIR)/%.c,$(BUILD_DIR)/log_c/%.o,$(LOG_C_SRC))
+UNITY_OBJS          = $(patsubst $(UNITY_DIR)/%.c,$(BUILD_DIR)/unity/%.o,$(UNITY_SRC))
+LMDB_OBJS			= $(patsubst $(LMDB_DIR)/%.c,$(BUILD_DIR)/lmdb/%.o,$(LMDB_SRC))
+LIBFORT_OBJS        = $(patsubst $(LIBFORT_DIR)/%.c,$(BUILD_DIR)/libfort/%.o,$(LIBFORT_SRC))
+
+# Common library objects needed by most executables
 DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(HASHTABLE_OBJS) \
                       $(PRIME_OBJS) $(LOG_C_OBJS) $(CORE_OBJS) \
 					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) $(HASHSET_OBJS)
 
-UNITY_OBJS          = $(UNITY_SRC:$(UNITY_DIR)/%.c=$(BUILD_DIR)/%.o)
-LMDB_OBJS			= $(LMDB_SRC:$(LMDB_DIR)/%.c=$(BUILD_DIR)/%.o)
-LIBFORT_OBJS        = $(LIBFORT_SRC:$(LIBFORT_DIR)/%.c=$(BUILD_DIR)/%.o)
+# Application-specific objects
+MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
+DIRECTOR_APP_OBJS 		= $(patsubst $(DIRECTOR_DIR)/%.c,$(BUILD_DIR)/director/%.o,$(DIRECTOR_APP_SRC))
+TICKET_ISSUER_APP_OBJS 	= $(patsubst $(TICKET_ISSUER_DIR)/%.c,$(BUILD_DIR)/ticket_issuer/%.o,$(TICKET_ISSUER_APP_SRC))
+USERS_MANAGER_APP_OBJS 	= $(patsubst $(USERS_MANAGER_DIR)/%.c,$(BUILD_DIR)/users_manager/%.o,$(USERS_MANAGER_APP_SRC))
+WORKER_APP_OBJS 		= $(patsubst $(WORKER_DIR)/%.c,$(BUILD_DIR)/worker/%.o,$(WORKER_APP_SRC))
+USER_APP_OBJS 			= $(patsubst $(USER_DIR)/%.c,$(BUILD_DIR)/user/%.o,$(USER_APP_SRC))
+TEST_OBJS      		    = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_SRC))
 
-MAIN_OBJS 			= $(MAIN_SRC:$(MAIN_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
-DIRECTOR_OBJS 		= $(DIRECTOR_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS) $(LMDB_OBJS)
-TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS) $(LMDB_OBJS)
-USERS_MANAGER_OBJS 	= $(USERS_MANAGER_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS) $(LMDB_OBJS)
-WORKER_OBJS 		= $(WORKER_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS)
-USER_OBJS 			= $(USER_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS)
-TEST_MAIN_OBJS 		= $(TEST_MAIN_SRC:$(TESTS_DIR)/%.c=$(BUILD_DIR)/%.o) $(DEFAULTS_OBJS) $(UNITY_OBJS)
+# Full dependency list for each final executable
+MAIN_OBJS           = $(MAIN_APP_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
+DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
+TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
+USERS_MANAGER_OBJS 	= $(USERS_MANAGER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
+WORKER_OBJS 		= $(WORKER_APP_OBJS) $(DEFAULTS_OBJS)
+USER_OBJS 			= $(USER_APP_OBJS) $(DEFAULTS_OBJS)
+TEST_MAIN_OBJS 		= $(TEST_OBJS) $(DEFAULTS_OBJS) $(UNITY_OBJS)
 
 # *** Targets *** #
 
@@ -377,96 +387,125 @@ help:
 
 # Create executables
 $(MAIN_EXEC): $(MAIN_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
 $(DIRECTOR_EXEC): $(DIRECTOR_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
 $(TICKET_ISSUER_EXEC): $(TICKET_ISSUER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
 $(USERS_MANAGER_EXEC): $(USERS_MANAGER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
 $(WORKER_EXEC): $(WORKER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
 $(USER_EXEC): $(USER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
 $(TEST_MAIN_EXEC): $(TEST_MAIN_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(TESTING_FLAGS) $(LDFLAGS) $(INCLUDES_I) $(CORE_I) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
-# Compile object files (create *subdirectories* if not exist)
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+# --- Static Pattern Rules for Compilation ---
+# This is the robust way to compile object files. Each rule is explicitly
+# tied to the list of objects it's responsible for building.
+
+# Rule for main application executable
+$(MAIN_APP_OBJS): $(BUILD_DIR)/main/%.o: $(MAIN_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(MAIN_DIR)/%.c
+# Rule for director application executable
+$(DIRECTOR_APP_OBJS): $(BUILD_DIR)/director/%.o: $(DIRECTOR_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(CORE_DIR)/%.c
+# Rule for ticket_issuer application executable
+$(TICKET_ISSUER_APP_OBJS): $(BUILD_DIR)/ticket_issuer/%.o: $(TICKET_ISSUER_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(HASHTABLE_DIR)/%.c
+# Rule for users_manager application executable
+$(USERS_MANAGER_APP_OBJS): $(BUILD_DIR)/users_manager/%.o: $(USERS_MANAGER_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(HASHSET_DIR)/%.c
+# Rule for worker application executable
+$(WORKER_APP_OBJS): $(BUILD_DIR)/worker/%.o: $(WORKER_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(NET_DIR)/%.c
+# Rule for user application executable
+$(USER_APP_OBJS): $(BUILD_DIR)/user/%.o: $(USER_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(PERF_DIR)/%.c
+# Rule for our internal libraries
+$(CORE_OBJS): $(BUILD_DIR)/core/%.o: $(CORE_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(PRIME_DIR)/%.c
+$(HASHTABLE_OBJS): $(BUILD_DIR)/hashtable/%.o: $(HASHTABLE_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(STORAGE_DIR)/%.c
+$(HASHSET_OBJS): $(BUILD_DIR)/hashset/%.o: $(HASHSET_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(UTILS_DIR)/%.c
+$(NET_OBJS): $(BUILD_DIR)/net/%.o: $(NET_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(INIH_DIR)/%.c
+$(PERF_OBJS): $(BUILD_DIR)/perf/%.o: $(PERF_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@ -DINI_ALLOW_NO_VALUE -DINI_STOP_ON_FIRST_ERROR -DINI_ALLOW_MULTILINE -DINI_ALLOW_REALLOC -DINI_USE_STACK=0 -DINI_MAX_LINE=1024
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(LIBFORT_DIR)/%.c
+$(PRIME_OBJS): $(BUILD_DIR)/prime/%.o: $(PRIME_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(INCLUDES_I) $(LIBS_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(LMDB_DIR)/%.c
+$(STORAGE_OBJS): $(BUILD_DIR)/storage/%.o: $(STORAGE_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(INCLUDES_I) $(LIBS_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(LOG_C_DIR)/%.c
+$(UTILS_OBJS): $(BUILD_DIR)/utils/%.o: $(UTILS_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@ -DLOG_USE_COLOR
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(UNITY_DIR)/%.c
+# Rule for all test files
+$(TEST_OBJS): $(BUILD_DIR)/tests/%.o: $(TESTS_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@ -DUNITY_FIXTURE_NO_EXTRAS
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@ -DUNITY_FIXTURE_NO_EXTRAS
 
-$(BUILD_DIR)/%.o: $(TESTS_DIR)/%.c
+# Rules for third-party libraries
+$(INIH_OBJS): $(BUILD_DIR)/inih/%.o: $(INIH_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(LIBS_I) -c $< -o $@ -DUNITY_FIXTURE_NO_EXTRAS
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@ -DINI_ALLOW_NO_VALUE -DINI_STOP_ON_FIRST_ERROR -DINI_ALLOW_MULTILINE -DINI_ALLOW_REALLOC -DINI_USE_STACK=0 -DINI_MAX_LINE=1024
 
-# Include dependencies
--include $(BUILD_DIR)/*.d
--include $(BUILD_DIR)/**/*.d
--include $(BUILD_DIR)/**/**/*.d
+$(LIBFORT_OBJS): $(BUILD_DIR)/libfort/%.o: $(LIBFORT_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(NON_DEBUGGING_FLAGS) $(ALL_I) -c $< -o $@
+
+$(LMDB_OBJS): $(BUILD_DIR)/lmdb/%.o: $(LMDB_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(NON_DEBUGGING_FLAGS) $(ALL_I) -c $< -o $@
+
+$(LOG_C_OBJS): $(BUILD_DIR)/log_c/%.o: $(LOG_C_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@ -DLOG_USE_COLOR
+
+$(UNITY_OBJS): $(BUILD_DIR)/unity/%.o: $(UNITY_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@ -DUNITY_FIXTURE_NO_EXTRAS
+
+# --- End of Static Pattern Rules ---
+
+# Include dependencies generated by -MMD
+-include $(shell find $(BUILD_DIR) -name '*.d')
 
 # Create directories if not exist
 $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
+

@@ -127,7 +127,7 @@ void perf_histogram_record(const perf_histogram_t *h, uint64_t value);
  *
  * Useful at shutdown or on‐demand to get a snapshot of performance metrics.
  */
-void perf_report(void);
+int perf_report(void);
 
 #ifdef __cplusplus
 }

@@ -165,6 +165,7 @@ size_t hashtable_capacity(const hashtable_t* table) __wur __nonnull((1));
  * @return void** corresponding to an array of keys in the hash table, or `NULL` on failure
  * 
  * @note The caller is responsible for freeing the array of keys.
+ * @note The array is NOT NULL-terminated. Use size() to determine length.
  */
 void** hashtable_keyset(
     const hashtable_t* table
@@ -186,6 +187,8 @@ void hashtable_free(hashtable_t* table);
  *
  * Call this to get an iterator at the start. Then repeatedly call
  * hashtable_iter_next() until it returns false.
+ * 
+ * @note The user is responsible for freeing the iterator after use.
  */
 hashtable_iter_t *hashtable_iterator(const hashtable_t *ht);
 
@@ -272,6 +275,7 @@ void hashtable_map(
  * @return The array of values in the hash table, or `NULL` on failure
  * 
  * @note The caller is responsible for freeing the array of values.
+ * @note The array is NOT NULL-terminated. Use size() to determine length.
  */
 void** hashtable_values(
     const hashtable_t* table
