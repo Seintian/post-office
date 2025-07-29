@@ -25,7 +25,7 @@ TEST_SETUP(HashSet) {
 }
 
 TEST_TEAR_DOWN(HashSet) {
-    hashset_free(set);
+    hashset_destroy(&set);
 }
 
 TEST(HashSet, CreateDefault) {
@@ -33,7 +33,7 @@ TEST(HashSet, CreateDefault) {
     TEST_ASSERT_NOT_NULL(s2);
     TEST_ASSERT_EQUAL_UINT(0, hashset_size(s2));
     TEST_ASSERT_TRUE(hashset_capacity(s2) >= 17);
-    hashset_free(s2);
+    hashset_destroy(&s2);
 }
 
 TEST(HashSet, AddAndContains) {
@@ -118,7 +118,7 @@ TEST(HashSet, ResizeUp) {
     void **keys = hashset_keys(small);
     for (size_t i = 0; i < hashset_size(small); i++) free(keys[i]);
     free(keys);
-    hashset_free(small);
+    hashset_destroy(&small);
 }
 
 TEST(HashSet, ResizeDown) {
@@ -134,7 +134,7 @@ TEST(HashSet, ResizeDown) {
     size_t cap2 = hashset_capacity(s2);
     // capacity may shrink but never below initial
     TEST_ASSERT_TRUE(cap2 >= 17 || cap2 >= cap1);
-    hashset_free(s2);
+    hashset_destroy(&s2);
 }
 
 TEST_GROUP_RUNNER(HashSet) {

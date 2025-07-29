@@ -309,12 +309,17 @@ int hashtable_clear(hashtable_t *table) {
     return 1;
 }
 
-void hashtable_free(hashtable_t *table) {
-    if (table) {
-        hashtable_clear(table);
-        free(table->buckets);
+void hashtable_destroy(hashtable_t **table) {
+    if (!*table)
+        return;
+
+    hashtable_t *_table = *table;
+    if (_table) {
+        hashtable_clear(_table);
+        free(_table->buckets);
     }
-    free(table);
+    free(_table);
+    *table = NULL;
 }
 
 // Extended hashtable operations

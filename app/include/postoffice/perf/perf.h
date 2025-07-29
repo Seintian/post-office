@@ -1,32 +1,29 @@
-#ifndef PO_PERF_H
-#define PO_PERF_H
+#ifndef _PO_PERF_H
+#define _PO_PERF_H
 
-#include <stdint.h>
 #include <stddef.h>
-#include <time.h>
+#include <stdint.h>
+#include <stdio.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
-/** Opaque handle for a named counter. */
-typedef struct perf_counter perf_counter_t;
-
-/** Opaque handle for a named timer. */
-typedef struct perf_timer   perf_timer_t;
-
-/** Opaque handle for a named histogram. */
+// -----------------------------------------------------------------------------
+// Public opaque types
+// -----------------------------------------------------------------------------
+typedef struct perf_counter   perf_counter_t;
+typedef struct perf_timer     perf_timer_t;
 typedef struct perf_histogram perf_histogram_t;
 
+// -----------------------------------------------------------------------------
+// Initialization / Shutdown
+// -----------------------------------------------------------------------------
+
 /**
- * @brief Initialize the performance subsystem.
- * 
- * Must be called once at process startup before any other perf calls.
- * 
- * @param expected_counters    Number of distinct counters you will register.
- * @param expected_timers      Number of distinct timers you will register.
- * @param expected_histograms  Number of histograms you will register.
- * @return 0 on success, non‐zero on error.
+ * Initialize the perf module and spawn background worker thread.
+ *
+ * @param expected_counters   Expected number of counters to pre-size the hashtable
+ * @param expected_timers     Expected number of timers
+ * @param expected_histograms Expected number of histograms
+ * @return 0 on success, -1 on failure (errno set)
  */
 int perf_init(
     size_t expected_counters,
@@ -35,102 +32,104 @@ int perf_init(
 );
 
 /**
- * @brief Shutdown the perf subsystem, releasing all resources.
+ * Gracefully shut down perf, flush events, destroy tables and report stats.
  */
-void perf_shutdown(void);
+void perf_shutdown(FILE *out);
+
+// -----------------------------------------------------------------------------
+// Counters API
+// -----------------------------------------------------------------------------
 
 /**
- * @brief Create or look up a named counter.
+ * Create or retrieve a counter by name (synchronous).
  *
- * @param name  Unique ASCII name for this counter.
- * @return pointer to perf_counter_t, or NULL on failure.
+ * @param name  Counter name (string key)
+ * @return pointer to the counter object, or NULL on failure
  */
-perf_counter_t *perf_counter_create(const char *name);
+int perf_counter_create(const char *name) __nonnull((1));
 
 /**
- * @brief Atomically increment a counter by 1.
- * 
- * @param ctr  Counter handle.
- */
-void perf_counter_inc(perf_counter_t *ctr);
-
-/**
- * @brief Atomically add a value to a counter.
- * 
- * @param ctr   Counter handle.
- * @param delta Amount (>=0) to add.
- */
-void perf_counter_add(perf_counter_t *ctr, uint64_t delta);
-
-/**
- * @brief Read the current value of a counter.
- * 
- * @param ctr  Counter handle.
- * @return current count.
- */
-uint64_t perf_counter_value(perf_counter_t *ctr);
-
-/**
- * @brief Create or look up a named high‑resolution timer.
+ * Increment counter value by 1 asynchronously.
  *
- * @param name  Unique ASCII name for this timer.
- * @return pointer to perf_timer_t, or NULL on failure.
+ * @param name  Counter name (string key)
  */
-perf_timer_t *perf_timer_create(const char *name);
+void perf_counter_inc(const char *name) __nonnull((1));
 
 /**
- * @brief Record a start timestamp for a timer.
+ * Add delta to counter value asynchronously.
  *
- * @param t  Timer handle.
+ * @param name   Counter name (string key)
+ * @param delta  Amount to add
  */
-int perf_timer_start(perf_timer_t *t);
+void perf_counter_add(const char *name, uint64_t delta) __nonnull((1));
+
+// -----------------------------------------------------------------------------
+// Timers API
+// -----------------------------------------------------------------------------
 
 /**
- * @brief Record an end timestamp for a timer and accumulate the interval.
+ * Create or retrieve a timer by name (synchronous).
  *
- * @param t  Timer handle.
+ * @param name Timer name (string key)
+ * @return pointer to timer object, or NULL on failure
  */
-int perf_timer_stop(perf_timer_t *t);
+int perf_timer_create(const char *name) __nonnull((1));
 
 /**
- * @brief Get the total accumulated nanoseconds for a timer.
+ * Start a timer asynchronously.
  *
- * @param t  Timer handle.
- * @return total time in nanoseconds.
+ * @param t  Timer pointer returned by perf_timer_create
+ * @return 0 on success, -1 on failure
  */
-uint64_t perf_timer_ns(perf_timer_t *t);
+int perf_timer_start(const char *name) __nonnull((1));
 
 /**
- * @brief Create or look up a named histogram with fixed bins.
+ * Stop a timer asynchronously and accumulate elapsed time.
  *
- * @param name   Unique ASCII name for this histogram.
- * @param bins   Array of bin upper‐bounds (monotonic increasing).
- * @param nbins  Number of bins.
- * @return pointer to perf_histogram_t, or NULL on failure.
+ * @param t Timer pointer
+ * @return 0 on success, -1 on failure
  */
-perf_histogram_t *perf_histogram_create(
+int perf_timer_stop(const char *name) __nonnull((1));
+
+// -----------------------------------------------------------------------------
+// Histograms API
+// -----------------------------------------------------------------------------
+
+/**
+ * Create a histogram by name (synchronous).
+ *
+ * @param name  Name of histogram
+ * @param bins  Array of bin thresholds
+ * @param nbins Number of bins
+ * @return pointer to histogram object, or NULL on failure
+ */
+int perf_histogram_create(
     const char *name,
     const uint64_t *bins,
     size_t nbins
-);
+) __nonnull((1, 2));
 
 /**
- * @brief Record a value into the histogram.
+ * Record a value asynchronously into the histogram.
  *
- * @param h     Histogram handle.
- * @param value Value to bucket.
+ * @param name  Histogram name (string key)
+ * @param value Value to record
  */
-void perf_histogram_record(const perf_histogram_t *h, uint64_t value);
+int perf_histogram_record(
+    const char *name,
+    uint64_t value
+) __nonnull((1));
+
+// -----------------------------------------------------------------------------
+// Reporting
+// -----------------------------------------------------------------------------
 
 /**
- * @brief Dump all registered counters, timers, and histograms to stdout.
+ * Print a synchronous report of all counters, timers, and histograms
+ * to stdout. This function does not queue an event; it runs synchronously.
  *
- * Useful at shutdown or on‐demand to get a snapshot of performance metrics.
+ * @return 0 on success, -1 on failure
  */
-int perf_report(void);
+int perf_report(FILE *out);
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif // PO_PERF_H
+#endif // _PO_PERF_H

@@ -25,7 +25,7 @@ TEST_SETUP(HashTable) {
 }
 
 TEST_TEAR_DOWN(HashTable) {
-    hashtable_free(ht);
+    hashtable_destroy(&ht);
 }
 
 TEST(HashTable, CreateDefault) {
@@ -33,7 +33,7 @@ TEST(HashTable, CreateDefault) {
     TEST_ASSERT_NOT_NULL(h2);
     TEST_ASSERT_EQUAL_UINT(0, hashtable_size(h2));
     TEST_ASSERT_TRUE(hashtable_capacity(h2) >= 17);
-    hashtable_free(h2);
+    hashtable_destroy(&h2);
 }
 
 TEST(HashTable, PutAndGet) {
@@ -139,7 +139,7 @@ TEST(HashTable, EqualsAndCopy) {
     // modify copy
     hashtable_put(copy, "3", "three");
     TEST_ASSERT_FALSE(hashtable_equals(ht, copy, test_cmp));
-    hashtable_free(copy);
+    hashtable_destroy(&copy);
 }
 
 TEST(HashTable, Merge) {
@@ -148,7 +148,7 @@ TEST(HashTable, Merge) {
     hashtable_put(src, "b", "2");
     hashtable_merge(ht, src);
     TEST_ASSERT_EQUAL_STRING("2", (char*)hashtable_get(ht, "b"));
-    hashtable_free(src);
+    hashtable_destroy(&src);
 }
 
 TEST(HashTable, Iterator) {

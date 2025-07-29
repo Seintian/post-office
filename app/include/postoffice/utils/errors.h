@@ -183,7 +183,10 @@ const char *po_strerror(int err);
 #define PERF_ENOHISTOGRAM (PERF_EBASE + 4) // Histogram not found
 #define PERF_EINVAL (PERF_EBASE + 5) // Invalid parameters or state
 #define PERF_ENOTINIT (PERF_EBASE + 6) // Performance subsystem not initialized
-#define PERF_ETOP PERF_ENOTINIT // Top-most error value for range checks
+#define PERF_EBUSY (PERF_EBASE + 7) // Performance subsystem is busy
+#define PERF_EAGAIN (PERF_EBASE + 8) // Resource temporarily unavailable
+#define PERF_EOVERFLOW (PERF_EBASE + 9) // Overflow in histogram or
+#define PERF_ETOP PERF_EOVERFLOW // Top-most error value for range checks
 
 // - net
 

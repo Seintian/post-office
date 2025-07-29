@@ -266,12 +266,17 @@ void hashset_clear(hashset_t *set) {
     set->size = 0;
 }
 
-void hashset_free(hashset_t *set) {
-    if (set) {
-        hashset_clear(set);
-        free(set->buckets);
+void hashset_destroy(hashset_t **set) {
+    if (!*set)
+        return;
+
+    hashset_t *_set = *set;
+    if (_set) {
+        hashset_clear(_set);
+        free(_set->buckets);
     }
-    free(set);
+    free(_set);
+    *set = NULL;
 }
 
 // Extended hashset operations

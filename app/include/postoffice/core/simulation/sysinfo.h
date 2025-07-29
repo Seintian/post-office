@@ -39,6 +39,7 @@ typedef struct {
 
     /* Cache sizes (bytes) */
     int64_t         cache_l1;               /**< L1 cache size per core */
+    int64_t         dcache_lnsize;          /**< Data cache line size (bytes) */
     int64_t         dcache_l1;              /**< Data cache size per core */
     int64_t         cache_l2;               /**< L2 cache size per core */
     int64_t         cache_l3;               /**< L3 cache size per NUMA node */

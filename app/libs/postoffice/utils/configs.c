@@ -135,8 +135,8 @@ static int _po_config_load(
     ctx->sections = hashset_create(&str_cmp, &str_hash);
 
     if (!ctx->entries || !ctx->sections) {
-        if (ctx->entries) hashtable_free(ctx->entries);
-        if (ctx->sections) hashset_free(ctx->sections);
+        if (ctx->entries) hashtable_destroy(&ctx->entries);
+        if (ctx->sections) hashset_destroy(&ctx->sections);
         free(ctx);
         return -1;
     }
@@ -186,7 +186,7 @@ void po_config_free(po_config_t **cfg) {
         for (size_t i = 0; i < size; i++)
             free(values[i]);
 
-        hashtable_free(config->entries);
+        hashtable_destroy(&config->entries);
 
         for (size_t i = 0; i < size; i++)
             free(keys[i]);
@@ -197,7 +197,7 @@ void po_config_free(po_config_t **cfg) {
 
     if (config->sections) {
         clear_keys(config->sections);
-        hashset_free(config->sections);
+        hashset_destroy(&config->sections);
     }
 
     free(config);

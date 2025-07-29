@@ -1,0 +1,109 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
+#include "perf/batcher.h"
+#include "perf/ringbuf.h"
+
+#include <sys/eventfd.h>
+#include <unistd.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+
+
+struct _perf_batcher_t {
+    perf_ringbuf_t  *rb;
+    int              efd;
+    size_t           batch_size;
+};
+
+perf_batcher_t *perf_batcher_create(perf_ringbuf_t *rb, size_t batch_size) {
+    if (!rb || batch_size == 0) {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    perf_batcher_t *b = malloc(sizeof(*b));
+    if (!b)
+        return NULL;
+
+    b->rb = rb;
+    b->batch_size = batch_size;
+
+    // Create an eventfd for producer->consumer signaling
+    b->efd = eventfd(0, EFD_CLOEXEC | EFD_SEMAPHORE);
+    if (b->efd < 0) {
+        free(b);
+        return NULL;
+    }
+
+    return b;
+}
+
+void perf_batcher_destroy(perf_batcher_t **b) {
+    if (!b || !*b)
+        return;
+
+    perf_batcher_t *batcher = *b;
+
+    if (batcher->efd >= 0) {
+        close(batcher->efd);
+        batcher->efd = -1;
+    }
+
+    // The user must free the ring buffer separately
+
+    free(batcher);
+    *b = NULL;
+}
+
+int perf_batcher_enqueue(perf_batcher_t *b, void *item) {
+    if (!b || b->rb == NULL || b->efd < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    // Enqueue into ring
+    if (perf_ringbuf_enqueue(b->rb, item) < 0) {
+        errno = EAGAIN;  // full
+        return -1;
+    }
+
+    // Signal consumer: increment counter by 1
+    uint64_t inc = 1;
+    if (write(b->efd, &inc, sizeof(inc)) != sizeof(inc)) {
+        // if this fails, we consider it an internal error
+        errno = EIO;
+        return -1;
+    }
+
+    return 0;
+}
+
+ssize_t perf_batcher_next(perf_batcher_t *b, void **out) {
+    if (!b || b->rb == NULL || b->efd < 0 || !out) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    // Block until at least one event arrives
+    uint64_t cnt;
+    if (read(b->efd, &cnt, sizeof(cnt)) != sizeof(cnt)) {
+        return -1;  // efd closed or error
+    }
+
+    // Now drain up to batch_size items
+    size_t n = 0;
+    for (; n < b->batch_size; n++) {
+        void *item;
+        if (perf_ringbuf_dequeue(b->rb, &item) < 0) {
+            break;  // empty
+        }
+
+        out[n] = item;
+    }
+
+    return (ssize_t)n;
+}
