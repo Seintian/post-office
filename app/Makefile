@@ -218,7 +218,8 @@ LIBFORT_OBJS        = $(patsubst $(LIBFORT_DIR)/%.c,$(BUILD_DIR)/libfort/%.o,$(L
 # Common library objects needed by most executables
 DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(HASHTABLE_OBJS) \
                       $(PRIME_OBJS) $(LOG_C_OBJS) $(CORE_OBJS) \
-					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) $(HASHSET_OBJS)
+					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
+					  $(LMDB_OBJS) $(HASHSET_OBJS)
 
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))

@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "utils/errors.h"
 
 
 // -----------------------------------------------------------------------------

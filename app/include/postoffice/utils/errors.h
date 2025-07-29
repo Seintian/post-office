@@ -42,13 +42,13 @@ const char *po_strerror(int err);
 
 // no errors
 
-// - lmdb | see: http://www.lmdb.tech/doc/group__errors.html
+// - db_lmdb | see: http://www.lmdb.tech/doc/group__errors.html
 
 /**
- * @defgroup LMDB_ERRORS LMDB Error Codes
+ * @defgroup DB_ERRORS LMDB Error Codes
  * @brief Application-specific error codes mapping LMDB return values to internal codes.
  *
- * These macros define an error code base (`LMDB_EBASE`) and enumerated values for each
+ * These macros define an error code base (`DB_EBASE`) and enumerated values for each
  * LMDB error condition, offset from a project-wide base (`PO_EBASE`). They allow consistent
  * error handling in the application without directly depending on LMDB's negative return values.
  *
@@ -59,65 +59,56 @@ const char *po_strerror(int err);
  * Each error corresponds to a documented LMDB return value and can be converted to a
  * human-readable string with `mdb_strerror(int)` if the raw LMDB error code is known.
  *
- * Usage example:
- * @code
- * int rc = mdb_put(txn, dbi, &key, &data, 0);
- * if (rc != MDB_SUCCESS) {
- *     errno = LMDB_EBASE + (abs(rc) - abs(MDB_KEYEXIST)); // example mapping
- *     return -1;
- * }
- * @endcode
- *
  * @{
  */
 
 /// Base offset for LMDB-related errors relative to project error codes.
-#define LMDB_EBASE (PO_EBASE + 100)
+#define DB_EBASE (PO_EBASE + 100)
 
 /// Success (maps to MDB_SUCCESS / 0)
-#define LMDB_EOK MDB_SUCCESS
+#define DB_EOK MDB_SUCCESS
 
 /// Key/data pair already exists (`MDB_KEYEXIST`)
-#define LMDB_EKEYEXIST (LMDB_EBASE + 1)
+#define DB_EKEYEXIST (DB_EBASE + 1)
 
 /// Key/data pair not found (`MDB_NOTFOUND`)
-#define LMDB_ENOTFOUND (LMDB_EBASE + 2)
+#define DB_ENOTFOUND (DB_EBASE + 2)
 
 /// Requested page not found or invalid page reference (`MDB_PAGE_NOTFOUND`)
-#define LMDB_EPAGENOTFOUND (LMDB_EBASE + 3)
+#define DB_EPAGENOTFOUND (DB_EBASE + 3)
 
 /// Database file is corrupted (`MDB_CORRUPTED`)
-#define LMDB_ECORRUPTED (LMDB_EBASE + 4)
+#define DB_ECORRUPTED (DB_EBASE + 4)
 
 /// Update of meta page failed or environment panicked (`MDB_PANIC`)
-#define LMDB_EPANIC (LMDB_EBASE + 5)
+#define DB_EPANIC (DB_EBASE + 5)
 
 /// Environment version mismatch (`MDB_VERSION_MISMATCH`)
-#define LMDB_EVERSION (LMDB_EBASE + 6)
+#define DB_EVERSION (DB_EBASE + 6)
 
 /// File descriptor or environment handle is invalid (`MDB_INVALID`)
-#define LMDB_EINVALID (LMDB_EBASE + 7)
+#define DB_EINVALID (DB_EBASE + 7)
 
 /// Database map is full; size limit reached (`MDB_MAP_FULL`)
-#define LMDB_EMAPFULL (LMDB_EBASE + 8)
+#define DB_EMAPFULL (DB_EBASE + 8)
 
 /// Maximum number of named databases reached (`MDB_DBS_FULL`)
-#define LMDB_EDBSFULL (LMDB_EBASE + 9)
+#define DB_EDBSFULL (DB_EBASE + 9)
 
 /// Too many reader slots in the environment (`MDB_READERS_FULL`)
-#define LMDB_EREADERSFULL (LMDB_EBASE + 10)
+#define DB_EREADERSFULL (DB_EBASE + 10)
 
 /// Transaction has too many dirty pages (`MDB_TXN_FULL`)
-#define LMDB_ETXNFULL (LMDB_EBASE + 11)
+#define DB_ETXNFULL (DB_EBASE + 11)
 
 /// Cursor stack is full (`MDB_CURSOR_FULL`)
-#define LMDB_ECURSORFULL (LMDB_EBASE + 12)
+#define DB_ECURSORFULL (DB_EBASE + 12)
 
 /// Page has no more space for new key/data pairs (`MDB_PAGE_FULL`)
-#define LMDB_EPAGEFULL (LMDB_EBASE + 13)
+#define DB_EPAGEFULL (DB_EBASE + 13)
 
 /// Environment map resized unexpectedly (`MDB_MAP_RESIZED`)
-#define LMDB_EMAPRESIZED (LMDB_EBASE + 14)
+#define DB_EMAPRESIZED (DB_EBASE + 14)
 
 /// Environment is incompatible with requested flags (`MDB_INCOMPATIBLE`)
 ///
@@ -126,36 +117,36 @@ const char *po_strerror(int err);
 ///     Opening a named DB when the unnamed DB has `MDB_DUPSORT` / `MDB_INTEGERKEY`.
 ///     Accessing a data record as a database, or vice versa.
 ///     The database was dropped and recreated with different flags.
-#define LMDB_EINCOMP (LMDB_EBASE + 15)
+#define DB_EINCOMP (DB_EBASE + 15)
 
 /// Invalid reuse of reader slot (`MDB_BAD_RSLOT`)
-#define LMDB_EBADRSLOT (LMDB_EBASE + 16)
+#define DB_EBADRSLOT (DB_EBASE + 16)
 
 /// Transaction must abort and cannot proceed (`MDB_BAD_TXN`)
-#define LMDB_EBADTXN (LMDB_EBASE + 17)
+#define DB_EBADTXN (DB_EBASE + 17)
 
 /// Invalid key/value size or misuse of DUPFIXED (`MDB_BAD_VALSIZE`)
-#define LMDB_EBADVALSIZE (LMDB_EBASE + 18)
+#define DB_EBADVALSIZE (DB_EBASE + 18)
 
 /// Database handle changed or invalid (`MDB_BAD_DBI`)
-#define LMDB_EBADDBI (LMDB_EBASE + 19)
+#define DB_EBADDBI (DB_EBASE + 19)
 
 /// Cursor not initialized before use (application-specific)
-#define LMDB_ECURSORUNINIT (LMDB_EBASE + 20)
+#define DB_ECURSORUNINIT (DB_EBASE + 20)
 
 /// Cursor used from a different thread than it was created on (application-specific)
-#define LMDB_ECURSORTHREAD (LMDB_EBASE + 21)
+#define DB_ECURSORTHREAD (DB_EBASE + 21)
 
 /// Write attempted in a read-only transaction (`MDB_TXN_READONLY`)
-#define LMDB_ETXNREADONLY (LMDB_EBASE + 22)
+#define DB_ETXNREADONLY (DB_EBASE + 22)
 
 /// Illegal access or permission denied in LMDB operations (application-specific)
-#define LMDB_EILLACC (LMDB_EBASE + 23)
+#define DB_EILLACC (DB_EBASE + 23)
 
 /// Top-most error value for range checks
-#define LMDB_ETOP LMDB_EILLACC
+#define DB_ETOP DB_EILLACC
 
-/** @} */ // end of LMDB_ERRORS
+/** @} */ // end of DB_ERRORS
 
 // - log_c
 
@@ -185,7 +176,7 @@ const char *po_strerror(int err);
 #define PERF_ENOTINIT (PERF_EBASE + 6) // Performance subsystem not initialized
 #define PERF_EBUSY (PERF_EBASE + 7) // Performance subsystem is busy
 #define PERF_EAGAIN (PERF_EBASE + 8) // Resource temporarily unavailable
-#define PERF_EOVERFLOW (PERF_EBASE + 9) // Overflow in histogram or
+#define PERF_EOVERFLOW (PERF_EBASE + 9) // Overflow in histogram or counter
 #define PERF_ETOP PERF_EOVERFLOW // Top-most error value for range checks
 
 // - net

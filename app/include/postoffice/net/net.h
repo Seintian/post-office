@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "utils/errors.h"
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,9 +24,14 @@ po_conn_t *po_listen(const char *path, uint16_t port);
 // Connect to a listening endpoint
 po_conn_t *po_connect(const char *path, uint16_t port);
 
-// Send a single framed message (hdr+payload)
-int po_send(po_conn_t *c, uint8_t msg_type, uint8_t flags,
-            const void *payload, uint32_t payload_len);
+// Send a single framed message (hdr + payload)
+int po_send(
+    po_conn_t *c,
+    uint8_t msg_type,
+    uint8_t flags,
+    const void *payload,
+    uint32_t payload_len
+);
 
 // Try to receive one full message
 //   out_payload is malloc'd, caller must free()

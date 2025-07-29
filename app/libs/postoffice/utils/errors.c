@@ -26,30 +26,30 @@ static const char *inih_strerror(int err) {
 
 static const char *lmdb_strerror(int err) {
     switch (err) {
-        case LMDB_EOK: return "No error";
-        case LMDB_EKEYEXIST: return "Key already exists";
-        case LMDB_ENOTFOUND: return "Key not found";
-        case LMDB_EPAGENOTFOUND: return "Page not found";
-        case LMDB_ECORRUPTED: return "Database corrupted";
-        case LMDB_EPANIC: return "Environment panic";
-        case LMDB_EVERSION: return "Version mismatch";
-        case LMDB_EINVALID: return "Invalid handle";
-        case LMDB_EMAPFULL: return "Map full";
-        case LMDB_EDBSFULL: return "Database full";
-        case LMDB_EREADERSFULL: return "Readers full";
-        case LMDB_ETXNFULL: return "Transaction full";
-        case LMDB_ECURSORFULL: return "Cursor full";
-        case LMDB_EPAGEFULL: return "Page full";
-        case LMDB_EMAPRESIZED: return "Map resized";
-        case LMDB_EINCOMP: return "Incompatible environment";
-        case LMDB_EBADRSLOT: return "Bad reader slot";
-        case LMDB_EBADTXN: return "Bad transaction";
-        case LMDB_EBADVALSIZE: return "Bad value size";
-        case LMDB_EBADDBI: return "Bad database identifier";
-        case LMDB_ECURSORUNINIT: return "Cursor uninitialized";
-        case LMDB_ECURSORTHREAD: return "Cursor thread mismatch";
-        case LMDB_ETXNREADONLY: return "Transaction read-only";
-        case LMDB_EILLACC: return "Illegal access";
+        case DB_EOK: return "No error";
+        case DB_EKEYEXIST: return "Key already exists";
+        case DB_ENOTFOUND: return "Key not found";
+        case DB_EPAGENOTFOUND: return "Page not found";
+        case DB_ECORRUPTED: return "Database corrupted";
+        case DB_EPANIC: return "Environment panic";
+        case DB_EVERSION: return "Version mismatch";
+        case DB_EINVALID: return "Invalid handle";
+        case DB_EMAPFULL: return "Map full";
+        case DB_EDBSFULL: return "Database full";
+        case DB_EREADERSFULL: return "Readers full";
+        case DB_ETXNFULL: return "Transaction full";
+        case DB_ECURSORFULL: return "Cursor full";
+        case DB_EPAGEFULL: return "Page full";
+        case DB_EMAPRESIZED: return "Map resized";
+        case DB_EINCOMP: return "Incompatible environment";
+        case DB_EBADRSLOT: return "Bad reader slot";
+        case DB_EBADTXN: return "Bad transaction";
+        case DB_EBADVALSIZE: return "Bad value size";
+        case DB_EBADDBI: return "Bad database identifier";
+        case DB_ECURSORUNINIT: return "Cursor uninitialized";
+        case DB_ECURSORTHREAD: return "Cursor thread mismatch";
+        case DB_ETXNREADONLY: return "Transaction read-only";
+        case DB_EILLACC: return "Illegal access";
         default: return "Unknown error code";
     }
 }
@@ -68,7 +68,7 @@ static const char *perf_strerror(int err) {
 }
 
 const char *po_strerror(int err) {
-    if (BETWEEN(err, LMDB_EBASE, LMDB_ETOP)) 
+    if (BETWEEN(err, DB_EBASE, DB_ETOP)) 
         return lmdb_strerror(err);
 
     if (BETWEEN(err, INIH_EBASE, INIH_ETOP))
