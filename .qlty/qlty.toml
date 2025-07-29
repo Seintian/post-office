@@ -9,7 +9,7 @@ config_version = "0"
 # Don't scan test harness files or generated code:
 exclude_patterns = [
   # never scan Unity internals
-  "**/libs/unity/**",
+  "**/libs/thirdparty/unity/**",
   # never scan generated files
   "**/build/**",
 ]
