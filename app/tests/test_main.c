@@ -11,6 +11,7 @@ extern TEST_GROUP_RUNNER(Batcher);
 extern TEST_GROUP_RUNNER(ZeroCopy);
 extern TEST_GROUP_RUNNER(Perf);
 extern TEST_GROUP_RUNNER(DB_LMDB);
+extern TEST_GROUP_RUNNER(Framing);
 // etc for other suites...
 
 static void RunAllTests(void) {
@@ -24,6 +25,7 @@ static void RunAllTests(void) {
     RUN_TEST_GROUP(ZeroCopy);
     RUN_TEST_GROUP(Perf);
     RUN_TEST_GROUP(DB_LMDB);
+    RUN_TEST_GROUP(Framing);
 }
 
 int main(int argc, const char *argv[]) {

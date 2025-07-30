@@ -1,5 +1,5 @@
-#ifndef PO_NET_H
-#define PO_NET_H
+#ifndef _PO_NET_H
+#define _PO_NET_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 // High‑level connection handle
-typedef struct po_conn po_conn_t;
+typedef struct _po_conn_t po_conn_t;
 
 // Initialize networking (sets up epoll, etc.)
 int po_net_init(void);
@@ -53,4 +53,4 @@ void po_close(po_conn_t *c);
 }
 #endif
 
-#endif // PO_NET_H
+#endif // _PO_NET_H

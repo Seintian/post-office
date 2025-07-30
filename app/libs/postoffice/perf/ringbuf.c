@@ -5,21 +5,17 @@
 #include "perf/ringbuf.h"
 #include <stdlib.h>
 #include <errno.h>
-#include <stdatomic.h>
 #include <string.h>
+#include <stdatomic.h>
 #include <assert.h>
-#include <stdint.h>
-#include <threads.h>
-
 
 /*
-    We allocate head and tail each in their own cache‐line‐sized block,
-    so they never share a cache line.
+    head (read index)  and  tail (write index)  are each allocated
+    on their own cache‐line so there's no false sharing.
 */
-
 struct _perf_ringbuf_t {
-    atomic_size_t *head;   // pointer to a cache-line-aligned slot
-    atomic_size_t *tail;   // likewise
+    atomic_size_t *head;   // read index
+    atomic_size_t *tail;   // write index
     size_t         cap;    // must be power‐of‐two
     size_t         mask;   // cap - 1
     void         **slots;  // array[cap]
@@ -28,22 +24,21 @@ struct _perf_ringbuf_t {
 static size_t _cacheline = 64;
 
 void perf_ringbuf_set_cacheline(size_t cacheline_bytes) {
-    if (cacheline_bytes && (cacheline_bytes & (cacheline_bytes - 1)) == 0)
+    if (cacheline_bytes && !(cacheline_bytes & (cacheline_bytes - 1))) 
         _cacheline = cacheline_bytes;
     else
-        _cacheline = 64;
+        _cacheline = 64;  // default
 }
 
 perf_ringbuf_t *perf_ringbuf_create(size_t capacity) {
-    if ((capacity & (capacity - 1)) != 0) {
+    if (capacity == 0 || (capacity & (capacity - 1)) != 0) {
         errno = EINVAL;
         return NULL;
     }
 
-    perf_ringbuf_t *rb = malloc(sizeof(*rb));
-    if (!rb) 
+    perf_ringbuf_t *rb = calloc(1, sizeof(*rb));
+    if (!rb)
         return NULL;
-    memset(rb, 0, sizeof(*rb));
 
     rb->cap   = capacity;
     rb->mask  = capacity - 1;
@@ -53,9 +48,9 @@ perf_ringbuf_t *perf_ringbuf_create(size_t capacity) {
         return NULL;
     }
 
-    // allocate head and tail each on its own cache line
-    if (posix_memalign((void**)&rb->head, _cacheline, _cacheline) ||
-        posix_memalign((void**)&rb->tail, _cacheline, _cacheline)) {
+    // align head and tail on separate cache lines
+    if (posix_memalign((void**)&rb->head, _cacheline, sizeof(*rb->head)) != 0 ||
+        posix_memalign((void**)&rb->tail, _cacheline, sizeof(*rb->tail)) != 0) {
         free(rb->slots);
         free(rb);
         return NULL;
@@ -66,68 +61,81 @@ perf_ringbuf_t *perf_ringbuf_create(size_t capacity) {
     return rb;
 }
 
-void perf_ringbuf_destroy(perf_ringbuf_t **rb) {
-    if (!rb || !*rb)
+void perf_ringbuf_destroy(perf_ringbuf_t **prb) {
+    if (!*prb)
         return;
 
-    perf_ringbuf_t *ringbuf = *rb;
-
-    if (ringbuf->slots) {
-        free(ringbuf->slots);
-        ringbuf->slots = NULL;
-    }
-
-    if (ringbuf->head) {
-        free(ringbuf->head);
-        ringbuf->head = NULL;
-    }
-
-    if (ringbuf->tail) {
-        free(ringbuf->tail);
-        ringbuf->tail = NULL;
-    }
-
-    free(ringbuf);
-    *rb = NULL;
+    perf_ringbuf_t *rb = *prb;
+    free(rb->slots);
+    free(rb->head);
+    free(rb->tail);
+    free(rb);
+    *prb = NULL;
 }
 
 int perf_ringbuf_enqueue(perf_ringbuf_t *rb, void *item) {
-    size_t h = atomic_load_explicit(rb->head, memory_order_relaxed);
-    size_t t = atomic_load_explicit(rb->tail, memory_order_acquire);
+    size_t head = atomic_load_explicit(rb->head, memory_order_acquire);
+    size_t tail = atomic_load_explicit(rb->tail, memory_order_relaxed);
 
-    if (((h + 1) & rb->mask) == t)
-        return -1;  // full
+    // full if writing would catch the reader
+    if (((tail + 1) & rb->mask) == (head & rb->mask))
+        return -1;
 
-    rb->slots[h] = item;
-    atomic_store_explicit(
-        rb->head,
-        (h + 1) & rb->mask,
-        memory_order_release
-    );
+    rb->slots[tail & rb->mask] = item;
+    atomic_store_explicit(rb->tail, tail + 1, memory_order_release);
     return 0;
 }
 
 int perf_ringbuf_dequeue(perf_ringbuf_t *rb, void **out) {
-    size_t t = atomic_load_explicit(rb->tail, memory_order_relaxed);
-    size_t h = atomic_load_explicit(rb->head, memory_order_acquire);
+    size_t head = atomic_load_explicit(rb->head, memory_order_relaxed);
+    size_t tail = atomic_load_explicit(rb->tail, memory_order_acquire);
 
-    if (t == h)
-        return -1;  // empty
+    // empty if nothing written
+    if ((head & rb->mask) == (tail & rb->mask))
+        return -1;
 
-    *out = rb->slots[t];
-    atomic_store_explicit(
-        rb->tail,
-        (t + 1) & rb->mask,
-        memory_order_release
-    );
+    *out = rb->slots[head & rb->mask];
+    atomic_store_explicit(rb->head, head + 1, memory_order_release);
     return 0;
 }
 
 size_t perf_ringbuf_count(const perf_ringbuf_t *rb) {
-    size_t h = atomic_load_explicit(rb->head, memory_order_acquire);
-    size_t t = atomic_load_explicit(rb->tail, memory_order_acquire);
-    if (h >= t)
-        return h - t;
+    size_t head = atomic_load_explicit(rb->head, memory_order_acquire);
+    size_t tail = atomic_load_explicit(rb->tail, memory_order_acquire);
+    // how many writes ahead of reads?
+    return (tail - head);
+}
 
-    return (h + rb->cap) - t;
+int perf_ringbuf_peek(const perf_ringbuf_t *rb, void **out) {
+    size_t head = atomic_load_explicit(rb->head, memory_order_acquire);
+    size_t tail = atomic_load_explicit(rb->tail, memory_order_acquire);
+
+    if (head == tail)               // empty?
+        return -1;
+
+    if (out)
+        *out = rb->slots[head & rb->mask];
+
+    return 0;
+}
+
+int perf_ringbuf_peek_at(const perf_ringbuf_t *rb, size_t idx, void **out) {
+    size_t cnt = perf_ringbuf_count(rb);
+    if (idx >= cnt)
+        return -1;
+
+    size_t head = atomic_load_explicit(rb->head, memory_order_acquire);
+    if (out)
+        *out = rb->slots[(head + idx) & rb->mask];
+
+    return 0;
+}
+
+int perf_ringbuf_advance(perf_ringbuf_t *rb, size_t n) {
+    size_t cnt = perf_ringbuf_count(rb);
+    if (n > cnt)
+        return -1;
+
+    atomic_fetch_add_explicit(rb->head, n, memory_order_release);
+    return 0;
 }
