@@ -2,6 +2,7 @@
 #define _PERF_ZEROCOPY_H
 
 #include <stddef.h>
+#include <sys/cdefs.h>
 
 
 #ifdef __cplusplus
@@ -30,7 +31,7 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size);
  *
  * @param pool The pool to destroy.
  */
-void perf_zcpool_destroy(perf_zcpool_t **pool);
+void perf_zcpool_destroy(perf_zcpool_t **pool) __nonnull((1));
 
 /**
  * @brief Acquire one free buffer from the pool.
@@ -38,7 +39,7 @@ void perf_zcpool_destroy(perf_zcpool_t **pool);
  * @param pool The pool to acquire from.
  * @return     Pointer to a buffer, or NULL if none are free (errno=EAGAIN).
  */
-void *perf_zcpool_acquire(perf_zcpool_t *pool);
+void *perf_zcpool_acquire(perf_zcpool_t *pool) __nonnull((1));
 
 /**
  * @brief Release a buffer back to the pool.
@@ -48,7 +49,7 @@ void *perf_zcpool_acquire(perf_zcpool_t *pool);
  * @param pool   The pool to release into.
  * @param buffer Buffer pointer to return.
  */
-void perf_zcpool_release(perf_zcpool_t *pool, void *buffer);
+void perf_zcpool_release(perf_zcpool_t *pool, void *buffer) __nonnull((1, 2));
 
 /**
  * @brief Get the number of free buffers currently available.
@@ -56,7 +57,7 @@ void perf_zcpool_release(perf_zcpool_t *pool, void *buffer);
  * @param pool The pool to query.
  * @return     Number of free buffers, or 0 if pool is NULL.
  */
-size_t perf_zcpool_freecount(const perf_zcpool_t *pool);
+size_t perf_zcpool_freecount(const perf_zcpool_t *pool) __nonnull((1));
 
 #ifdef __cplusplus
 }

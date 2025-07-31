@@ -3,20 +3,22 @@
 #endif
 
 #include "net/framing.h"
+#include "utils/errors.h"
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <arpa/inet.h>  // htonl/ntohl
 
+// -----------------------------------------------------------------------------
+// framing_encoder
+// -----------------------------------------------------------------------------
 
-struct framing_encoder {
-    perf_zcpool_t *pool;
-    uint32_t       max_payload;
-};
-
-framing_encoder_t *framing_encoder_new(perf_zcpool_t *pool, uint32_t max_payload) {
+framing_encoder_t *framing_encoder_new(
+    perf_zcpool_t *pool,
+    uint32_t       max_payload
+) {
     if (max_payload == 0) {
-        errno = EINVAL;
+        errno = NET_EINVAL;
         return NULL;
     }
 
@@ -37,20 +39,20 @@ int framing_encode(
     uint32_t          *out_len
 ) {
     if (payload_len > enc->max_payload) {
-        errno = EINVAL;
+        errno = NET_EMSGSIZE;  // payload too big
         return -1;
     }
 
-    /* allocate one buffer from pool */
+    // grab one big buffer: 4 B header + payload
     void *buf = perf_zcpool_acquire(enc->pool);
-    if (!buf)
+    if (!buf) {
+        // errno == EAGAIN from pool
+        errno = NET_EAGAIN;
         return -1;
+    }
 
-    /* write length header BE */
-    uint32_t be = htonl(payload_len);
-    memcpy(buf, &be, 4);
-
-    /* copy payload after header */
+    uint32_t be_len = htonl(payload_len);
+    memcpy(buf, &be_len, 4);
     if (payload_len)
         memcpy((char*)buf + 4, payload, payload_len);
 
@@ -68,14 +70,16 @@ void framing_encoder_free(framing_encoder_t **penc) {
 }
 
 
-struct framing_decoder {
-    perf_ringbuf_t *rb;  // ring of void* frame buffers
-    perf_zcpool_t  *pool;
-};
+// -----------------------------------------------------------------------------
+// framing_decoder
+// -----------------------------------------------------------------------------
 
-framing_decoder_t *framing_decoder_new(size_t depth, perf_zcpool_t *pool) {
+framing_decoder_t *framing_decoder_new(
+    size_t         depth,
+    perf_zcpool_t *pool
+) {
     if ((depth & (depth - 1)) != 0 || depth < 2) {
-        errno = EINVAL;
+        errno = NET_EINVAL;
         return NULL;
     }
 
@@ -93,34 +97,39 @@ framing_decoder_t *framing_decoder_new(size_t depth, perf_zcpool_t *pool) {
     return d;
 }
 
-int framing_decoder_feed(framing_decoder_t *dec, void *frame) {
-    /* enqueue the buffer pointer */
-    if (perf_ringbuf_enqueue(dec->rb, frame) < 0)
+int framing_decoder_feed(
+    framing_decoder_t *dec,
+    void              *frame
+) {
+    // enqueue the full buffer pointer
+    if (perf_ringbuf_enqueue(dec->rb, frame) < 0) {
+        // ring full ⇒ ENOSPC
+        errno = NET_ENOSPC;
         return -1;
+    }
 
     return 0;
 }
 
 int framing_decoder_next(
     framing_decoder_t *dec,
-    void **out_payload,
-    uint32_t *out_len
+    void             **out_payload,
+    uint32_t          *out_len
 ) {
     void *frame;
     int rc = perf_ringbuf_dequeue(dec->rb, &frame);
-    if (rc < 0)
-        return 0;  // queue empty
+    if (rc < 0) {
+        // empty
+        return 0;
+    }
 
-    /* frame points at [4B len | payload] */
+    // frame is [4B BE length][payload…]
     uint32_t be;
     memcpy(&be, frame, 4);
     uint32_t payload_len = ntohl(be);
 
-    /* shift payload pointer in place */
     *out_payload = (char*)frame + 4;
     *out_len     = payload_len;
-
-    /* note: user must eventually release(frame) back to zcpool */
     return 1;
 }
 

@@ -2,6 +2,7 @@
 #include "net/framing.h"
 #include "perf/zerocopy.h"
 #include "perf/ringbuf.h"
+#include "utils/errors.h"
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -43,7 +44,7 @@ TEST_TEAR_DOWN(Framing) {
 TEST(Framing, EncoderNew_InvalidParams) {
     // max_payload==0
     TEST_ASSERT_NULL(framing_encoder_new(pool, 0));
-    TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+    TEST_ASSERT_EQUAL_INT(NET_EINVAL, errno);
 }
 
 TEST(Framing, Encode_PayloadTooBig) {
@@ -52,7 +53,7 @@ TEST(Framing, Encode_PayloadTooBig) {
     char buf[16] = {0};
     void *frame; uint32_t flen;
     TEST_ASSERT_EQUAL_INT(-1, framing_encode(enc, buf, 9, &frame, &flen));
-    TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+    TEST_ASSERT_EQUAL_INT(NET_EMSGSIZE, errno);
 }
 
 TEST(Framing, Encode_Basic) {

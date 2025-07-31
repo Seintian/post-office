@@ -67,6 +67,35 @@ static const char *perf_strerror(int err) {
     }
 }
 
+static const char *net_strerror(int err) {
+    switch (err) {
+        case NET_EOK: return "No error";
+        case NET_EINVAL: return "Invalid argument";
+        case NET_ENOSPC: return "No space left on device";
+        case NET_EMSGSIZE: return "Message too long";
+        case NET_ESOCK: return "Socket error";
+        case NET_ETIMEOUT: return "Operation timed out";
+        case NET_EVERSION: return "Protocol version mismatch";
+        case NET_EAGAIN: return "Resource temporarily unavailable";
+        case NET_ENOTCONN: return "Socket is not connected";
+        case NET_ECONNREFUSED: return "Connection refused";
+        case NET_EPROTO: return "Protocol error";
+        case NET_EPROTONOSUPPORT: return "Protocol not supported";
+        default: return "Unknown network error code";
+    }
+}
+
+static const char *zcp_strerror(int err) {
+    switch (err) {
+        case ZCP_EOK: return "No error";
+        case ZCP_EINVAL: return "Invalid argument";
+        case ZCP_ENOMEM: return "Out of memory";
+        case ZCP_EAGAIN: return "Resource temporarily unavailable";
+        case ZCP_EMMAP: return "Memory mapping failed";
+        default: return "Unknown zero-copy pool error code";
+    }
+}
+
 const char *po_strerror(int err) {
     if (BETWEEN(err, DB_EBASE, DB_ETOP)) 
         return lmdb_strerror(err);
@@ -76,6 +105,12 @@ const char *po_strerror(int err) {
 
     if (BETWEEN(err, PERF_EBASE, PERF_ETOP))
         return perf_strerror(err);
+
+    if (BETWEEN(err, NET_EBASE, NET_ETOP))
+        return net_strerror(err);
+
+    if (BETWEEN(err, ZCP_EBASE, ZCP_ETOP))
+        return zcp_strerror(err);
 
     return strerror(err);
 }

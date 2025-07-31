@@ -4,15 +4,25 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "perf/ringbuf.h"    // pointer ring‐buffer
-#include "perf/zerocopy.h"   // zcpool
+#include "perf/ringbuf.h"
+#include "perf/zerocopy.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct framing_encoder framing_encoder_t;
-typedef struct framing_decoder framing_decoder_t;
+struct _framing_encoder_t {
+    perf_zcpool_t *pool;
+    uint32_t       max_payload;
+};
+
+struct _framing_decoder_t {
+    perf_ringbuf_t *rb;    ///< holds void* pointers to full frames
+    perf_zcpool_t  *pool;  ///< zcpool for both encoder and release
+};
+
+typedef struct _framing_encoder_t framing_encoder_t;
+typedef struct _framing_decoder_t framing_decoder_t;
 
 /**
  * @brief Create a framing encoder.

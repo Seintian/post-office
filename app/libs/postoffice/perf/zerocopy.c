@@ -4,6 +4,7 @@
 
 #include "perf/zerocopy.h"
 #include "perf/ringbuf.h"
+#include "utils/errors.h"
 
 #include <sys/mman.h>
 #include <linux/mman.h>
@@ -23,7 +24,7 @@ struct _perf_zcpool_t {
 
 perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
     if (buf_count < 1 || buf_size == 0 || buf_size > (2UL<<20)) {
-        errno = EINVAL;
+        errno = ZCP_EINVAL;
         return NULL;
     }
 
@@ -51,8 +52,10 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
             -1,
             0
         );
-        if (base == MAP_FAILED)
+        if (base == MAP_FAILED) {
+            errno = ZCP_EMMAP;
             return NULL;
+        }
     }
 
     perf_zcpool_t *p = malloc(sizeof(*p));
@@ -81,7 +84,7 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
 }
 
 void perf_zcpool_destroy(perf_zcpool_t **p) {
-    if (!p || !*p)
+    if (!*p)
         return;
 
     perf_zcpool_t *pool = *p;
@@ -102,14 +105,14 @@ void perf_zcpool_destroy(perf_zcpool_t **p) {
 }
 
 void *perf_zcpool_acquire(perf_zcpool_t *p) {
-    if (!p || !p->freeq) {
-        errno = EINVAL;
+    if (!p->freeq) {
+        errno = ZCP_EINVAL;
         return NULL;
     }
 
     void *buf = NULL;
     if (perf_ringbuf_dequeue(p->freeq, &buf) < 0) {
-        errno = EAGAIN;
+        errno = ZCP_EAGAIN;
         return NULL;
     }
 
@@ -117,8 +120,8 @@ void *perf_zcpool_acquire(perf_zcpool_t *p) {
 }
 
 void perf_zcpool_release(perf_zcpool_t *p, void *buffer) {
-    if (!p || !buffer || !p->freeq) {
-        errno = EINVAL;
+    if (!p->freeq) {
+        errno = ZCP_EINVAL;
         return;
     }
 
@@ -134,8 +137,8 @@ void perf_zcpool_release(perf_zcpool_t *p, void *buffer) {
 }
 
 size_t perf_zcpool_freecount(const perf_zcpool_t *p) {
-    if (!p || !p->freeq) {
-        errno = EINVAL;
+    if (!p->freeq) {
+        errno = ZCP_EINVAL;
         return 0;
     }
 

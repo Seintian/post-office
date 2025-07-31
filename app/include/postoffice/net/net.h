@@ -1,56 +1,67 @@
-#ifndef _PO_NET_H
-#define _PO_NET_H
+#ifndef _NET_NET_H
+#define _NET_NET_H
 
 #include <stdint.h>
 #include <stddef.h>
-#include "utils/errors.h"
-
+#include <sys/socket.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// High‑level connection handle
 typedef struct _po_conn_t po_conn_t;
 
-// Initialize networking (sets up epoll, etc.)
+// Initialize global networking (epoll, thread‑pools, etc.)
 int po_net_init(void);
 
-// Listen on a Unix‑domain or TCP socket
-//   path: "unix:/tmp/po.sock"  or "127.0.0.1"
-//   port: 0 for Unix‑domain, or TCP port number
-po_conn_t *po_listen(const char *path, uint16_t port);
+// Start listening (Unix‑socket if port==0, else TCP)
+po_conn_t *po_listen(const char *path, uint16_t port) __nonnull((1));
 
-// Connect to a listening endpoint
-po_conn_t *po_connect(const char *path, uint16_t port);
+// Connect to a listener (Unix or TCP)
+po_conn_t *po_connect(const char *path, uint16_t port) __nonnull((1));
 
-// Send a single framed message (hdr + payload)
-int po_send(
-    po_conn_t *c,
-    uint8_t msg_type,
-    uint8_t flags,
+/**
+ * @brief Asynchronously send one application message.
+ * 
+ * Returns immediately after queueing; any write errors get surfaced
+ * in a background thread (logged).
+ */
+int net_send(
+    uint8_t     msg_type,
+    uint8_t     flags,
     const void *payload,
-    uint32_t payload_len
-);
+    uint32_t    payload_len
+) __nonnull((3));
 
-// Try to receive one full message
-//   out_payload is malloc'd, caller must free()
-int po_recv(
-    po_conn_t *c,
-    uint8_t *out_msg_type,
-    uint8_t *out_flags,
-    void **out_payload,
+/**
+ * @brief Read from socket (blocking) and feed framing decoder.
+ * 
+ * Typically call once before net_recv() when you know data is available.
+ */
+ssize_t net_read_and_feed(void);
+
+/**
+ * @brief Try to pop the next complete message.
+ * @param out_msg_type    Message type
+ * @param out_flags       Flags
+ * @param out_payload     Pointer to payload region (owned by pool)
+ * @param out_payload_len Length of payload
+ * @return  1 if you got a message,
+ *          0 if none is ready,
+ *         -1 on protocol error.
+ */
+int net_recv(
+    uint8_t  *out_msg_type,
+    uint8_t  *out_flags,
+    void    **out_payload,
     uint32_t *out_payload_len
-);
+) __nonnull((1, 2, 3, 4));
 
-// Poll for events on all connections (timeout_ms: -1 = block)
-int po_poll(int timeout_ms);
-
-// Close a connection
-void po_close(po_conn_t *c);
+/** When you're done with a `out_payload` from net_recv(), call this to recycle it. */
+void net_payload_release(void *buf) __nonnull((1));
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // _PO_NET_H
+#endif // _NET_NET_H

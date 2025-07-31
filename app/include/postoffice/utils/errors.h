@@ -1,5 +1,5 @@
-#ifndef PO_ERRORS_H
-#define PO_ERRORS_H
+#ifndef _PO_ERRORS_H
+#define _PO_ERRORS_H
 
 #include "lmdb/lmdb.h"
 
@@ -180,6 +180,57 @@ const char *po_strerror(int err);
 #define PERF_ETOP PERF_EOVERFLOW // Top-most error value for range checks
 
 // - net
+#define NET_EBASE      (PO_EBASE + 400)
+
+/// Generic success
+#define NET_EOK        0
+
+/// Invalid argument (NULL pointer, bad size, etc.)
+#define NET_EINVAL     (NET_EBASE + 1)
+
+/// No space in framing queue or zcpool
+#define NET_ENOSPC     (NET_EBASE + 2)
+
+/// Message too large for encoder
+#define NET_EMSGSIZE   (NET_EBASE + 3)
+
+/// Underlying socket error
+#define NET_ESOCK      (NET_EBASE + 4)
+
+/// Timeout waiting for socket/event
+#define NET_ETIMEOUT   (NET_EBASE + 5)
+
+/// Protocol version mismatch
+#define NET_EVERSION   (NET_EBASE + 6)
+
+/// Resource temporarily unavailable
+#define NET_EAGAIN     (NET_EBASE + 7)
+
+/// Socket not connected
+#define NET_ENOTCONN   (NET_EBASE + 8)
+
+/// Connection refused
+#define NET_ECONNREFUSED (NET_EBASE + 9)
+
+/// Protocol error (malformed message, etc.)
+#define NET_EPROTO     (NET_EBASE + 10)
+
+/// Protocol not supported
+#define NET_EPROTONOSUPPORT (NET_EBASE + 11)
+
+/// Top‐most net error value
+#define NET_ETOP       NET_EPROTONOSUPPORT
+
+// - zcpool
+
+/// Zero‐copy buffer pool errors
+#define ZCP_EBASE   (PO_EBASE + 500)
+#define ZCP_EOK     (ZCP_EBASE + 0)          ///< No error
+#define ZCP_EINVAL  (ZCP_EBASE + 1)          ///< Invalid pool or buffer pointer
+#define ZCP_ENOMEM  (ZCP_EBASE + 2)          ///< Out of memory (pool creation)
+#define ZCP_EAGAIN  (ZCP_EBASE + 3)          ///< No buffers free (acquire would block)
+#define ZCP_EMMAP   (ZCP_EBASE + 4)          ///< Memory mapping failed
+#define ZCP_ETOP    ZCP_EAGAIN               ///< Topmost error
 
 // - hashtable
 
@@ -191,4 +242,4 @@ const char *po_strerror(int err);
 
 // - core
 
-#endif // PO_ERRORS_H
+#endif // _PO_ERRORS_H

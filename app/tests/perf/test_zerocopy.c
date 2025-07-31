@@ -1,5 +1,6 @@
 #include "unity/unity_fixture.h"
 #include "perf/zerocopy.h"
+#include "utils/errors.h"
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
@@ -23,15 +24,15 @@ TEST_TEAR_DOWN(ZeroCopy) {
 TEST(ZeroCopy, InvalidCreate) {
     const perf_zcpool_t *p1 = perf_zcpool_create(0, 1024);
     TEST_ASSERT_NULL(p1);
-    TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+    TEST_ASSERT_EQUAL_INT(ZCP_EINVAL, errno);
 
     const perf_zcpool_t *p2 = perf_zcpool_create(4, 0);
     TEST_ASSERT_NULL(p2);
-    TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+    TEST_ASSERT_EQUAL_INT(ZCP_EINVAL, errno);
 
     const perf_zcpool_t *p3 = perf_zcpool_create(4, (2UL << 20) + 1);
     TEST_ASSERT_NULL(p3);
-    TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+    TEST_ASSERT_EQUAL_INT(ZCP_EINVAL, errno);
 }
 
 TEST(ZeroCopy, AcquireReleaseBasic) {
@@ -48,7 +49,7 @@ TEST(ZeroCopy, AcquireReleaseBasic) {
     // further acquire should fail immediately
     const void *b = perf_zcpool_acquire(pool);
     TEST_ASSERT_NULL(b);
-    TEST_ASSERT_EQUAL_INT(EAGAIN, errno);
+    TEST_ASSERT_EQUAL_INT(ZCP_EAGAIN, errno);
 
     // release in a different order, one at a time
     perf_zcpool_release(pool, bufs[2]);
@@ -79,18 +80,10 @@ TEST(ZeroCopy, BufferDistinctness) {
 
 TEST(ZeroCopy, ReleaseInvalid) {
     // releasing NULL or foreign ptr should not crash
-    perf_zcpool_release(pool, NULL);
     int x;
     perf_zcpool_release(pool, &x);
     // freecount remains at 3
     TEST_ASSERT_EQUAL_UINT(3, perf_zcpool_freecount(pool));
-}
-
-TEST(ZeroCopy, DestroyAndAcquire) {
-    perf_zcpool_destroy(&pool);
-    const void *buf = perf_zcpool_acquire(pool);
-    TEST_ASSERT_NULL(buf);
-    TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 }
 
 TEST_GROUP_RUNNER(ZeroCopy) {
@@ -98,5 +91,4 @@ TEST_GROUP_RUNNER(ZeroCopy) {
     RUN_TEST_CASE(ZeroCopy, AcquireReleaseBasic);
     RUN_TEST_CASE(ZeroCopy, BufferDistinctness);
     RUN_TEST_CASE(ZeroCopy, ReleaseInvalid);
-    RUN_TEST_CASE(ZeroCopy, DestroyAndAcquire);
 }
