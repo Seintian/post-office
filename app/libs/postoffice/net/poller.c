@@ -8,10 +8,11 @@
 #include <unistd.h>
 #include <sys/epoll.h>
 #include <string.h>
-#include <stdatomic.h>
+#include <stdint.h>
+
 
 struct poller {
-    int               epfd;       // epoll instance fd
+    int               epfd;      // epoll instance fd
     perf_ringbuf_t   *queue;     // ring buffer of poller_event_t*
     perf_zcpool_t    *pool;      // pool for event objects
     size_t            max_events;
@@ -53,23 +54,22 @@ int poller_ctl(
     void           *user,
     int             op
 ) {
-    if (fd < 0 || !(op == EPOLL_CTL_ADD || op == EPOLL_CTL_MOD || op == EPOLL_CTL_DEL)) {
+    if (fd < 0 ||
+        !(op == EPOLL_CTL_ADD || op == EPOLL_CTL_MOD || op == EPOLL_CTL_DEL)) {
         errno = EINVAL;
         return -1;
     }
 
     struct epoll_event ev;
     memset(&ev, 0, sizeof(ev));
-    ev.events   = events;
+    ev.events = events;
     ev.data.ptr = user;
 
-    if (epoll_ctl(p->epfd, op, fd, &ev) < 0)
-        return -1;
-
-    return 0;
+    return epoll_ctl(p->epfd, op, fd, &ev);
 }
 
 int poller_wait(poller_t *p, int timeout_ms) {
+    // allocate on the stack if max_events is small, otherwise heap:
     struct epoll_event *events = malloc(sizeof(*events) * p->max_events);
     if (!events)
         return -1;
@@ -88,9 +88,6 @@ int poller_wait(poller_t *p, int timeout_ms) {
             break;
         }
 
-        e->fd        = events[i].data.fd >= 0
-                        ? events[i].data.fd
-                        : -1;
         e->events    = events[i].events;
         e->user_data = events[i].data.ptr;
 
@@ -111,7 +108,7 @@ int poller_next(poller_t *p, poller_event_t **ev) {
     void *raw;
     int rc = perf_ringbuf_dequeue(p->queue, &raw);
     if (rc < 0)
-        return 0;
+        return 0;   // none left
 
     *ev = (poller_event_t*)raw;
     return 1;

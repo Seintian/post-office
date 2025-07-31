@@ -3,62 +3,81 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <sys/socket.h>
+#include "net/socket.h"
+#include "net/protocol.h"
+#include "net/framing.h"
+#include "perf/zerocopy.h"
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct _po_conn_t po_conn_t;
+/**
+ * @brief Initialize the networking stack.
+ *
+ * Creates:
+ *   - Global poller
+ *   - Zero‑copy buffer pool for frames
+ *   - Framing encoder
+ *
+ * @param max_events  Max simultaneous epoll events
+ * @param buf_count   Number of buffers in the pool
+ * @param buf_size    Size of each buffer
+ * @param ring_depth  Depth of per‑connection frame queues
+ * @return 0 on success, -1 on error (errno set)
+ */
+int po_init(
+    size_t   max_events,
+    size_t   buf_count,
+    uint32_t buf_size,
+    size_t   ring_depth
+);
 
-// Initialize global networking (epoll, thread‑pools, etc.)
-int po_net_init(void);
+/** Shut down and free all global resources. */
+void po_shutdown(void);
 
-// Start listening (Unix‑socket if port==0, else TCP)
-po_conn_t *po_listen(const char *path, uint16_t port) __nonnull((1));
+/** High‑level listen/connect/accept using sockets. */
+po_conn_t *po_listen(const char *path, uint16_t port);
+po_conn_t *po_connect(const char *path, uint16_t port);
+int        po_accept(const po_conn_t *listener, po_conn_t **out);
 
-// Connect to a listener (Unix or TCP)
-po_conn_t *po_connect(const char *path, uint16_t port) __nonnull((1));
+/** Close a connection and free its decoder. */
+void po_close(po_conn_t **conn);
 
 /**
- * @brief Asynchronously send one application message.
- * 
- * Returns immediately after queueing; any write errors get surfaced
- * in a background thread (logged).
+ * @brief Send a complete protocol message over a connection.
+ *
+ * Uses zero‑copy buffers and framing encoder internally.
+ * Caller does NOT manage buffers.
+ *
+ * @return 0 on success, -1 on error
  */
-int net_send(
-    uint8_t     msg_type,
-    uint8_t     flags,
-    const void *payload,
-    uint32_t    payload_len
-) __nonnull((3));
+int po_send_msg(
+    po_conn_t   *conn,
+    uint8_t      msg_type,
+    uint8_t      flags,
+    const void  *payload,
+    uint32_t     payload_len
+);
 
 /**
- * @brief Read from socket (blocking) and feed framing decoder.
- * 
- * Typically call once before net_recv() when you know data is available.
+ * @brief Receive next complete protocol message (non‑blocking).
+ *
+ * @return  1 if a message is ready,
+ *          0 if none available,
+ *         -1 on error (errno set).
+ *
+ * On success, *payload points inside a pool buffer. Caller must
+ * eventually call perf_zcpool_release() on the frame buffer.
  */
-ssize_t net_read_and_feed(void);
-
-/**
- * @brief Try to pop the next complete message.
- * @param out_msg_type    Message type
- * @param out_flags       Flags
- * @param out_payload     Pointer to payload region (owned by pool)
- * @param out_payload_len Length of payload
- * @return  1 if you got a message,
- *          0 if none is ready,
- *         -1 on protocol error.
- */
-int net_recv(
-    uint8_t  *out_msg_type,
-    uint8_t  *out_flags,
-    void    **out_payload,
-    uint32_t *out_payload_len
-) __nonnull((1, 2, 3, 4));
-
-/** When you're done with a `out_payload` from net_recv(), call this to recycle it. */
-void net_payload_release(void *buf) __nonnull((1));
+int po_recv_msg(
+    po_conn_t   *conn,
+    uint8_t     *msg_type,
+    uint8_t     *flags,
+    void       **payload,
+    uint32_t    *payload_len
+);
 
 #ifdef __cplusplus
 }

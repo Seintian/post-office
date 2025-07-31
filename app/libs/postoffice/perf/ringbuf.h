@@ -44,7 +44,7 @@ int perf_ringbuf_enqueue(perf_ringbuf_t *rb, void *item) __nonnull((1));
  * @brief Dequeue one pointer from the ring.
  * @return 0 on success (*out set), -1 if the ring is empty.
  */
-int perf_ringbuf_dequeue(perf_ringbuf_t *rb, void **out) __nonnull((1, 2));
+int perf_ringbuf_dequeue(perf_ringbuf_t *rb, void **out) __nonnull((1));
 
 /**
  * @brief Return the approximate number of items currently in the ring.

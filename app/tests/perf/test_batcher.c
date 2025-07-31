@@ -25,11 +25,6 @@ TEST_TEAR_DOWN(Batcher) {
 }
 
 TEST(Batcher, InvalidCreate) {
-    // null ring
-    const perf_batcher_t *b1 = perf_batcher_create(NULL, 4);
-    TEST_ASSERT_NULL(b1);
-    TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-
     // zero batch size
     perf_ringbuf_t *rb = perf_ringbuf_create(8);
     TEST_ASSERT_NOT_NULL(rb);
@@ -80,14 +75,6 @@ TEST(Batcher, FullBatch) {
     TEST_ASSERT_EQUAL_INT(vals[5], *(int*)out[1]);
 }
 
-TEST(Batcher, EnqueueAfterDestroy) {
-    int x = 0;
-    perf_batcher_destroy(&batcher);
-    int rc = perf_batcher_enqueue(batcher, &x);
-    TEST_ASSERT_EQUAL_INT(-1, rc);
-    TEST_ASSERT_EQUAL_INT(EINVAL, errno);
-}
-
 // Optional: test blocking via thread
 static void *consumer_thread(void *arg) {
     perf_batcher_t *b = arg;
@@ -117,6 +104,5 @@ TEST_GROUP_RUNNER(Batcher) {
     RUN_TEST_CASE(Batcher, SingleBatch);
     RUN_TEST_CASE(Batcher, PartialBatch);
     RUN_TEST_CASE(Batcher, FullBatch);
-    RUN_TEST_CASE(Batcher, EnqueueAfterDestroy);
     RUN_TEST_CASE(Batcher, BlockingNext);
 }

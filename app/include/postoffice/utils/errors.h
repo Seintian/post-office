@@ -218,8 +218,17 @@ const char *po_strerror(int err);
 /// Protocol not supported
 #define NET_EPROTONOSUPPORT (NET_EBASE + 11)
 
+/// Network already initialized or in use
+#define NET_EALREADY   (NET_EBASE + 12)
+
+/// No such file or directory (e.g., socket path not found)
+#define NET_ENOENT     (NET_EBASE + 13)
+
+/// Generic I/O error (e.g., send/recv failure)
+#define NET_EIO        (NET_EBASE + 14)
+
 /// Top‐most net error value
-#define NET_ETOP       NET_EPROTONOSUPPORT
+#define NET_ETOP       NET_EIO
 
 // - zcpool
 

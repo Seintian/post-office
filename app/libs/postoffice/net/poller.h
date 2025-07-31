@@ -15,7 +15,6 @@ typedef struct poller poller_t;
 
 /// One ready‐fd event, allocated from a zero‑copy pool.
 typedef struct {
-    int      fd;          ///< file descriptor with activity
     uint32_t events;      ///< epoll events bitmask (EPOLLIN, EPOLLOUT, …)
     void    *user_data;   ///< custom pointer passed at registration
 } poller_event_t;

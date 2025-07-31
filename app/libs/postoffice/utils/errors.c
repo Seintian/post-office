@@ -81,6 +81,9 @@ static const char *net_strerror(int err) {
         case NET_ECONNREFUSED: return "Connection refused";
         case NET_EPROTO: return "Protocol error";
         case NET_EPROTONOSUPPORT: return "Protocol not supported";
+        case NET_EALREADY: return "Network already initialized or in use";
+        case NET_ENOENT: return "No such file or directory";
+        case NET_EIO: return "I/O error";
         default: return "Unknown network error code";
     }
 }

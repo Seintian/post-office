@@ -13,6 +13,14 @@ extern "C" {
 typedef struct _perf_zcpool_t perf_zcpool_t;
 
 /**
+ * @brief Get the size of each buffer in the zero-copy pool.
+ *
+ * @param pool The pool to query.
+ * @return Size of each buffer in bytes, or 0 if pool is NULL.
+ */
+size_t perf_zcpool_bufsize(const perf_zcpool_t *pool) __nonnull((1));
+
+/**
  * @brief Create a zero‑copy buffer pool backed by 2 MiB huge pages.
  *
  * Allocates a contiguous region of `buf_count * buf_size` bytes using

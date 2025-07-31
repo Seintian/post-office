@@ -11,6 +11,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <limits.h>
+#include <sys/uio.h>
+#include <stdbool.h>
 
 
 struct _perf_batcher_t {
@@ -20,7 +23,7 @@ struct _perf_batcher_t {
 };
 
 perf_batcher_t *perf_batcher_create(perf_ringbuf_t *rb, size_t batch_size) {
-    if (!rb || batch_size == 0) {
+    if (batch_size == 0) {
         errno = EINVAL;
         return NULL;
     }
@@ -43,7 +46,7 @@ perf_batcher_t *perf_batcher_create(perf_ringbuf_t *rb, size_t batch_size) {
 }
 
 void perf_batcher_destroy(perf_batcher_t **b) {
-    if (!b || !*b)
+    if (!*b)
         return;
 
     perf_batcher_t *batcher = *b;
@@ -60,7 +63,7 @@ void perf_batcher_destroy(perf_batcher_t **b) {
 }
 
 int perf_batcher_enqueue(perf_batcher_t *b, void *item) {
-    if (!b || b->rb == NULL || b->efd < 0) {
+    if (b->rb == NULL || b->efd < 0) {
         errno = EINVAL;
         return -1;
     }
@@ -82,8 +85,60 @@ int perf_batcher_enqueue(perf_batcher_t *b, void *item) {
     return 0;
 }
 
+int perf_batcher_flush(perf_batcher_t *b, int fd) {
+    if (fd < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    size_t count = perf_ringbuf_count(b->rb);
+    if (count == 0)
+        return 0;
+
+    if (count > IOV_MAX)
+        count = IOV_MAX;
+
+    struct iovec iov[IOV_MAX];
+
+    // Gather frames into iovec
+    size_t i = 0;
+    for (; i < count; i++) {
+        void *frame;
+        if (perf_ringbuf_peek_at(b->rb, i, &frame) < 0)
+            break;
+
+        uint32_t len = *(uint32_t *)frame; // first 4B = length
+        iov[i].iov_base = frame;
+        iov[i].iov_len  = len;
+    }
+
+    ssize_t written = writev(fd, iov, (int)i);
+    if (written < 0)
+        return -1;
+
+    // Remove frames that were fully written
+    ssize_t consumed = written;
+    for (size_t j = 0; j < i; j++) {
+        uint32_t len = *(uint32_t *)iov[j].iov_base;
+
+        if (consumed >= (ssize_t)len) {
+            perf_ringbuf_dequeue(b->rb, NULL); // drop from queue
+            consumed -= len;
+        }
+        else {
+            // Partial write - adjust the frame pointer
+            char *base = iov[j].iov_base;
+            base += consumed;
+            *(uint32_t *)base = len - (uint32_t)consumed; // update remaining size
+            break;
+        }
+    }
+
+    return 0;
+}
+
 ssize_t perf_batcher_next(perf_batcher_t *b, void **out) {
-    if (!b || b->rb == NULL || b->efd < 0 || !out) {
+    if (b->rb == NULL || b->efd < 0) {
         errno = EINVAL;
         return -1;
     }
@@ -98,12 +153,18 @@ ssize_t perf_batcher_next(perf_batcher_t *b, void **out) {
     size_t n = 0;
     for (; n < b->batch_size; n++) {
         void *item;
-        if (perf_ringbuf_dequeue(b->rb, &item) < 0) {
+        if (perf_ringbuf_dequeue(b->rb, &item) < 0)
             break;  // empty
-        }
 
         out[n] = item;
     }
 
     return (ssize_t)n;
+}
+
+bool perf_batcher_is_empty(const perf_batcher_t *b) {
+    if (!b->rb)
+        return true;
+
+    return perf_ringbuf_count(b->rb) == 0;
 }

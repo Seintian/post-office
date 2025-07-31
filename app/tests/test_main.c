@@ -1,5 +1,6 @@
 #include "unity/unity_fixture.h"
 
+
 // declare all your group runners:
 extern TEST_GROUP_RUNNER(Argv);
 extern TEST_GROUP_RUNNER(Configs);
@@ -13,7 +14,9 @@ extern TEST_GROUP_RUNNER(Perf);
 extern TEST_GROUP_RUNNER(DB_LMDB);
 extern TEST_GROUP_RUNNER(Framing);
 extern TEST_GROUP_RUNNER(Protocol);
-// etc for other suites...
+extern TEST_GROUP_RUNNER(Socket);
+extern TEST_GROUP_RUNNER(Net);
+
 
 static void RunAllTests(void) {
     RUN_TEST_GROUP(Argv);
@@ -28,6 +31,8 @@ static void RunAllTests(void) {
     RUN_TEST_GROUP(DB_LMDB);
     RUN_TEST_GROUP(Framing);
     RUN_TEST_GROUP(Protocol);
+    RUN_TEST_GROUP(Socket);
+    RUN_TEST_GROUP(Net);
 }
 
 int main(int argc, const char *argv[]) {

@@ -94,7 +94,9 @@ int perf_ringbuf_dequeue(perf_ringbuf_t *rb, void **out) {
     if ((head & rb->mask) == (tail & rb->mask))
         return -1;
 
-    *out = rb->slots[head & rb->mask];
+    if (out)
+        *out = rb->slots[head & rb->mask];
+
     atomic_store_explicit(rb->head, head + 1, memory_order_release);
     return 0;
 }
