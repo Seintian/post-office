@@ -88,14 +88,14 @@ static int iter_stop_after_one(
     return 42;
 }
 
-TEST(DB_LMDB, EnvOpenInvalidPath) {
+TEST(DB_LMDB, ENVOPENINVALIDPATH) {
     db_env_t *bad = NULL;
     int rc = db_env_open("/no/such/dir/hopefully", 1, 1<<20, &bad);
     TEST_ASSERT_EQUAL_INT(-1, rc);
     TEST_ASSERT_NULL(bad);
 }
 
-TEST(DB_LMDB, EnvOpenClose) {
+TEST(DB_LMDB, ENVOPENCLOSE) {
     int rc = db_env_open(env_path, 2, 1<<20, &env);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_NOT_NULL(env);
@@ -103,13 +103,13 @@ TEST(DB_LMDB, EnvOpenClose) {
 }
 
 
-TEST(DB_LMDB, BucketOpenAndClose) {
+TEST(DB_LMDB, BUCKETOPENANDCLOSE) {
     open_env_and_bucket("mybucket");
     TEST_ASSERT_NOT_NULL(bucket);
     db_bucket_close(&bucket);
 }
 
-TEST(DB_LMDB, PutGetDelete) {
+TEST(DB_LMDB, PUTGETDELETE) {
     open_env_and_bucket("b1");
 
     /* put */
@@ -137,7 +137,7 @@ TEST(DB_LMDB, PutGetDelete) {
     TEST_ASSERT_EQUAL_INT(DB_ENOTFOUND, errno);
 }
 
-TEST(DB_LMDB, PutOverwrite) {
+TEST(DB_LMDB, PUTOVERWRITE) {
     open_env_and_bucket("b2");
     const char *k = "key";
     const char *v1 = "one";
@@ -153,14 +153,14 @@ TEST(DB_LMDB, PutOverwrite) {
     free(out);
 }
 
-TEST(DB_LMDB, DeleteMissing) {
+TEST(DB_LMDB, DELETEMISSING) {
     open_env_and_bucket("b3");
     int rc = db_delete(bucket, "nokey", 5);
     TEST_ASSERT_EQUAL_INT(-1, rc);
     TEST_ASSERT_EQUAL_INT(DB_ENOTFOUND, errno);
 }
 
-TEST(DB_LMDB, GetMissing) {
+TEST(DB_LMDB, GETMISSING) {
     open_env_and_bucket("b4");
     void *out; size_t len;
     int rc = db_get(bucket, "nokey", 5, &out, &len);
@@ -168,7 +168,7 @@ TEST(DB_LMDB, GetMissing) {
     TEST_ASSERT_EQUAL_INT(DB_ENOTFOUND, errno);
 }
 
-TEST(DB_LMDB, IterateAll) {
+TEST(DB_LMDB, ITERATEALL) {
     open_env_and_bucket("b5");
     const struct {
         const char *k;
@@ -198,7 +198,7 @@ TEST(DB_LMDB, IterateAll) {
     TEST_ASSERT_EQUAL_STRING("cherry", data.keys[2]);
 }
 
-TEST(DB_LMDB, IterateEarlyStop) {
+TEST(DB_LMDB, ITERATEEARLYSTOP) {
     open_env_and_bucket("b6");
     TEST_ASSERT_EQUAL_INT(0, db_put(bucket, "x", 1 + 1, "1", 1 + 1));
     TEST_ASSERT_EQUAL_INT(0, db_put(bucket, "y", 1 + 1, "2", 1 + 1));
@@ -206,7 +206,7 @@ TEST(DB_LMDB, IterateEarlyStop) {
     TEST_ASSERT_EQUAL_INT(42, rc);
 }
 
-TEST(DB_LMDB, MultipleBucketsIsolation) {
+TEST(DB_LMDB, MULTIPLEBUCKETSISOLATION) {
     open_env_and_bucket("bA");
     db_bucket_t *b2;
     TEST_ASSERT_EQUAL_INT(0, db_bucket_open(env, "bB", &b2));
@@ -228,14 +228,14 @@ TEST(DB_LMDB, MultipleBucketsIsolation) {
 }
 
 TEST_GROUP_RUNNER(DB_LMDB) {
-    RUN_TEST_CASE(DB_LMDB, EnvOpenInvalidPath);
-    RUN_TEST_CASE(DB_LMDB, EnvOpenClose);
-    RUN_TEST_CASE(DB_LMDB, BucketOpenAndClose);
-    RUN_TEST_CASE(DB_LMDB, PutGetDelete);
-    RUN_TEST_CASE(DB_LMDB, PutOverwrite);
-    RUN_TEST_CASE(DB_LMDB, DeleteMissing);
-    RUN_TEST_CASE(DB_LMDB, GetMissing);
-    RUN_TEST_CASE(DB_LMDB, IterateAll);
-    RUN_TEST_CASE(DB_LMDB, IterateEarlyStop);
-    RUN_TEST_CASE(DB_LMDB, MultipleBucketsIsolation);
+    RUN_TEST_CASE(DB_LMDB, ENVOPENINVALIDPATH);
+    RUN_TEST_CASE(DB_LMDB, ENVOPENCLOSE);
+    RUN_TEST_CASE(DB_LMDB, BUCKETOPENANDCLOSE);
+    RUN_TEST_CASE(DB_LMDB, PUTGETDELETE);
+    RUN_TEST_CASE(DB_LMDB, PUTOVERWRITE);
+    RUN_TEST_CASE(DB_LMDB, DELETEMISSING);
+    RUN_TEST_CASE(DB_LMDB, GETMISSING);
+    RUN_TEST_CASE(DB_LMDB, ITERATEALL);
+    RUN_TEST_CASE(DB_LMDB, ITERATEEARLYSTOP);
+    RUN_TEST_CASE(DB_LMDB, MULTIPLEBUCKETSISOLATION);
 }
