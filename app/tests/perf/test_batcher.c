@@ -7,11 +7,11 @@
 #include <stdlib.h>
 
 
-TEST_GROUP(Batcher);
+TEST_GROUP(BATCHER);
 static perf_batcher_t *batcher;
 static perf_ringbuf_t *ringbuf;
 
-TEST_SETUP(Batcher) {
+TEST_SETUP(BATCHER) {
     // create a ring with capacity 8 and batcher size 4
     ringbuf = perf_ringbuf_create(8);
     TEST_ASSERT_NOT_NULL(ringbuf);
@@ -19,12 +19,12 @@ TEST_SETUP(Batcher) {
     TEST_ASSERT_NOT_NULL(batcher);
 }
 
-TEST_TEAR_DOWN(Batcher) {
+TEST_TEAR_DOWN(BATCHER) {
     perf_batcher_destroy(&batcher);
     perf_ringbuf_destroy(&ringbuf);
 }
 
-TEST(Batcher, InvalidCreate) {
+TEST(BATCHER, InvalidCreate) {
     // zero batch size
     perf_ringbuf_t *rb = perf_ringbuf_create(8);
     TEST_ASSERT_NOT_NULL(rb);
@@ -34,7 +34,7 @@ TEST(Batcher, InvalidCreate) {
     perf_ringbuf_destroy(&rb);
 }
 
-TEST(Batcher, SingleBatch) {
+TEST(BATCHER, SingleBatch) {
     int v = 123;
     void *out[4];
     // enqueue one
@@ -45,7 +45,7 @@ TEST(Batcher, SingleBatch) {
     TEST_ASSERT_EQUAL_PTR(&v, out[0]);
 }
 
-TEST(Batcher, PartialBatch) {
+TEST(BATCHER, PartialBatch) {
     void *out[4];
     int vals[3] = {10,20,30};
     for (int i = 0; i < 3; i++) {
@@ -58,7 +58,7 @@ TEST(Batcher, PartialBatch) {
     }
 }
 
-TEST(Batcher, FullBatch) {
+TEST(BATCHER, FullBatch) {
     void *out[4];
     int vals[6] = {1,2,3,4,5,6};
     // enqueue 6, batcher size is 4
@@ -86,7 +86,7 @@ static void *consumer_thread(void *arg) {
     return NULL;
 }
 
-TEST(Batcher, BlockingNext) {
+TEST(BATCHER, BlockingNext) {
     // spawn consumer that will block until we enqueue
     pthread_t tid;
     TEST_ASSERT_EQUAL_INT(0, pthread_create(&tid, NULL, consumer_thread, batcher));
@@ -99,10 +99,10 @@ TEST(Batcher, BlockingNext) {
     TEST_ASSERT_EQUAL_INT(0, pthread_join(tid, NULL));
 }
 
-TEST_GROUP_RUNNER(Batcher) {
-    RUN_TEST_CASE(Batcher, InvalidCreate);
-    RUN_TEST_CASE(Batcher, SingleBatch);
-    RUN_TEST_CASE(Batcher, PartialBatch);
-    RUN_TEST_CASE(Batcher, FullBatch);
-    RUN_TEST_CASE(Batcher, BlockingNext);
+TEST_GROUP_RUNNER(BATCHER) {
+    RUN_TEST_CASE(BATCHER, InvalidCreate);
+    RUN_TEST_CASE(BATCHER, SingleBatch);
+    RUN_TEST_CASE(BATCHER, PartialBatch);
+    RUN_TEST_CASE(BATCHER, FullBatch);
+    RUN_TEST_CASE(BATCHER, BlockingNext);
 }

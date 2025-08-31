@@ -26,38 +26,38 @@
     fclose(tmp);                                  \
 } while (0)
 
-TEST_GROUP(Perf);
+TEST_GROUP(PERF);
 
-TEST_SETUP(Perf) {
+TEST_SETUP(PERF) {
     char buf[2048];
     CAPTURE_REPORT(buf, sizeof(buf), perf_shutdown);
 }
 
-TEST_TEAR_DOWN(Perf) {
+TEST_TEAR_DOWN(PERF) {
     char buf[2048];
     CAPTURE_REPORT(buf, sizeof(buf), perf_shutdown);
 }
 
-TEST(Perf, InitAndShutdown) {
+TEST(PERF, InitAndShutdown) {
     TEST_ASSERT_EQUAL_INT(0, perf_init(4, 2, 1));
     char buf[2048];
     CAPTURE_REPORT(buf, sizeof(buf), perf_shutdown);
     TEST_ASSERT_EQUAL_INT(0, perf_init(1, 1, 1)); // reinit works
 }
 
-TEST(Perf, DoubleInitError) {
+TEST(PERF, DoubleInitError) {
     TEST_ASSERT_EQUAL_INT(0, perf_init(1, 1, 1));
     TEST_ASSERT_EQUAL_INT(-1, perf_init(1, 1, 1));
     TEST_ASSERT_EQUAL_INT(PERF_EALREADY, errno);
 }
 
-TEST(Perf, CounterBeforeInit) {
+TEST(PERF, CounterBeforeInit) {
     perf_shutdown(stdout);
     TEST_ASSERT_EQUAL_INT(-1, perf_counter_create("c"));
     TEST_ASSERT_EQUAL_INT(PERF_ENOTINIT, errno);
 }
 
-TEST(Perf, CounterCreateAndIncrement) {
+TEST(PERF, CounterCreateAndIncrement) {
     TEST_ASSERT_EQUAL_INT(0, perf_init(2, 2, 2));
     TEST_ASSERT_NOT_EQUAL_INT(-1, perf_counter_create("ct"));
 
@@ -74,13 +74,13 @@ TEST(Perf, CounterCreateAndIncrement) {
     TEST_ASSERT_NOT_NULL(strstr(buf, "ct: 4")); // 1+3
 }
 
-TEST(Perf, TimerBeforeInit) {
+TEST(PERF, TimerBeforeInit) {
     perf_shutdown(stdout);
     TEST_ASSERT_EQUAL_INT(-1, perf_timer_create("t"));
     TEST_ASSERT_EQUAL_INT(PERF_ENOTINIT, errno);
 }
 
-TEST(Perf, TimerCreateAndMeasure) {
+TEST(PERF, TimerCreateAndMeasure) {
     perf_init(1, 1, 1);
     TEST_ASSERT_EQUAL_INT(0, perf_timer_create("tm"));
 
@@ -97,13 +97,13 @@ TEST(Perf, TimerCreateAndMeasure) {
     TEST_ASSERT_NOT_NULL(strstr(buf, "tm:")); // value > 0 printed
 }
 
-TEST(Perf, HistogramBeforeInit) {
+TEST(PERF, HistogramBeforeInit) {
     perf_shutdown(stdout);
     uint64_t bins[] = {10, 20};
     TEST_ASSERT_EQUAL_INT(-1, perf_histogram_create("h", bins, 2));
 }
 
-TEST(Perf, HistogramCreateAndRecordBins) {
+TEST(PERF, HistogramCreateAndRecordBins) {
     perf_init(1, 1, 1);
     uint64_t bins[] = {5, 15, 30};
     TEST_ASSERT_EQUAL_INT(0, perf_histogram_create("hg", bins, 3));
@@ -123,7 +123,7 @@ TEST(Perf, HistogramCreateAndRecordBins) {
     TEST_ASSERT_NOT_NULL(strstr(buf, "<= 30: 1"));
 }
 
-TEST(Perf, HistogramOverflowBin) {
+TEST(PERF, HistogramOverflowBin) {
     perf_init(1, 1, 1);
     uint64_t bins[] = {1, 2};
     TEST_ASSERT_EQUAL_INT(0, perf_histogram_create("of", bins, 2));
@@ -139,14 +139,14 @@ TEST(Perf, HistogramOverflowBin) {
     TEST_ASSERT_NOT_NULL(strstr(buf, "<= 2: 1"));
 }
 
-TEST_GROUP_RUNNER(Perf) {
-    RUN_TEST_CASE(Perf, InitAndShutdown);
-    RUN_TEST_CASE(Perf, DoubleInitError);
-    RUN_TEST_CASE(Perf, CounterBeforeInit);
-    RUN_TEST_CASE(Perf, CounterCreateAndIncrement);
-    RUN_TEST_CASE(Perf, TimerBeforeInit);
-    RUN_TEST_CASE(Perf, TimerCreateAndMeasure);
-    RUN_TEST_CASE(Perf, HistogramBeforeInit);
-    RUN_TEST_CASE(Perf, HistogramCreateAndRecordBins);
-    RUN_TEST_CASE(Perf, HistogramOverflowBin);
+TEST_GROUP_RUNNER(PERF) {
+    RUN_TEST_CASE(PERF, InitAndShutdown);
+    RUN_TEST_CASE(PERF, DoubleInitError);
+    RUN_TEST_CASE(PERF, CounterBeforeInit);
+    RUN_TEST_CASE(PERF, CounterCreateAndIncrement);
+    RUN_TEST_CASE(PERF, TimerBeforeInit);
+    RUN_TEST_CASE(PERF, TimerCreateAndMeasure);
+    RUN_TEST_CASE(PERF, HistogramBeforeInit);
+    RUN_TEST_CASE(PERF, HistogramCreateAndRecordBins);
+    RUN_TEST_CASE(PERF, HistogramOverflowBin);
 }

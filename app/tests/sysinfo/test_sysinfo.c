@@ -9,17 +9,17 @@
 #include <stdio.h>
 
 
-TEST_GROUP(SysInfo);
+TEST_GROUP(SYSINFO);
 
-TEST_SETUP(SysInfo) {
+TEST_SETUP(SYSINFO) {
     // Initialize any necessary resources or state before each test
 }
 
-TEST_TEAR_DOWN(SysInfo) {
+TEST_TEAR_DOWN(SYSINFO) {
     // Clean up any resources or state after each test
 }
 
-TEST(SysInfo, TestSysInfoCollectSuccess) {
+TEST(SYSINFO, TestSysInfoCollectSuccess) {
     po_sysinfo_t info;
     memset(&info, 0, sizeof(info));
 
@@ -38,7 +38,7 @@ TEST(SysInfo, TestSysInfoCollectSuccess) {
     TEST_ASSERT(info.max_stack_size > 0);
 }
 
-TEST(SysInfo, TestSysInfoCollectInvalidPointer) {
+TEST(SYSINFO, TestSysInfoCollectInvalidPointer) {
     // Attempt to collect system information with a NULL pointer
     int result = po_sysinfo_collect(NULL);
     TEST_ASSERT_EQUAL_INT(-1, result);
@@ -75,7 +75,7 @@ static void assert_print_success(const po_sysinfo_t *info)
     fclose(mem);
 }
 
-TEST(SysInfo, TestSysInfoPrint) {
+TEST(SYSINFO, TestSysInfoPrint) {
     po_sysinfo_t info;
     memset(&info, 0, sizeof(info));
 
@@ -86,8 +86,8 @@ TEST(SysInfo, TestSysInfoPrint) {
     assert_print_success(&info);
 }
 
-TEST_GROUP_RUNNER(SysInfo) {
-    RUN_TEST_CASE(SysInfo, TestSysInfoCollectSuccess);
-    RUN_TEST_CASE(SysInfo, TestSysInfoCollectInvalidPointer);
-    RUN_TEST_CASE(SysInfo, TestSysInfoPrint);
+TEST_GROUP_RUNNER(SYSINFO) {
+    RUN_TEST_CASE(SYSINFO, TestSysInfoCollectSuccess);
+    RUN_TEST_CASE(SYSINFO, TestSysInfoCollectInvalidPointer);
+    RUN_TEST_CASE(SYSINFO, TestSysInfoPrint);
 }

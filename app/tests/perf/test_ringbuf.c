@@ -6,21 +6,21 @@
 
 static perf_ringbuf_t *rb;
 
-TEST_GROUP(RingBuf);
+TEST_GROUP(RINGBUF);
 
 
-TEST_SETUP(RingBuf) {
+TEST_SETUP(RINGBUF) {
     perf_ringbuf_set_cacheline(64);
     rb = perf_ringbuf_create(4);  // 4 (power-of-two) -> 3 usable slots
     TEST_ASSERT_NOT_NULL(rb);
 }
 
-TEST_TEAR_DOWN(RingBuf) {
+TEST_TEAR_DOWN(RINGBUF) {
     perf_ringbuf_destroy(&rb);
     TEST_ASSERT_NULL(rb);
 }
 
-TEST(RingBuf, InvalidCapacity) {
+TEST(RINGBUF, InvalidCapacity) {
     // non-power-of-two capacity
     perf_ringbuf_t *_rb = perf_ringbuf_create(3);
     TEST_ASSERT_NULL(_rb);
@@ -29,7 +29,7 @@ TEST(RingBuf, InvalidCapacity) {
     TEST_ASSERT_NULL(_rb);
 }
 
-TEST(RingBuf, ValidCreateDestroy) {
+TEST(RINGBUF, ValidCreateDestroy) {
     perf_ringbuf_set_cacheline(128);
     perf_ringbuf_t *_rb = perf_ringbuf_create(8);
     TEST_ASSERT_NOT_NULL(_rb);
@@ -37,13 +37,13 @@ TEST(RingBuf, ValidCreateDestroy) {
     TEST_ASSERT_NULL(_rb);
 }
 
-TEST(RingBuf, EmptyDequeue) {
+TEST(RINGBUF, EmptyDequeue) {
     void *item;
     int rc = perf_ringbuf_dequeue(rb, &item);
     TEST_ASSERT_EQUAL_INT(-1, rc);
 }
 
-TEST(RingBuf, SingleEnqueueDequeue) {
+TEST(RINGBUF, SingleEnqueueDequeue) {
     int value = 42;
     void *out;
     TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_enqueue(rb, &value));
@@ -53,7 +53,7 @@ TEST(RingBuf, SingleEnqueueDequeue) {
     TEST_ASSERT_EQUAL_UINT(0, perf_ringbuf_count(rb));
 }
 
-TEST(RingBuf, FullBuffer) {
+TEST(RINGBUF, FullBuffer) {
     size_t cap = 4;
 
     int vals[4] = {1,2,3,4};
@@ -66,7 +66,7 @@ TEST(RingBuf, FullBuffer) {
     TEST_ASSERT_EQUAL_UINT(cap-1, perf_ringbuf_count(rb));
 }
 
-TEST(RingBuf, WrapAround) {
+TEST(RINGBUF, WrapAround) {
     int vals[10];
     void *out;
 
@@ -99,7 +99,7 @@ TEST(RingBuf, WrapAround) {
     TEST_ASSERT_NULL(_rb);
 }
 
-TEST(RingBuf, CountAccuracy) {
+TEST(RINGBUF, CountAccuracy) {
     int x;
 
     perf_ringbuf_t *_rb = perf_ringbuf_create(8);
@@ -124,7 +124,7 @@ TEST(RingBuf, CountAccuracy) {
 }
 
 // Basic enqueue/dequeue behavior
-TEST(RingBuf, EnqueueDequeue) {
+TEST(RINGBUF, EnqueueDequeue) {
     int a = 1;
     int b = 2;
     int c = 3;
@@ -152,7 +152,7 @@ TEST(RingBuf, EnqueueDequeue) {
 }
 
 // Peek without removing
-TEST(RingBuf, Peek) {
+TEST(RINGBUF, Peek) {
     int x = 42;
     int y = 43;
     int *out;
@@ -175,7 +175,7 @@ TEST(RingBuf, Peek) {
 }
 
 // Peek at arbitrary offset
-TEST(RingBuf, PeekAt) {
+TEST(RINGBUF, PeekAt) {
     int v[3] = {10, 20, 30};
     int *out;
 
@@ -203,7 +203,7 @@ TEST(RingBuf, PeekAt) {
 }
 
 // Advance (drop) multiple items
-TEST(RingBuf, Advance) {
+TEST(RINGBUF, Advance) {
     int v[4] = {7, 8, 9, 10};
     int *out;
 
@@ -235,7 +235,7 @@ TEST(RingBuf, Advance) {
 }
 
 // Combined peek/advance/enqueue/dequeue
-TEST(RingBuf, MixedOperations) {
+TEST(RINGBUF, MixedOperations) {
     int data[5] = {1,2,3,4,5};
     int *out;
 
@@ -266,17 +266,17 @@ TEST(RingBuf, MixedOperations) {
     TEST_ASSERT_EQUAL_UINT64(0, perf_ringbuf_count(rb));
 }
 
-TEST_GROUP_RUNNER(RingBuf) {
-    RUN_TEST_CASE(RingBuf, InvalidCapacity);
-    RUN_TEST_CASE(RingBuf, ValidCreateDestroy);
-    RUN_TEST_CASE(RingBuf, EmptyDequeue);
-    RUN_TEST_CASE(RingBuf, SingleEnqueueDequeue);
-    RUN_TEST_CASE(RingBuf, FullBuffer);
-    RUN_TEST_CASE(RingBuf, WrapAround);
-    RUN_TEST_CASE(RingBuf, CountAccuracy);
-    RUN_TEST_CASE(RingBuf, EnqueueDequeue);
-    RUN_TEST_CASE(RingBuf, Peek);
-    RUN_TEST_CASE(RingBuf, PeekAt);
-    RUN_TEST_CASE(RingBuf, Advance);
-    RUN_TEST_CASE(RingBuf, MixedOperations);
+TEST_GROUP_RUNNER(RINGBUF) {
+    RUN_TEST_CASE(RINGBUF, InvalidCapacity);
+    RUN_TEST_CASE(RINGBUF, ValidCreateDestroy);
+    RUN_TEST_CASE(RINGBUF, EmptyDequeue);
+    RUN_TEST_CASE(RINGBUF, SingleEnqueueDequeue);
+    RUN_TEST_CASE(RINGBUF, FullBuffer);
+    RUN_TEST_CASE(RINGBUF, WrapAround);
+    RUN_TEST_CASE(RINGBUF, CountAccuracy);
+    RUN_TEST_CASE(RINGBUF, EnqueueDequeue);
+    RUN_TEST_CASE(RINGBUF, Peek);
+    RUN_TEST_CASE(RINGBUF, PeekAt);
+    RUN_TEST_CASE(RINGBUF, Advance);
+    RUN_TEST_CASE(RINGBUF, MixedOperations);
 }

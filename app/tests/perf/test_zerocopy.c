@@ -6,10 +6,10 @@
 #include <stdlib.h>
 
 
-TEST_GROUP(ZeroCopy);
+TEST_GROUP(ZEROCOPY);
 static perf_zcpool_t *pool;
 
-TEST_SETUP(ZeroCopy) {
+TEST_SETUP(ZEROCOPY) {
     // create a pool of 4 buffers, each 1024 bytes
     pool = perf_zcpool_create(4, 1024);
     TEST_ASSERT_NOT_NULL(pool);
@@ -17,11 +17,11 @@ TEST_SETUP(ZeroCopy) {
     TEST_ASSERT_EQUAL_UINT(3, perf_zcpool_freecount(pool));
 }
 
-TEST_TEAR_DOWN(ZeroCopy) {
+TEST_TEAR_DOWN(ZEROCOPY) {
     perf_zcpool_destroy(&pool);
 }
 
-TEST(ZeroCopy, InvalidCreate) {
+TEST(ZEROCOPY, InvalidCreate) {
     const perf_zcpool_t *p1 = perf_zcpool_create(0, 1024);
     TEST_ASSERT_NULL(p1);
     TEST_ASSERT_EQUAL_INT(ZCP_EINVAL, errno);
@@ -35,7 +35,7 @@ TEST(ZeroCopy, InvalidCreate) {
     TEST_ASSERT_EQUAL_INT(ZCP_EINVAL, errno);
 }
 
-TEST(ZeroCopy, AcquireReleaseBasic) {
+TEST(ZEROCOPY, AcquireReleaseBasic) {
     void *bufs[4];
     // Only 3 buffers can actually be acquired
     for (int i = 0; i < 3; i++) {
@@ -62,7 +62,7 @@ TEST(ZeroCopy, AcquireReleaseBasic) {
     TEST_ASSERT_EQUAL_UINT(3, perf_zcpool_freecount(pool));
 }
 
-TEST(ZeroCopy, BufferDistinctness) {
+TEST(ZEROCOPY, BufferDistinctness) {
     // can still only get 3 pointers
     void *a = perf_zcpool_acquire(pool);
     void *b = perf_zcpool_acquire(pool);
@@ -78,7 +78,7 @@ TEST(ZeroCopy, BufferDistinctness) {
     perf_zcpool_release(pool, c);
 }
 
-TEST(ZeroCopy, ReleaseInvalid) {
+TEST(ZEROCOPY, ReleaseInvalid) {
     // releasing NULL or foreign ptr should not crash
     int x;
     perf_zcpool_release(pool, &x);
@@ -86,9 +86,9 @@ TEST(ZeroCopy, ReleaseInvalid) {
     TEST_ASSERT_EQUAL_UINT(3, perf_zcpool_freecount(pool));
 }
 
-TEST_GROUP_RUNNER(ZeroCopy) {
-    RUN_TEST_CASE(ZeroCopy, InvalidCreate);
-    RUN_TEST_CASE(ZeroCopy, AcquireReleaseBasic);
-    RUN_TEST_CASE(ZeroCopy, BufferDistinctness);
-    RUN_TEST_CASE(ZeroCopy, ReleaseInvalid);
+TEST_GROUP_RUNNER(ZEROCOPY) {
+    RUN_TEST_CASE(ZEROCOPY, InvalidCreate);
+    RUN_TEST_CASE(ZEROCOPY, AcquireReleaseBasic);
+    RUN_TEST_CASE(ZEROCOPY, BufferDistinctness);
+    RUN_TEST_CASE(ZEROCOPY, ReleaseInvalid);
 }

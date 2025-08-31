@@ -15,13 +15,13 @@ static const char bad_ini[] =
     "key1 hello\n";  // missing '='
 
 
-TEST_GROUP(Configs);
+TEST_GROUP(CONFIGS);
 
-TEST_SETUP(Configs) {
+TEST_SETUP(CONFIGS) {
     // nothing
 }
 
-TEST_TEAR_DOWN(Configs) {
+TEST_TEAR_DOWN(CONFIGS) {
     // nothing
 }
 
@@ -37,7 +37,7 @@ static char *mktempfile(const char *content) {
     return strdup(template);
 }
 
-TEST(Configs, LoadSuccess) {
+TEST(CONFIGS, LoadSuccess) {
     char *path = mktempfile(good_ini);
     po_config_t *cfg;
     int rc = po_config_load(path, &cfg);
@@ -46,7 +46,7 @@ TEST(Configs, LoadSuccess) {
     TEST_ASSERT_EQUAL_INT(0, rc);
 }
 
-TEST(Configs, LoadFailureMalformed) {
+TEST(CONFIGS, LoadFailureMalformed) {
     char *path = mktempfile(bad_ini);
     po_config_t *cfg;
     int rc = po_config_load_strict(path, &cfg);
@@ -56,7 +56,7 @@ TEST(Configs, LoadFailureMalformed) {
     TEST_ASSERT_NULL(cfg);
 }
 
-TEST(Configs, GetStringSuccess) {
+TEST(CONFIGS, GetStringSuccess) {
     char *path = mktempfile(good_ini);
     po_config_t *cfg;
     po_config_load(path, &cfg);
@@ -68,7 +68,7 @@ TEST(Configs, GetStringSuccess) {
     TEST_ASSERT_EQUAL_INT(0, rc);
 }
 
-TEST(Configs, GetStringMissing) {
+TEST(CONFIGS, GetStringMissing) {
     char *path = mktempfile(good_ini);
     po_config_t *cfg;
     po_config_load(path, &cfg);
@@ -79,7 +79,7 @@ TEST(Configs, GetStringMissing) {
     TEST_ASSERT_NOT_EQUAL(0, rc);
 }
 
-TEST(Configs, GetIntSuccess) {
+TEST(CONFIGS, GetIntSuccess) {
     char *path = mktempfile(good_ini);
     po_config_t *cfg;
     po_config_load(path, &cfg);
@@ -91,7 +91,7 @@ TEST(Configs, GetIntSuccess) {
     TEST_ASSERT_EQUAL_INT(123, num);
 }
 
-TEST(Configs, GetIntInvalid) {
+TEST(CONFIGS, GetIntInvalid) {
     char content[] = "[global]\nnumber=notanumber\n";
     char *path = mktempfile(content);
     po_config_t *cfg;
@@ -103,7 +103,7 @@ TEST(Configs, GetIntInvalid) {
     TEST_ASSERT_EQUAL_INT(-1, rc);
 }
 
-TEST(Configs, GetBoolSuccess) {
+TEST(CONFIGS, GetBoolSuccess) {
     char *path = mktempfile(good_ini);
     po_config_t *cfg;
     po_config_load(path, &cfg);
@@ -115,7 +115,7 @@ TEST(Configs, GetBoolSuccess) {
     TEST_ASSERT_TRUE(flag);
 }
 
-TEST(Configs, GetBoolInvalid) {
+TEST(CONFIGS, GetBoolInvalid) {
     char content[] = "[global]\nflag=maybe\n";
     char *path = mktempfile(content);
     po_config_t *cfg;
@@ -127,13 +127,13 @@ TEST(Configs, GetBoolInvalid) {
     TEST_ASSERT_EQUAL_INT(-1, rc);
 }
 
-TEST_GROUP_RUNNER(Configs) {
-    RUN_TEST_CASE(Configs, LoadSuccess);
-    RUN_TEST_CASE(Configs, LoadFailureMalformed);
-    RUN_TEST_CASE(Configs, GetStringSuccess);
-    RUN_TEST_CASE(Configs, GetStringMissing);
-    RUN_TEST_CASE(Configs, GetIntSuccess);
-    RUN_TEST_CASE(Configs, GetIntInvalid);
-    RUN_TEST_CASE(Configs, GetBoolSuccess);
-    RUN_TEST_CASE(Configs, GetBoolInvalid);
+TEST_GROUP_RUNNER(CONFIGS) {
+    RUN_TEST_CASE(CONFIGS, LoadSuccess);
+    RUN_TEST_CASE(CONFIGS, LoadFailureMalformed);
+    RUN_TEST_CASE(CONFIGS, GetStringSuccess);
+    RUN_TEST_CASE(CONFIGS, GetStringMissing);
+    RUN_TEST_CASE(CONFIGS, GetIntSuccess);
+    RUN_TEST_CASE(CONFIGS, GetIntInvalid);
+    RUN_TEST_CASE(CONFIGS, GetBoolSuccess);
+    RUN_TEST_CASE(CONFIGS, GetBoolInvalid);
 }

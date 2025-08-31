@@ -1,219 +1,173 @@
+// tests/net/test_framing.c
 #include "unity/unity_fixture.h"
 #include "net/framing.h"
-#include "perf/zerocopy.h"
-#include "perf/ringbuf.h"
-#include "utils/errors.h"
+#include "net/protocol.h"
+#include <sys/socket.h>
+#include <unistd.h>
 #include <string.h>
 #include <errno.h>
-#include <stdlib.h>
-#include <arpa/inet.h>  // htonl/ntohl
 
+TEST_GROUP(FRAMING);
 
-TEST_GROUP(Framing);
-
-// common pool & decoder/encoder pointers
-static perf_zcpool_t   *pool;
-static framing_encoder_t *enc;
-static framing_decoder_t *dec;
-
-// small helper
-static void release_frame(void *payload) {
-    // frame pointer is payload − 4 bytes
-    void *frame = (char*)payload - 4;
-    perf_zcpool_release(pool, frame);
+TEST_SETUP(FRAMING) {
+	// Use default max payload
+	framing_init(0);
 }
 
-TEST_SETUP(Framing) {
-    // create a small pool: 4 buffers × 64 bytes each
-    pool = perf_zcpool_create(4, 64);
-    TEST_ASSERT_NOT_NULL(pool);
-    enc = NULL;
-    dec = NULL;
+TEST_TEAR_DOWN(FRAMING) { /* nothing to cleanup */ }
+
+TEST(FRAMING, RoundtripEmptyPayload) {
+	int sv[2];
+	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
+	po_header_t h; // construct network-order header for empty payload
+	protocol_init_header(&h, 0x10u, PO_FLAG_NONE, 0u);
+	int rc = framing_write_msg(sv[0], &h, NULL, 0);
+	TEST_ASSERT_EQUAL_INT(0, rc);
+
+	po_header_t out;
+	zcp_buffer_t *payload = NULL;
+	rc = framing_read_msg(sv[1], &out, &payload);
+	TEST_ASSERT_EQUAL_INT(0, rc);
+	TEST_ASSERT_NULL(payload);
+	TEST_ASSERT_EQUAL_HEX16(PROTOCOL_VERSION, out.version);
+	TEST_ASSERT_EQUAL_HEX8(0x10u, out.msg_type);
+	TEST_ASSERT_EQUAL_HEX8(PO_FLAG_NONE, out.flags);
+	TEST_ASSERT_EQUAL_UINT32(0u, out.payload_len);
+	close(sv[0]); close(sv[1]);
 }
 
-TEST_TEAR_DOWN(Framing) {
-    if (enc) framing_encoder_free(&enc);
-    if (dec) framing_decoder_free(&dec);
-    perf_zcpool_destroy(&pool);
+TEST(FRAMING, RoundtripSmallPayload) {
+	int sv[2];
+	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
+	const char msg[] = "hi";
+	po_header_t h;
+	protocol_init_header(&h, 0x20u, PO_FLAG_NONE, (uint32_t)sizeof msg);
+	int rc = framing_write_msg(sv[0], &h, (const uint8_t*)msg, (uint32_t)sizeof msg);
+	TEST_ASSERT_EQUAL_INT(0, rc);
+
+	po_header_t out;
+	zcp_buffer_t *payload = NULL;
+	rc = framing_read_msg(sv[1], &out, &payload);
+	TEST_ASSERT_EQUAL_INT(0, rc);
+	TEST_ASSERT_NULL(payload); // zero-copy not wired yet, framing discards payload
+	TEST_ASSERT_EQUAL_HEX16(PROTOCOL_VERSION, out.version);
+	TEST_ASSERT_EQUAL_HEX8(0x20u, out.msg_type);
+	TEST_ASSERT_EQUAL_UINT32(sizeof msg, out.payload_len);
+	close(sv[0]); close(sv[1]);
 }
 
-//------------------------------------------------------------------------
-// Encoder tests
-//------------------------------------------------------------------------
-
-TEST(Framing, EncoderNew_InvalidParams) {
-    // max_payload==0
-    TEST_ASSERT_NULL(framing_encoder_new(pool, 0));
-    TEST_ASSERT_EQUAL_INT(NET_EINVAL, errno);
+TEST_GROUP_RUNNER(FRAMING) {
+	RUN_TEST_CASE(FRAMING, RoundtripEmptyPayload);
+	RUN_TEST_CASE(FRAMING, RoundtripSmallPayload);
 }
 
-TEST(Framing, Encode_PayloadTooBig) {
-    enc = framing_encoder_new(pool, 8);
-    TEST_ASSERT_NOT_NULL(enc);
-    char buf[16] = {0};
-    void *frame; uint32_t flen;
-    TEST_ASSERT_EQUAL_INT(-1, framing_encode(enc, buf, 9, &frame, &flen));
-    TEST_ASSERT_EQUAL_INT(NET_EMSGSIZE, errno);
+// Additional tests
+
+TEST(FRAMING, InitAndGetMaxPayload) {
+	// default
+	TEST_ASSERT_EQUAL_UINT(FRAMING_DEFAULT_MAX_PAYLOAD, framing_get_max_payload());
+	// set custom smaller
+	TEST_ASSERT_EQUAL_INT(0, framing_init(4096));
+	TEST_ASSERT_EQUAL_UINT(4096u, framing_get_max_payload());
+	// reject larger than cap (64 MiB)
+	TEST_ASSERT_EQUAL_INT(-1, framing_init(65u * 1024u * 1024u));
+	TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+	// restore default
+	TEST_ASSERT_EQUAL_INT(0, framing_init(0));
 }
 
-TEST(Framing, Encode_Basic) {
-    enc = framing_encoder_new(pool, 16);
-    TEST_ASSERT_NOT_NULL(enc);
-
-    const char *msg = "hello";
-    void *frame;
-    uint32_t frame_len;
-    TEST_ASSERT_EQUAL_INT(0,
-        framing_encode(enc, msg, (uint32_t)strlen(msg), &frame, &frame_len));
-    // frame_len == 4 + payload
-    TEST_ASSERT_EQUAL_UINT32(4 + 5, frame_len);
-
-    // header is big-endian 5
-    uint32_t be;
-    memcpy(&be, frame, 4);
-    TEST_ASSERT_EQUAL_UINT32(htonl(5), be);
-
-    // payload follows
-    TEST_ASSERT_EQUAL_MEMORY(msg, (char*)frame + 4, 5);
-
-    // release back
-    perf_zcpool_release(pool, frame);
+TEST(FRAMING, ReadRejectsTotalSmallerThanHeader) {
+	int sv[2];
+	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
+	// Write a length prefix that is smaller than po_header_t
+	uint32_t total = (uint32_t)sizeof(po_header_t) - 1u;
+	uint32_t total_be = htonl(total);
+	ssize_t wn = write(sv[0], &total_be, sizeof(total_be));
+	TEST_ASSERT_EQUAL_INT(sizeof(total_be), (int)wn);
+	po_header_t out; zcp_buffer_t *payload = NULL;
+	int rc = framing_read_msg(sv[1], &out, &payload);
+	TEST_ASSERT_EQUAL_INT(-1, rc);
+	TEST_ASSERT_EQUAL_INT(EPROTO, errno);
+	close(sv[0]); close(sv[1]);
 }
 
-TEST(Framing, Encode_MultipleBuffers) {
-    enc = framing_encoder_new(pool, 8);
-    TEST_ASSERT_NOT_NULL(enc);
-
-    void *frames[3];
-    for (int i = 0; i < 3; i++) {
-        char msg[4] = { (char)i,0,0,0 };
-        uint32_t fl;
-        TEST_ASSERT_EQUAL_INT(0, framing_encode(enc, msg, 1, &frames[i], &fl));
-    }
-    // pool exhausted now
-    void *f5;
-    uint32_t fl5;
-    TEST_ASSERT_EQUAL_INT(-1,
-        framing_encode(enc, "x", 1, &f5, &fl5));
-    TEST_ASSERT_NULL(frames[2] == NULL ? NULL : f5);
-    // release all 3
-    for (int i = 0; i < 3; i++)
-        perf_zcpool_release(pool, frames[i]);
+TEST(FRAMING, ReadRejectsBadVersion) {
+	int sv[2];
+	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
+	// Craft a header with wrong version
+	po_header_t bad_hdr = {0};
+	bad_hdr.version = htons((uint16_t)(PROTOCOL_VERSION + 1u));
+	bad_hdr.msg_type = 0x01u;
+	bad_hdr.flags = PO_FLAG_NONE;
+	bad_hdr.payload_len = htonl(0u);
+	uint32_t total = (uint32_t)sizeof(po_header_t);
+	uint32_t total_be = htonl(total);
+	(void)!write(sv[0], &total_be, sizeof total_be);
+	(void)!write(sv[0], &bad_hdr, sizeof bad_hdr);
+	po_header_t out; zcp_buffer_t *payload = NULL;
+	int rc = framing_read_msg(sv[1], &out, &payload);
+	TEST_ASSERT_EQUAL_INT(-1, rc);
+	TEST_ASSERT_EQUAL_INT(EPROTONOSUPPORT, errno);
+	close(sv[0]); close(sv[1]);
 }
 
-//------------------------------------------------------------------------
-// Decoder tests
-//------------------------------------------------------------------------
-
-TEST(Framing, DecoderNew_Valid) {
-    dec = framing_decoder_new(4, pool);
-    TEST_ASSERT_NOT_NULL(dec);
+TEST(FRAMING, ReadRejectsTooLargePayload) {
+	// Configure small limit
+	TEST_ASSERT_EQUAL_INT(0, framing_init(8));
+	int sv[2];
+	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
+	// Header declares payload 9 (>8)
+	po_header_t h; protocol_init_header(&h, 0x02u, PO_FLAG_NONE, 9u);
+	uint32_t total = (uint32_t)sizeof(po_header_t) + 9u;
+	uint32_t total_be = htonl(total);
+	(void)!write(sv[0], &total_be, sizeof total_be);
+	(void)!write(sv[0], &h, sizeof h);
+	po_header_t out; zcp_buffer_t *payload = NULL;
+	int rc = framing_read_msg(sv[1], &out, &payload);
+	TEST_ASSERT_EQUAL_INT(-1, rc);
+	TEST_ASSERT_EQUAL_INT(EMSGSIZE, errno);
+	close(sv[0]); close(sv[1]);
+	// restore default
+	TEST_ASSERT_EQUAL_INT(0, framing_init(0));
 }
 
-TEST(Framing, DecoderFeedAndNext_Basic) {
-    enc = framing_encoder_new(pool, 16);
-    dec = framing_decoder_new(4, pool);
-    TEST_ASSERT_NOT_NULL(enc);
-    TEST_ASSERT_NOT_NULL(dec);
-
-    // make two frames
-    void *f1;
-    void *f2;
-    uint32_t l1;
-    uint32_t l2;
-    TEST_ASSERT_EQUAL_INT(0, framing_encode(enc, "A", 1, &f1, &l1));
-    TEST_ASSERT_EQUAL_INT(0, framing_encode(enc, "BC", 2, &f2, &l2));
-
-    // feed them
-    TEST_ASSERT_EQUAL_INT(0, framing_decoder_feed(dec, f1));
-    TEST_ASSERT_EQUAL_INT(0, framing_decoder_feed(dec, f2));
-
-    // pop first
-    void *p; uint32_t plen;
-    TEST_ASSERT_EQUAL_INT(1, framing_decoder_next(dec, &p, &plen));
-    TEST_ASSERT_EQUAL_UINT32(1, plen);
-    TEST_ASSERT_EQUAL_CHAR_ARRAY("A", p, 1);
-    // return buffer
-    release_frame(p);
-
-    // pop second
-    TEST_ASSERT_EQUAL_INT(1, framing_decoder_next(dec, &p, &plen));
-    TEST_ASSERT_EQUAL_UINT32(2, plen);
-    TEST_ASSERT_EQUAL_CHAR_ARRAY("BC", p, 2);
-    release_frame(p);
-
-    // now empty
-    TEST_ASSERT_EQUAL_INT(0, framing_decoder_next(dec, &p, &plen));
+TEST(FRAMING, WriteRejectsTooLargePayload) {
+	// Set small max
+	TEST_ASSERT_EQUAL_INT(0, framing_init(4));
+	int sv[2];
+	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
+	po_header_t h; protocol_init_header(&h, 0x03u, PO_FLAG_NONE, 5u);
+	uint8_t payload[5] = {0,1,2,3,4};
+	int rc = framing_write_msg(sv[0], &h, payload, 5u);
+	TEST_ASSERT_EQUAL_INT(-1, rc);
+	TEST_ASSERT_EQUAL_INT(EMSGSIZE, errno);
+	close(sv[0]); close(sv[1]);
+	TEST_ASSERT_EQUAL_INT(0, framing_init(0));
 }
 
-TEST(Framing, DecoderOrderPreserved) {
-    enc = framing_encoder_new(pool, 8);
-    dec = framing_decoder_new(8, pool);
-
-    void *f[3];
-    uint32_t fl;
-    for (int i = 0; i < 3; i++) {
-        char tmp[] = { (char)('0'+i), 0 };
-        TEST_ASSERT_EQUAL_INT(0, framing_encode(enc, tmp, 1, &f[i], &fl));
-        TEST_ASSERT_EQUAL_INT(0, framing_decoder_feed(dec, f[i]));
-    }
-
-    for (int i = 0; i < 3; i++) {
-        void *p;
-        uint32_t plen;
-        TEST_ASSERT_EQUAL_INT(1, framing_decoder_next(dec, &p, &plen));
-        TEST_ASSERT_EQUAL_UINT32(1, plen);
-        char expect = (char)('0'+i);
-        TEST_ASSERT_EQUAL_CHAR(expect, ((char*)p)[0]);
-        release_frame(p);
-    }
+TEST(FRAMING, WriteZeroCopyTreatedAsZeroPayload) {
+	int sv[2];
+	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
+	po_header_t h; protocol_init_header(&h, 0x04u, PO_FLAG_NONE, 0u);
+	// dummy opaque buffer
+	struct zcp_buffer { int dummy; };
+	struct zcp_buffer dummy = (struct zcp_buffer){0};
+	int rc = framing_write_zcp(sv[0], &h, (const zcp_buffer_t *)&dummy);
+	TEST_ASSERT_EQUAL_INT(0, rc);
+	po_header_t out; zcp_buffer_t *payload = NULL;
+	rc = framing_read_msg(sv[1], &out, &payload);
+	TEST_ASSERT_EQUAL_INT(0, rc);
+	TEST_ASSERT_EQUAL_UINT32(0u, out.payload_len);
+	TEST_ASSERT_NULL(payload);
+	close(sv[0]); close(sv[1]);
 }
 
-TEST(Framing, DecoderQueueFull) {
-    enc = framing_encoder_new(pool, 8);
-    // make depth=2 => can hold only 1 frame (we consider ring of size N holds N-1 items)
-    dec = framing_decoder_new(2, pool);
-    TEST_ASSERT_NOT_NULL(dec);
-
-    void *f1;
-    uint32_t fl;
-    TEST_ASSERT_EQUAL_INT(0, framing_encode(enc, "x", 1, &f1, &fl));
-    TEST_ASSERT_EQUAL_INT(0, framing_decoder_feed(dec, f1));
-
-    TEST_ASSERT_EQUAL_INT(-1, framing_decoder_feed(dec, f1)); // full
-    // return leftover
-    release_frame((char*)f1);
+TEST_GROUP_RUNNER(FRAMING_EXT) {
+	RUN_TEST_CASE(FRAMING, InitAndGetMaxPayload);
+	RUN_TEST_CASE(FRAMING, ReadRejectsTotalSmallerThanHeader);
+	RUN_TEST_CASE(FRAMING, ReadRejectsBadVersion);
+	RUN_TEST_CASE(FRAMING, ReadRejectsTooLargePayload);
+	RUN_TEST_CASE(FRAMING, WriteRejectsTooLargePayload);
+	RUN_TEST_CASE(FRAMING, WriteZeroCopyTreatedAsZeroPayload);
 }
 
-TEST(Framing, CombinedEncodeFeedNextRelease) {
-    enc = framing_encoder_new(pool, 16);
-    dec = framing_decoder_new(4, pool);
-
-    // encode+feed in one go
-    const char *msg = "ZCQ";
-    void *frm; uint32_t fl;
-    TEST_ASSERT_EQUAL_INT(0, framing_encode(enc, msg, 3, &frm, &fl));
-    TEST_ASSERT_EQUAL_INT(0, framing_decoder_feed(dec, frm));
-
-    // next
-    void *payload; uint32_t plen;
-    TEST_ASSERT_EQUAL_INT(1, framing_decoder_next(dec, &payload, &plen));
-    TEST_ASSERT_EQUAL_UINT32(3, plen);
-    TEST_ASSERT_EQUAL_MEMORY(msg, payload, 3);
-
-    // cleanup
-    release_frame(payload);
-}
-
-TEST_GROUP_RUNNER(Framing) {
-    RUN_TEST_CASE(Framing, EncoderNew_InvalidParams);
-    RUN_TEST_CASE(Framing, Encode_PayloadTooBig);
-    RUN_TEST_CASE(Framing, Encode_Basic);
-    RUN_TEST_CASE(Framing, Encode_MultipleBuffers);
-
-    RUN_TEST_CASE(Framing, DecoderNew_Valid);
-    RUN_TEST_CASE(Framing, DecoderFeedAndNext_Basic);
-    RUN_TEST_CASE(Framing, DecoderOrderPreserved);
-    RUN_TEST_CASE(Framing, DecoderQueueFull);
-    RUN_TEST_CASE(Framing, CombinedEncodeFeedNextRelease);
-}
