@@ -10,13 +10,13 @@ TEST_GROUP(POLLER);
 TEST_SETUP(POLLER) { /* no-op */ }
 TEST_TEAR_DOWN(POLLER) { /* no-op */ }
 
-TEST(POLLER, CreateAndDestroy) {
+TEST(POLLER, CREATEANDDESTROY) {
 	poller_t *p = poller_create();
 	TEST_ASSERT_NOT_NULL(p);
 	poller_destroy(p);
 }
 
-TEST(POLLER, AddModifyRemoveAndWait) {
+TEST(POLLER, ADDMODIFYREMOVEANDWAIT) {
 	poller_t *p = poller_create();
 	TEST_ASSERT_NOT_NULL(p);
 
@@ -53,7 +53,7 @@ TEST(POLLER, AddModifyRemoveAndWait) {
 	poller_destroy(p);
 }
 
-TEST(POLLER, WaitTimeout) {
+TEST(POLLER, WAITTIMEOUT) {
 	poller_t *p = poller_create();
 	TEST_ASSERT_NOT_NULL(p);
 	int sv[2];
@@ -68,7 +68,7 @@ TEST(POLLER, WaitTimeout) {
 }
 
 TEST_GROUP_RUNNER(POLLER) {
-	RUN_TEST_CASE(POLLER, CreateAndDestroy);
-	RUN_TEST_CASE(POLLER, AddModifyRemoveAndWait);
-	RUN_TEST_CASE(POLLER, WaitTimeout);
+	RUN_TEST_CASE(POLLER, CREATEANDDESTROY);
+	RUN_TEST_CASE(POLLER, ADDMODIFYREMOVEANDWAIT);
+	RUN_TEST_CASE(POLLER, WAITTIMEOUT);
 }
