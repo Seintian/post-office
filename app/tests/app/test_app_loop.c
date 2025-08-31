@@ -74,7 +74,7 @@ TEST_TEAR_DOWN(APP) {
     CAPTURE_REPORT(buf, sizeof(buf), perf_shutdown);
 }
 
-TEST(APP, MainLoopEndToEnd) {
+TEST(APP, MAINLOOPENDTOEND) {
     // Arrange networking
     int sv[2];
     TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
@@ -129,5 +129,5 @@ TEST(APP, MainLoopEndToEnd) {
 }
 
 TEST_GROUP_RUNNER(APP) {
-    RUN_TEST_CASE(APP, MainLoopEndToEnd);
+    RUN_TEST_CASE(APP, MAINLOOPENDTOEND);
 }
