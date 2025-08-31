@@ -16,7 +16,7 @@ TEST_SETUP(FRAMING) {
 
 TEST_TEAR_DOWN(FRAMING) { /* nothing to cleanup */ }
 
-TEST(FRAMING, RoundtripEmptyPayload) {
+TEST(FRAMING, ROUNDTRIPEMPTYPAYLOAD) {
 	int sv[2];
 	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
 	po_header_t h; // construct network-order header for empty payload
@@ -36,7 +36,7 @@ TEST(FRAMING, RoundtripEmptyPayload) {
 	close(sv[0]); close(sv[1]);
 }
 
-TEST(FRAMING, RoundtripSmallPayload) {
+TEST(FRAMING, ROUNDTRIPSMALLPAYLOAD) {
 	int sv[2];
 	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
 	const char msg[] = "hi";
@@ -57,13 +57,13 @@ TEST(FRAMING, RoundtripSmallPayload) {
 }
 
 TEST_GROUP_RUNNER(FRAMING) {
-	RUN_TEST_CASE(FRAMING, RoundtripEmptyPayload);
-	RUN_TEST_CASE(FRAMING, RoundtripSmallPayload);
+	RUN_TEST_CASE(FRAMING, ROUNDTRIPEMPTYPAYLOAD);
+	RUN_TEST_CASE(FRAMING, ROUNDTRIPSMALLPAYLOAD);
 }
 
 // Additional tests
 
-TEST(FRAMING, InitAndGetMaxPayload) {
+TEST(FRAMING, INITANDGETMAXPAYLOAD) {
 	// default
 	TEST_ASSERT_EQUAL_UINT(FRAMING_DEFAULT_MAX_PAYLOAD, framing_get_max_payload());
 	// set custom smaller
@@ -76,7 +76,7 @@ TEST(FRAMING, InitAndGetMaxPayload) {
 	TEST_ASSERT_EQUAL_INT(0, framing_init(0));
 }
 
-TEST(FRAMING, ReadRejectsTotalSmallerThanHeader) {
+TEST(FRAMING, READREJECTSTOTALSMALLERTHANHEADER) {
 	int sv[2];
 	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
 	// Write a length prefix that is smaller than po_header_t
@@ -91,7 +91,7 @@ TEST(FRAMING, ReadRejectsTotalSmallerThanHeader) {
 	close(sv[0]); close(sv[1]);
 }
 
-TEST(FRAMING, ReadRejectsBadVersion) {
+TEST(FRAMING, READREJECTSBADVERSION) {
 	int sv[2];
 	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
 	// Craft a header with wrong version
@@ -111,7 +111,7 @@ TEST(FRAMING, ReadRejectsBadVersion) {
 	close(sv[0]); close(sv[1]);
 }
 
-TEST(FRAMING, ReadRejectsTooLargePayload) {
+TEST(FRAMING, READREJECTSTOOLARGEPAYLOAD) {
 	// Configure small limit
 	TEST_ASSERT_EQUAL_INT(0, framing_init(8));
 	int sv[2];
@@ -131,7 +131,7 @@ TEST(FRAMING, ReadRejectsTooLargePayload) {
 	TEST_ASSERT_EQUAL_INT(0, framing_init(0));
 }
 
-TEST(FRAMING, WriteRejectsTooLargePayload) {
+TEST(FRAMING, WRITEREJECTSTOOLARGEPAYLOAD) {
 	// Set small max
 	TEST_ASSERT_EQUAL_INT(0, framing_init(4));
 	int sv[2];
@@ -145,7 +145,7 @@ TEST(FRAMING, WriteRejectsTooLargePayload) {
 	TEST_ASSERT_EQUAL_INT(0, framing_init(0));
 }
 
-TEST(FRAMING, WriteZeroCopyTreatedAsZeroPayload) {
+TEST(FRAMING, WRITEZEROCOPYTREATEDASZEROPAYLOAD) {
 	int sv[2];
 	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
 	po_header_t h; protocol_init_header(&h, 0x04u, PO_FLAG_NONE, 0u);
@@ -163,11 +163,11 @@ TEST(FRAMING, WriteZeroCopyTreatedAsZeroPayload) {
 }
 
 TEST_GROUP_RUNNER(FRAMING_EXT) {
-	RUN_TEST_CASE(FRAMING, InitAndGetMaxPayload);
-	RUN_TEST_CASE(FRAMING, ReadRejectsTotalSmallerThanHeader);
-	RUN_TEST_CASE(FRAMING, ReadRejectsBadVersion);
-	RUN_TEST_CASE(FRAMING, ReadRejectsTooLargePayload);
-	RUN_TEST_CASE(FRAMING, WriteRejectsTooLargePayload);
-	RUN_TEST_CASE(FRAMING, WriteZeroCopyTreatedAsZeroPayload);
+	RUN_TEST_CASE(FRAMING, INITANDGETMAXPAYLOAD);
+	RUN_TEST_CASE(FRAMING, READREJECTSTOTALSMALLERTHANHEADER);
+	RUN_TEST_CASE(FRAMING, READREJECTSBADVERSION);
+	RUN_TEST_CASE(FRAMING, READREJECTSTOOLARGEPAYLOAD);
+	RUN_TEST_CASE(FRAMING, WRITEREJECTSTOOLARGEPAYLOAD);
+	RUN_TEST_CASE(FRAMING, WRITEZEROCOPYTREATEDASZEROPAYLOAD);
 }
 
