@@ -8,7 +8,7 @@ TEST_GROUP(PROTOCOL);
 TEST_SETUP(PROTOCOL) { /* no-op */ }
 TEST_TEAR_DOWN(PROTOCOL) { /* no-op */ }
 
-TEST(PROTOCOL, InitAndByteOrderRoundtrip) {
+TEST(PROTOCOL, INITANDBYTEORDERROUNDTRIP) {
 	po_header_t h = {0};
 	// Build in host order first
 	h.version = (uint16_t)PROTOCOL_VERSION;
@@ -40,10 +40,10 @@ TEST(PROTOCOL, InitAndByteOrderRoundtrip) {
 }
 
 TEST_GROUP_RUNNER(PROTOCOL) {
-	RUN_TEST_CASE(PROTOCOL, InitAndByteOrderRoundtrip);
+	RUN_TEST_CASE(PROTOCOL, INITANDBYTEORDERROUNDTRIP);
 }
 
-TEST(PROTOCOL, MessageSizeComputation) {
+TEST(PROTOCOL, MESSAGESIZECOMPUTATION) {
 	po_header_t h_host = {0};
 	h_host.version = PROTOCOL_VERSION;
 	h_host.msg_type = 0xAAu;
@@ -53,7 +53,7 @@ TEST(PROTOCOL, MessageSizeComputation) {
 	TEST_ASSERT_EQUAL_UINT32(sizeof(po_header_t) + 4096u, total);
 }
 
-TEST(PROTOCOL, LargePayloadBoundary) {
+TEST(PROTOCOL, LARGE_PAYLOADBOUNDARY) {
 	// Ensure 32-bit payload length conversion survives high values
 	po_header_t h;
 	const uint32_t len = 64u * 1024u * 1024u; // 64 MiB boundary used elsewhere
@@ -65,8 +65,8 @@ TEST(PROTOCOL, LargePayloadBoundary) {
 }
 
 TEST_GROUP_RUNNER(PROTOCOL_EXT) {
-	RUN_TEST_CASE(PROTOCOL, MessageSizeComputation);
-	RUN_TEST_CASE(PROTOCOL, LargePayloadBoundary);
+	RUN_TEST_CASE(PROTOCOL, MESSAGESIZECOMPUTATION);
+	RUN_TEST_CASE(PROTOCOL, LARGE_PAYLOADBOUNDARY);
 }
 
 
