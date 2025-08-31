@@ -28,7 +28,7 @@ TEST_TEAR_DOWN(HASHSET) {
     hashset_destroy(&set);
 }
 
-TEST(HASHSET, CreateDefault) {
+TEST(HASHSET, CREATEDEFAULT) {
     hashset_t *s2 = hashset_create(test_cmp, test_hash);
     TEST_ASSERT_NOT_NULL(s2);
     TEST_ASSERT_EQUAL_UINT(0, hashset_size(s2));
@@ -36,20 +36,20 @@ TEST(HASHSET, CreateDefault) {
     hashset_destroy(&s2);
 }
 
-TEST(HASHSET, AddAndContains) {
+TEST(HASHSET, ADDANDCONTAINS) {
     int rc = hashset_add(set, "a");
     TEST_ASSERT_EQUAL_INT(1, rc);
     TEST_ASSERT_TRUE(hashset_contains(set, "a"));
 }
 
-TEST(HASHSET, DuplicateAdd) {
+TEST(HASHSET, DUPLICATEADD) {
     hashset_add(set, "dup");
     int rc = hashset_add(set, "dup");
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_UINT(1, hashset_size(set));
 }
 
-TEST(HASHSET, Remove) {
+TEST(HASHSET, REMOVE) {
     hashset_add(set, "x");
     TEST_ASSERT_TRUE(hashset_contains(set, "x"));
     int rc = hashset_remove(set, "x");
@@ -59,7 +59,7 @@ TEST(HASHSET, Remove) {
     TEST_ASSERT_EQUAL_INT(0, rc);
 }
 
-TEST(HASHSET, SizeAndCapacity) {
+TEST(HASHSET, SIZEANDCAPACITY) {
     TEST_ASSERT_EQUAL_UINT(0, hashset_size(set));
     size_t cap = hashset_capacity(set);
     hashset_add(set, "1");
@@ -68,7 +68,7 @@ TEST(HASHSET, SizeAndCapacity) {
     TEST_ASSERT_EQUAL_UINT(cap, hashset_capacity(set));
 }
 
-TEST(HASHSET, KeysArray) {
+TEST(HASHSET, KEYSARRAY) {
     hashset_add(set, "k1");
     hashset_add(set, "k2");
     void **keys = hashset_keys(set);
@@ -84,7 +84,7 @@ TEST(HASHSET, KeysArray) {
     TEST_ASSERT_EQUAL_INT(1, found2);
 }
 
-TEST(HASHSET, Clear) {
+TEST(HASHSET, CLEAR) {
     hashset_add(set, "c");
     TEST_ASSERT_EQUAL_UINT(1, hashset_size(set));
     hashset_clear(set);
@@ -94,7 +94,7 @@ TEST(HASHSET, Clear) {
     TEST_ASSERT_TRUE(cap >= 5);
 }
 
-TEST(HASHSET, LoadFactor) {
+TEST(HASHSET, LOADFACTOR) {
     float lf0 = hashset_load_factor(set);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, lf0);
     hashset_add(set, "a");
@@ -102,7 +102,7 @@ TEST(HASHSET, LoadFactor) {
     TEST_ASSERT_TRUE(lf1 > 0.0f && lf1 <= 1.0f);
 }
 
-TEST(HASHSET, ResizeUp) {
+TEST(HASHSET, RESIZEUP) {
     // small initial capacity triggers resize when many adds
     hashset_t *small = hashset_create_sized(test_cmp, test_hash, 3);
     TEST_ASSERT_NOT_NULL(small);
@@ -121,7 +121,7 @@ TEST(HASHSET, ResizeUp) {
     hashset_destroy(&small);
 }
 
-TEST(HASHSET, ResizeDown) {
+TEST(HASHSET, RESIZEDOWN) {
     hashset_t *s2 = hashset_create_sized(test_cmp, test_hash, 7);
     TEST_ASSERT_NOT_NULL(s2);
     // add few
@@ -138,14 +138,14 @@ TEST(HASHSET, ResizeDown) {
 }
 
 TEST_GROUP_RUNNER(HASHSET) {
-    RUN_TEST_CASE(HASHSET, CreateDefault);
-    RUN_TEST_CASE(HASHSET, AddAndContains);
-    RUN_TEST_CASE(HASHSET, DuplicateAdd);
-    RUN_TEST_CASE(HASHSET, Remove);
-    RUN_TEST_CASE(HASHSET, SizeAndCapacity);
-    RUN_TEST_CASE(HASHSET, KeysArray);
-    RUN_TEST_CASE(HASHSET, Clear);
-    RUN_TEST_CASE(HASHSET, LoadFactor);
-    RUN_TEST_CASE(HASHSET, ResizeUp);
-    RUN_TEST_CASE(HASHSET, ResizeDown);
+    RUN_TEST_CASE(HASHSET, CREATEDEFAULT);
+    RUN_TEST_CASE(HASHSET, ADDANDCONTAINS);
+    RUN_TEST_CASE(HASHSET, DUPLICATEADD);
+    RUN_TEST_CASE(HASHSET, REMOVE);
+    RUN_TEST_CASE(HASHSET, SIZEANDCAPACITY);
+    RUN_TEST_CASE(HASHSET, KEYSARRAY);
+    RUN_TEST_CASE(HASHSET, CLEAR);
+    RUN_TEST_CASE(HASHSET, LOADFACTOR);
+    RUN_TEST_CASE(HASHSET, RESIZEUP);
+    RUN_TEST_CASE(HASHSET, RESIZEDOWN);
 }
