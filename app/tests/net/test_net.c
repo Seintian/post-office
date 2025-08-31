@@ -9,7 +9,7 @@ TEST_GROUP(NET);
 TEST_SETUP(NET) { framing_init(0); }
 TEST_TEAR_DOWN(NET) { /* nothing to cleanup */ }
 
-TEST(NET, SendRecvEmptyPayload) {
+TEST(NET, SENDRECVEMPTYPAYLOAD) {
 	int sv[2];
 	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
 	uint8_t dummy = 0; // pass non-null pointer to satisfy nonnull contract when len==0
@@ -25,7 +25,7 @@ TEST(NET, SendRecvEmptyPayload) {
 	socket_close(sv[0]); socket_close(sv[1]);
 }
 
-TEST(NET, SendRecvSmallPayload) {
+TEST(NET, SENDRECVSMALLPAYLOAD) {
 	int sv[2];
 	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
 	const char payload[] = "abc";
@@ -42,11 +42,11 @@ TEST(NET, SendRecvSmallPayload) {
 }
 
 TEST_GROUP_RUNNER(NET) {
-	RUN_TEST_CASE(NET, SendRecvEmptyPayload);
-	RUN_TEST_CASE(NET, SendRecvSmallPayload);
+	RUN_TEST_CASE(NET, SENDRECVEMPTYPAYLOAD);
+	RUN_TEST_CASE(NET, SENDRECVSMALLPAYLOAD);
 }
 
-TEST(NET, SendRecvBackToBackMessages) {
+TEST(NET, SENDRECVBACKTOBACKMESSAGES) {
 	framing_init(0);
 	int sv[2];
 	TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
@@ -71,7 +71,7 @@ TEST(NET, SendRecvBackToBackMessages) {
 	socket_close(sv[0]); socket_close(sv[1]);
 }
 
-TEST(NET, LargePayloadBoundaryHeaderOnly) {
+TEST(NET, LARGE_PAYLOADBOUNDARYHEADERONLY) {
 	// We cannot actually allocate/send 64 MiB in tests; check header path only
 	const uint32_t len = 64u * 1024u * 1024u; // allowed cap
 	po_header_t h; protocol_init_header(&h, 0x55u, PO_FLAG_ENCRYPTED, len);
@@ -80,7 +80,7 @@ TEST(NET, LargePayloadBoundaryHeaderOnly) {
 }
 
 TEST_GROUP_RUNNER(NET_EXT) {
-	RUN_TEST_CASE(NET, SendRecvBackToBackMessages);
-	RUN_TEST_CASE(NET, LargePayloadBoundaryHeaderOnly);
+	RUN_TEST_CASE(NET, SENDRECVBACKTOBACKMESSAGES);
+	RUN_TEST_CASE(NET, LARGE_PAYLOADBOUNDARYHEADERONLY);
 }
 
