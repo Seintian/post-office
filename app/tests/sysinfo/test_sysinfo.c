@@ -19,7 +19,7 @@ TEST_TEAR_DOWN(SYSINFO) {
     // Clean up any resources or state after each test
 }
 
-TEST(SYSINFO, TestSysInfoCollectSuccess) {
+TEST(SYSINFO, TESTSYSINFOCOLLECTSUCCESS) {
     po_sysinfo_t info;
     memset(&info, 0, sizeof(info));
 
@@ -38,7 +38,7 @@ TEST(SYSINFO, TestSysInfoCollectSuccess) {
     TEST_ASSERT(info.max_stack_size > 0);
 }
 
-TEST(SYSINFO, TestSysInfoCollectInvalidPointer) {
+TEST(SYSINFO, TESTSYSINFOCOLLECTINVALIDPOINTER) {
     // Attempt to collect system information with a NULL pointer
     int result = po_sysinfo_collect(NULL);
     TEST_ASSERT_EQUAL_INT(-1, result);
@@ -75,7 +75,7 @@ static void assert_print_success(const po_sysinfo_t *info)
     fclose(mem);
 }
 
-TEST(SYSINFO, TestSysInfoPrint) {
+TEST(SYSINFO, TESTSYSINFOPRINT) {
     po_sysinfo_t info;
     memset(&info, 0, sizeof(info));
 
@@ -87,7 +87,7 @@ TEST(SYSINFO, TestSysInfoPrint) {
 }
 
 TEST_GROUP_RUNNER(SYSINFO) {
-    RUN_TEST_CASE(SYSINFO, TestSysInfoCollectSuccess);
-    RUN_TEST_CASE(SYSINFO, TestSysInfoCollectInvalidPointer);
-    RUN_TEST_CASE(SYSINFO, TestSysInfoPrint);
+    RUN_TEST_CASE(SYSINFO, TESTSYSINFOCOLLECTSUCCESS);
+    RUN_TEST_CASE(SYSINFO, TESTSYSINFOCOLLECTINVALIDPOINTER);
+    RUN_TEST_CASE(SYSINFO, TESTSYSINFOPRINT);
 }
