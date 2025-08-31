@@ -24,7 +24,7 @@ TEST_TEAR_DOWN(BATCHER) {
     perf_ringbuf_destroy(&ringbuf);
 }
 
-TEST(BATCHER, InvalidCreate) {
+TEST(BATCHER, INVALIDCREATE) {
     // zero batch size
     perf_ringbuf_t *rb = perf_ringbuf_create(8);
     TEST_ASSERT_NOT_NULL(rb);
@@ -34,7 +34,7 @@ TEST(BATCHER, InvalidCreate) {
     perf_ringbuf_destroy(&rb);
 }
 
-TEST(BATCHER, SingleBatch) {
+TEST(BATCHER, SINGLEBATCH) {
     int v = 123;
     void *out[4];
     // enqueue one
@@ -45,7 +45,7 @@ TEST(BATCHER, SingleBatch) {
     TEST_ASSERT_EQUAL_PTR(&v, out[0]);
 }
 
-TEST(BATCHER, PartialBatch) {
+TEST(BATCHER, PARTIALBATCH) {
     void *out[4];
     int vals[3] = {10,20,30};
     for (int i = 0; i < 3; i++) {
@@ -58,7 +58,7 @@ TEST(BATCHER, PartialBatch) {
     }
 }
 
-TEST(BATCHER, FullBatch) {
+TEST(BATCHER, FULLBATCH) {
     void *out[4];
     int vals[6] = {1,2,3,4,5,6};
     // enqueue 6, batcher size is 4
@@ -86,7 +86,7 @@ static void *consumer_thread(void *arg) {
     return NULL;
 }
 
-TEST(BATCHER, BlockingNext) {
+TEST(BATCHER, BLOCKINGNEXT) {
     // spawn consumer that will block until we enqueue
     pthread_t tid;
     TEST_ASSERT_EQUAL_INT(0, pthread_create(&tid, NULL, consumer_thread, batcher));
@@ -100,9 +100,9 @@ TEST(BATCHER, BlockingNext) {
 }
 
 TEST_GROUP_RUNNER(BATCHER) {
-    RUN_TEST_CASE(BATCHER, InvalidCreate);
-    RUN_TEST_CASE(BATCHER, SingleBatch);
-    RUN_TEST_CASE(BATCHER, PartialBatch);
-    RUN_TEST_CASE(BATCHER, FullBatch);
-    RUN_TEST_CASE(BATCHER, BlockingNext);
+    RUN_TEST_CASE(BATCHER, INVALIDCREATE);
+    RUN_TEST_CASE(BATCHER, SINGLEBATCH);
+    RUN_TEST_CASE(BATCHER, PARTIALBATCH);
+    RUN_TEST_CASE(BATCHER, FULLBATCH);
+    RUN_TEST_CASE(BATCHER, BLOCKINGNEXT);
 }
