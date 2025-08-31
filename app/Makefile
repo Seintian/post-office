@@ -42,6 +42,7 @@ PERF_DIR			   = $(POSTOFFICE_LIBS_DIR)/perf
 PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
 STORAGE_DIR			   = $(POSTOFFICE_LIBS_DIR)/storage
 UTILS_DIR			   = $(POSTOFFICE_LIBS_DIR)/utils
+LOG_DIR                = $(POSTOFFICE_LIBS_DIR)/log
 
 ## Third-party Libraries
 INIH_DIR               = $(THIRDPARTY_LIBS_DIR)/inih
@@ -178,6 +179,7 @@ PERF_SRC        = $(wildcard $(PERF_DIR)/*.c)
 PRIME_SRC       = $(wildcard $(PRIME_DIR)/*.c)
 STORAGE_SRC     = $(wildcard $(STORAGE_DIR)/*.c)
 UTILS_SRC       = $(wildcard $(UTILS_DIR)/*.c)
+LOG_SRC         = $(wildcard $(LOG_DIR)/*.c)
 
 ## Third-party Libraries
 INIH_SRC        = $(wildcard $(INIH_DIR)/*.c)
@@ -207,6 +209,7 @@ PERF_OBJS           = $(patsubst $(PERF_DIR)/%.c,$(BUILD_DIR)/perf/%.o,$(PERF_SR
 PRIME_OBJS          = $(patsubst $(PRIME_DIR)/%.c,$(BUILD_DIR)/prime/%.o,$(PRIME_SRC))
 STORAGE_OBJS        = $(patsubst $(STORAGE_DIR)/%.c,$(BUILD_DIR)/storage/%.o,$(STORAGE_SRC))
 UTILS_OBJS          = $(patsubst $(UTILS_DIR)/%.c,$(BUILD_DIR)/utils/%.o,$(UTILS_SRC))
+LOG_OBJS            = $(patsubst $(LOG_DIR)/%.c,$(BUILD_DIR)/log/%.o,$(LOG_SRC))
 
 ## Third-party Libraries
 INIH_OBJS           = $(patsubst $(INIH_DIR)/%.c,$(BUILD_DIR)/inih/%.o,$(INIH_SRC))
@@ -218,8 +221,8 @@ LIBFORT_OBJS        = $(patsubst $(LIBFORT_DIR)/%.c,$(BUILD_DIR)/libfort/%.o,$(L
 # Common library objects needed by most executables
 DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(HASHTABLE_OBJS) \
                       $(PRIME_OBJS) $(LOG_C_OBJS) $(CORE_OBJS) \
-					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
-					  $(LMDB_OBJS) $(HASHSET_OBJS)
+				  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
+				  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS)
 
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
@@ -472,6 +475,10 @@ $(STORAGE_OBJS): $(BUILD_DIR)/storage/%.o: $(STORAGE_DIR)/%.c
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 $(UTILS_OBJS): $(BUILD_DIR)/utils/%.o: $(UTILS_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+$(LOG_OBJS): $(BUILD_DIR)/log/%.o: $(LOG_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
