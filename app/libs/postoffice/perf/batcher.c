@@ -14,6 +14,7 @@
 #include <limits.h>
 #include <sys/uio.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 
 struct _perf_batcher_t {
@@ -113,6 +114,7 @@ int perf_batcher_flush(perf_batcher_t *b, int fd) {
     }
 
     ssize_t written = writev(fd, iov, (int)i);
+    printf("DEBUG: writev returned %zd\n", written);
     if (written < 0)
         return -1;
 
@@ -145,9 +147,8 @@ ssize_t perf_batcher_next(perf_batcher_t *b, void **out) {
 
     // Block until at least one event arrives
     uint64_t cnt;
-    if (read(b->efd, &cnt, sizeof(cnt)) != sizeof(cnt)) {
+    if (read(b->efd, &cnt, sizeof(cnt)) != sizeof(cnt))
         return -1;  // efd closed or error
-    }
 
     // Now drain up to batch_size items
     size_t n = 0;
