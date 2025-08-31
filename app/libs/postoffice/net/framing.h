@@ -1,92 +1,125 @@
-#ifndef _NET_FRAMING_H
-#define _NET_FRAMING_H
+/**
+ * @file framing.h
+ * @brief Length-prefixed message framing with zero-copy support.
+ *
+ * The framing layer implements the on-wire message format used by the
+ * PostOffice stack. Messages on the wire are encoded as:
+ *
+ *   [4B length prefix][po_header_t][payload bytes]
+ *
+ * where the 4-byte length prefix (network order) contains the number of
+ * bytes that follow the prefix (i.e. sizeof(po_header_t) + payload_len).
+ *
+ * The framing layer must handle partial reads/writes, arbitrary fragmentation
+ * and coalescing performed by the kernel, and provide zero-copy semantics for
+ * payload buffers via zcp_buffer_t (allocated from perf_zcpool_t).
+ */
+
+#ifndef _FRAMING_H
+#define _FRAMING_H
 
 #include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include "perf/ringbuf.h"
-#include "perf/zerocopy.h"
+#include <sys/cdefs.h>
+#include "protocol.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct _framing_encoder_t {
-    perf_zcpool_t *pool;
-    uint32_t       max_payload;
-};
-
-struct _framing_decoder_t {
-    perf_ringbuf_t *rb;    ///< holds void* pointers to full frames
-    perf_zcpool_t  *pool;  ///< zcpool for both encoder and release
-};
-
-typedef struct _framing_encoder_t framing_encoder_t;
-typedef struct _framing_decoder_t framing_decoder_t;
+/* Forward declaration of zero-copy buffer type provided by perf/zero-copy */
+typedef struct zcp_buffer zcp_buffer_t;
 
 /**
- * @brief Create a framing encoder.
- * @param pool         Zero‑copy pool for frame buffers.
- * @param max_payload  Maximum payload bytes.
- * @return encoder or NULL+errno
+ * @brief Default maximum frame payload size (in bytes).
+ *
+ * Default chosen to match the zero-copy pool backing big-pages: 2 MiB.
+ * The framing implementation will refuse frames that declare a payload
+ * larger than `framing_get_max_payload()`.
  */
-framing_encoder_t *framing_encoder_new(
-    perf_zcpool_t *pool,
-    uint32_t       max_payload
-) __nonnull((1));
+#define FRAMING_DEFAULT_MAX_PAYLOAD (2u * 1024u * 1024u) /* 2 MiB */
 
 /**
- * @brief Encode one payload to a single zcpool buffer: [4‑byte BE len][payload].
- * @return 0 or -1+errno.  On success *out_frame,*out_len.
+ * @brief Initialize the framing module.
+ *
+ * Must be called early during process initialization if the framed API is
+ * used. Sets an optional maximum payload size (0 means use default).
+ *
+ * @param max_payload_bytes The maximum allowed payload size; if 0 the
+ *        default (FRAMING_DEFAULT_MAX_PAYLOAD) is used.
+ * @return 0 on success, -1 on error (errno set).
  */
-int framing_encode(
-    framing_encoder_t *enc,
-    const void        *payload,
-    uint32_t           payload_len,
-    void             **out_frame,
-    uint32_t          *out_len
-) __nonnull((1, 2, 4, 5));
-
-/** Destroy encoder. */
-void framing_encoder_free(framing_encoder_t **enc) __nonnull((1));
-
+int framing_init(uint32_t max_payload_bytes);
 
 /**
- * @brief Create a framing decoder whose ring can hold up to `depth` frames.
- * @param depth  Number of frame pointers capacity (power‐of‐two).
- * @return decoder or NULL+errno.
+ * @brief Get the configured maximum payload size in bytes.
  */
-framing_decoder_t *framing_decoder_new(
-    size_t         depth,
-    perf_zcpool_t *pool
-) __nonnull((2));
+uint32_t framing_get_max_payload(void);
 
 /**
- * @brief Feed one complete frame buffer (as returned by encoder or recv).
- * @return 0 or -1+errno=ENOSPC if queue full.
+ * @brief Read a full message from a socket into a zero-copy buffer.
+ *
+ * This function implements a blocking/read-until-complete semantic on the
+ * provided file descriptor. It will allocate a zcp_buffer_t for the payload
+ * (from the perf zero-copy pool) and fill the header_out with the header in
+ * host byte order.
+ *
+ * Ownership:
+ * - On success: *payload_out is a reference to a zcp_buffer_t. The caller is
+ *   responsible for calling zcp_release(*payload_out) when done.
+ * - On failure: *payload_out is left unchanged.
+ *
+ * Return values:
+ * - 0 on success
+ * - -1 on error (errno set)
+ * - -2 if peer closed the connection (EOF)
+ *
+ * Note: This function uses blocking I/O semantics by repeatedly calling read
+ * until the full message is received. For integration with an event-driven
+ * poller, use a non-blocking, incremental decoder variant (not exported
+ * here) implemented internally in the framing module.
  */
-int framing_decoder_feed(
-    framing_decoder_t *dec,
-    void              *frame
-) __nonnull((1, 2));
+int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out)
+    __nonnull((2,3));
 
 /**
- * @brief Pop next frame's payload out of queue.
- *        Strips off its 4‑byte length header *in place*; returns the pointer
- *        (which still owns the entire buffer) and payload length.
- * @return 1 if a frame was returned, 0 if queue empty, -1 on error.
+ * @brief Write a message to a socket from a contiguous payload buffer.
+ *
+ * The header must already be in network byte order (use
+ * protocol_header_to_network() or protocol_init_header()). The function will
+ * handle partial writes internally and will return only after the entire
+ * message (length prefix + header + payload) has been sent or an error
+ * occurred.
+ *
+ * @param fd Socket file descriptor (non-blocking sockets are supported).
+ * @param header Pointer to a po_header_t in network byte order (non-NULL).
+ * @param payload Pointer to the contiguous payload bytes (non-NULL if payload_len>0).
+ * @param payload_len Length of payload in bytes.
+ * @return 0 on success, -1 on error (errno set), or -2 if the peer closed socket.
  */
-int framing_decoder_next(
-    framing_decoder_t *dec,
-    void             **out_payload,
-    uint32_t          *out_len
-) __nonnull((1, 2, 3));
+int framing_write_msg(int fd, const po_header_t *header, const uint8_t *payload, uint32_t payload_len)
+    __nonnull((2));
 
-/** Destroy decoder (frees its ring only; frames must be released by caller). */
-void framing_decoder_free(framing_decoder_t **dec) __nonnull((1));
+/**
+ * @brief Write a message to a socket using a zero-copy payload buffer.
+ *
+ * This variant avoids copying payload bytes into an intermediate buffer by
+ * sending the protocol header and using the kernel-space buffer directly
+ * where supported. Implementations may use writev/splice/sendfile depending
+ * on the buffer backing mechanism. The header must be in network order.
+ *
+ * Ownership: The caller retains ownership of the zcp_buffer_t while this
+ * function executes; the function will not take ownership.
+ *
+ * @param fd Socket file descriptor.
+ * @param header Pointer to a po_header_t in network byte order (non-NULL).
+ * @param payload A pointer to an allocated zcp_buffer_t containing the payload.
+ * @return 0 on success, -1 on error (errno set), -2 if peer closed.
+ */
+int framing_write_zcp(int fd, const po_header_t *header, const zcp_buffer_t *payload)
+    __nonnull((2,3));
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // _NET_FRAMING_H
+#endif /* _FRAMING_H */

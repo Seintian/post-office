@@ -1,86 +1,52 @@
-#ifndef _NET_NET_H
-#define _NET_NET_H
+/**
+ * @file net.h
+ * @brief Networking module public API.
+ * @details Combines the socket, framing, and protocol submodules to provide
+ * a simple message-based networking interface. It uses efficient zero-copy
+ * buffers and batched I/O for high-performance message exchange.
+ */
+#ifndef _NET_H
+#define _NET_H
 
 #include <stdint.h>
-#include <stddef.h>
-#include "net/socket.h"
+#include <sys/cdefs.h>
 #include "net/protocol.h"
 #include "net/framing.h"
-#include "perf/zerocopy.h"
+#include "net/socket.h"
 
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
- * @brief Initialize the networking stack.
+ * @brief Send a protocol message on a connected socket.
  *
- * Creates:
- *   - Global poller
- *   - Zero‑copy buffer pool for frames
- *   - Framing encoder
+ * This function constructs a protocol header (version, type, flags, payload length)
+ * and sends the length-prefixed message (header + payload) over the socket.
  *
- * @param max_events  Max simultaneous epoll events
- * @param buf_count   Number of buffers in the pool
- * @param buf_size    Size of each buffer
- * @param ring_depth  Depth of per‑connection frame queues
- * @return 0 on success, -1 on error (errno set)
+ * @param fd The socket file descriptor to send the message on.
+ * @param msg_type The message type identifier.
+ * @param flags The message flags bitmask.
+ * @param payload Pointer to the payload data to send.
+ * @param payload_len Length of the payload in bytes.
+ * @return 0 on success, or a negative error code on failure.
  */
-int po_init(
-    size_t   max_events,
-    size_t   buf_count,
-    uint32_t buf_size,
-    size_t   ring_depth
-);
-
-/** Shut down and free all global resources. */
-void po_shutdown(void);
-
-/** High‑level listen/connect/accept using sockets. */
-po_conn_t *po_listen(const char *path, uint16_t port);
-po_conn_t *po_connect(const char *path, uint16_t port);
-int        po_accept(const po_conn_t *listener, po_conn_t **out);
-
-/** Close a connection and free its decoder. */
-void po_close(po_conn_t **conn);
+int net_send_message(int fd, uint8_t msg_type, uint8_t flags,
+                     const uint8_t *payload, uint32_t payload_len) __nonnull((4));
 
 /**
- * @brief Send a complete protocol message over a connection.
+ * @brief Receive the next protocol message from a socket.
  *
- * Uses zero‑copy buffers and framing encoder internally.
- * Caller does NOT manage buffers.
+ * Reads a complete message (length prefix, header, payload) from the socket.
+ * On success, @p header_out contains the message header (converted to host byte order),
+ * and @p payload_out points to a zero-copy buffer containing the payload.
  *
- * @return 0 on success, -1 on error
+ * @param fd The socket file descriptor to read from.
+ * @param header_out Pointer to a po_header_t to fill with the received header.
+ * @param payload_out Pointer to a zcp_buffer_t* that will be set to the payload buffer.
+ * @return 0 on success, or a negative error code on failure.
+ *
+ * @note The caller is responsible for releasing the returned payload buffer
+ * (via zcp_release(*payload_out)) when finished with it.
  */
-int po_send_msg(
-    po_conn_t   *conn,
-    uint8_t      msg_type,
-    uint8_t      flags,
-    const void  *payload,
-    uint32_t     payload_len
-);
+int net_recv_message(int fd, po_header_t *header_out, zcp_buffer_t **payload_out)
+    __nonnull((2,3));
 
-/**
- * @brief Receive next complete protocol message (non‑blocking).
- *
- * @return  1 if a message is ready,
- *          0 if none available,
- *         -1 on error (errno set).
- *
- * On success, *payload points inside a pool buffer. Caller must
- * eventually call perf_zcpool_release() on the frame buffer.
- */
-int po_recv_msg(
-    po_conn_t   *conn,
-    uint8_t     *msg_type,
-    uint8_t     *flags,
-    void       **payload,
-    uint32_t    *payload_len
-);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif // _NET_NET_H
+#endif // _NET_H

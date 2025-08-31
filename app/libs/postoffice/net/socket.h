@@ -1,139 +1,127 @@
-#ifndef _NET_SOCKET_H
-#define _NET_SOCKET_H
+/**
+ * @file socket.h
+ * @brief TCP and UNIX-domain socket utility functions.
+ *
+ * This header provides minimal socket helpers used by the PostOffice net
+ * implementation. All sockets returned by these helpers are configured with
+ * CLOEXEC and set to non-blocking mode by default.
+ */
 
-#include <stdint.h>
-#include <stddef.h>
+#ifndef _SOCKET_H
+#define _SOCKET_H
+
 #include <sys/types.h>
-#include "net/poller.h"
-#include "net/framing.h"
-#include "perf/zerocopy.h"
-#include "perf/batcher.h"
-
+#include <sys/socket.h>
+#include <sys/cdefs.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct _po_conn_t po_conn_t;
-
-/// Callback type for events on a connection
-typedef void (*po_event_cb)(po_conn_t *c, uint32_t events, void *arg);
-
-/// Connection handle (listening or established)
-struct _po_conn_t {
-    int fd;
-    framing_decoder_t *decoder;
-    perf_batcher_t    *batcher;
-    perf_ringbuf_t *outq;
-    po_event_cb callback;
-    void *cb_arg;
-};
-
 /**
- * @brief Set a callback for connection events.
- * 
- * This will be called when the connection is ready for reading or writing,
- * or when an error occurs. The callback should handle the events and
- * perform necessary actions like reading/writing data.
+ * @brief Create, bind, and listen on a TCP socket.
+ *
+ * The function resolves the provided address (NULL or empty string means
+ * INADDR_ANY) and binds to the given port. The returned socket is non-blocking
+ * and has CLOEXEC set.
+ *
+ * @param address IP address or hostname to bind (NULL or "" for any).
+ * @param port Port string (e.g. "8080").
+ * @param backlog Listen backlog.
+ * @return Listening socket fd on success, -1 on error (errno set).
  */
-void po_set_event_cb(po_conn_t *c, po_event_cb cb, void *arg) __nonnull((1, 2));
+int socket_listen(const char *address, const char *port, int backlog) __nonnull((2));
 
 /**
- * @brief Modify the events for a connection.
- * 
- * This allows changing the events that the poller will monitor for this connection.
- * 
- * @param c       The connection to modify.
- * @param events  The new events to monitor (EPOLLIN, EPOLLOUT, etc.).
+ * @brief Connect to a remote TCP server.
+ *
+ * Creates a non-blocking socket and starts the connection process. A
+ * non-blocking connect may return -1 with errno==EINPROGRESS to indicate
+ * the connect is in progress; callers should monitor the socket for write
+ * readiness to detect completion.
+ *
+ * @param address Remote host (IP or hostname).
+ * @param port Remote port string.
+ * @return Connected socket fd (non-blocking) on success, -1 on immediate error.
+ */
+int socket_connect(const char *address, const char *port) __nonnull((1,2));
+
+/**
+ * @brief Accept a new connection on a listening socket.
+ *
+ * The returned client socket is non-blocking and has CLOEXEC set. If
+ * out_addr_buf is non-NULL it will be populated with the textual peer
+ * address (IPv4/IPv6). The function handles EINTR and EAGAIN correctly.
+ *
+ * @param listen_fd Listening socket fd.
+ * @param out_addr_buf Buffer for textual peer address or NULL.
+ * @param addr_buf_len Length of out_addr_buf if provided.
+ * @return New client fd on success, -1 on error, -2 if no pending connections
+ *         (EAGAIN/EWOULDBLOCK).
+ */
+int socket_accept(int listen_fd, char *out_addr_buf, size_t addr_buf_len);
+
+/**
+ * @brief Create, bind, and listen on a Unix domain socket path.
+ *
+ * The path will be unlinked before bind where appropriate. Permissions and
+ * SELinux labels are the caller's responsibility. The socket is non-blocking.
+ *
+ * @param path Filesystem path or abstract namespace (if starts with '\0').
+ * @param backlog Listen backlog.
+ * @return Listening socket fd on success, -1 on error.
+ */
+int socket_listen_unix(const char *path, int backlog) __nonnull((1));
+
+/**
+ * @brief Connect to a Unix domain socket path.
+ *
+ * Returns a non-blocking connected socket (or EINPROGRESS semantics for
+ * non-blocking connect).
+ *
+ * @param path Filesystem path or abstract namespace (if starts with '\0').
+ * @return Non-blocking socket fd on success, -1 on error.
+ */
+int socket_connect_unix(const char *path) __nonnull((1));
+
+/**
+ * @brief Close a socket and ignore EINTR.
+ *
+ * This helper centralizes FD closing semantics used across the net stack.
+ *
+ * @param fd File descriptor to close.
+ */
+void socket_close(int fd);
+
+/**
+ * @brief Set a socket to non-blocking mode.
+ *
+ * @param fd Socket fd.
  * @return 0 on success, -1 on error (errno set).
  */
-int po_modify_events(po_conn_t *c, uint32_t events) __nonnull((1));
+int socket_set_nonblocking(int fd);
 
 /**
- * @brief Initialize the socket subsystem.
- * 
- * Must be called once per process before any other po_* calls.
- * Internally creates a poller with capacity `max_events` and a
- * pool of `max_events` events.
- * 
- * @param max_events  Maximum simultaneous fds/events to track (power-of-two).
+ * @brief Set common socket options (TCP_NODELAY, REUSEADDR, KEEPALIVE).
+ *
+ * This helper is a convenience wrapper that sets several recommended options
+ * for high-performance servers. It does not enable SO_LINGER unless
+ * explicitly requested by the caller.
+ *
+ * @param fd Socket fd.
+ * @param enable_nodelay Set TCP_NODELAY if non-zero.
+ * @param reuseaddr Set SO_REUSEADDR if non-zero.
+ * @param keepalive Set SO_KEEPALIVE if non-zero.
  * @return 0 on success, -1 on error (errno set).
  */
-int sock_init(size_t max_events);
-
-/**
- * @brief Bind & listen on either a Unix‐domain or IPv4/TCP socket.
- * 
- * If `path` starts with "unix:", the remainder is taken as the filesystem socket path.
- * Otherwise it's treated as an IPv4 literal (e.g. "127.0.0.1") and `port` is used.
- * 
- * The returned listener is nonblocking and registered for EPOLLIN.
- */
-po_conn_t *sock_listen(const char *path, uint16_t port) __nonnull((1));
-
-/**
- * @brief Connect to a remote listener (Unix or TCP).
- * 
- * Same `path` rules as sock_listen.  Returns a nonblocking socket
- * which you must then poll for EPOLLOUT to detect connect completion.
- */
-po_conn_t *sock_connect(const char *path, uint16_t port) __nonnull((1));
-
-/**
- * @brief Accept one incoming connection on a listening `po_conn_t`.
- * 
- * @param listener  The listening handle.
- * @param out       Receives the new connection handle (or NULL on error).
- * @return 0 on success, -1 on nonblocking "no connection" (errno = EAGAIN),  
- *         or -1 on fatal error (errno set).  
- */
-int sock_accept(const po_conn_t *listener, po_conn_t **out) __nonnull((1, 2));
-
-/**
- * @brief Close & destroy a connection (or listener).
- * 
- * Unregisters from the poller and closes the FD.
- */
-void sock_close(po_conn_t **conn) __nonnull((1));
-
-/**
- * @brief Shutdown the socket subsystem.
- * 
- * Cleans up the poller and zero-copy pool, freeing all resources.
- */
-void sock_shutdown(void);
-
-/**
- * @brief Send up to `len` bytes on this connection (nonblocking).
- * 
- * @return number sent ≥0, or -1 on EAGAIN or other error (errno set).
- */
-ssize_t sock_send(const po_conn_t *c, const void *buf, size_t len) __nonnull((1));
-
-/**
- * @brief Receive up to `len` bytes on this connection (nonblocking).
- * 
- * @return number received ≥0, 0 on orderly shutdown, or -1 on EAGAIN/ error.
- */
-ssize_t sock_recv(const po_conn_t *c, void *buf, size_t len) __nonnull((1));
-
-/**
- * @brief Access the internal poller to drive the event loop.
- * 
- * After calling `poller_wait()` you may call `sock_next_event()` to
- * retrieve ready‐fd events.
- */
-poller_t *sock_poller(void);
-
-/**
- * @brief Pop the next ready `poller_event_t` from the shared queue.
- * 
- * @return 1 if an event is returned in *ev, 0 if none left, -1 on error.
- */
-int sock_next_event(poller_event_t **ev) __nonnull((1));
+int socket_set_common_options(int fd, int enable_nodelay, int reuseaddr, int keepalive);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // _NET_SOCKET_H
+#endif /* _SOCKET_H */
