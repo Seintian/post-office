@@ -80,8 +80,7 @@ SECURITY_FLAGS = -fstack-protector-strong -fstack-clash-protection \
 -D_FORTIFY_SOURCE=2 -D__USE_FORTIFY_LEVEL=2
 
 # Utility flags (always enabled)
-#? -D_POSIX_C_SOURCE=200809L
-UTILITY_FLAGS = -g -D_GNU_SOURCE -fno-omit-frame-pointer \
+UTILITY_FLAGS = -g -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -fno-omit-frame-pointer \
 -fasynchronous-unwind-tables -fno-strict-aliasing
 
 # Optimization flags (always enabled)
@@ -331,7 +330,7 @@ dev: clean
 # Build and run tests
 test: $(TEST_MAIN_EXEC)
 	@echo "> Makefile: Running tests..."
-	@$(TEST_MAIN_EXEC) $(TEST_MAIN_ARGS)
+	@PO_TEST_MUTE_CONSOLE=1 $(TEST_MAIN_EXEC) $(TEST_MAIN_ARGS)
 
 # Rule for generating compile_commands.json
 _compile_commands: clean
