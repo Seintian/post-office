@@ -20,7 +20,7 @@ TEST_TEAR_DOWN(RINGBUF) {
     TEST_ASSERT_NULL(rb);
 }
 
-TEST(RINGBUF, InvalidCapacity) {
+TEST(RINGBUF, INVALIDCAPACITY) {
     // non-power-of-two capacity
     perf_ringbuf_t *_rb = perf_ringbuf_create(3);
     TEST_ASSERT_NULL(_rb);
@@ -29,7 +29,7 @@ TEST(RINGBUF, InvalidCapacity) {
     TEST_ASSERT_NULL(_rb);
 }
 
-TEST(RINGBUF, ValidCreateDestroy) {
+TEST(RINGBUF, VALIDCREATEDESTROY) {
     perf_ringbuf_set_cacheline(128);
     perf_ringbuf_t *_rb = perf_ringbuf_create(8);
     TEST_ASSERT_NOT_NULL(_rb);
@@ -37,13 +37,13 @@ TEST(RINGBUF, ValidCreateDestroy) {
     TEST_ASSERT_NULL(_rb);
 }
 
-TEST(RINGBUF, EmptyDequeue) {
+TEST(RINGBUF, EMPTYDEQUEUE) {
     void *item;
     int rc = perf_ringbuf_dequeue(rb, &item);
     TEST_ASSERT_EQUAL_INT(-1, rc);
 }
 
-TEST(RINGBUF, SingleEnqueueDequeue) {
+TEST(RINGBUF, SINGLEENQUEUEDEQUEUE) {
     int value = 42;
     void *out;
     TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_enqueue(rb, &value));
@@ -53,7 +53,7 @@ TEST(RINGBUF, SingleEnqueueDequeue) {
     TEST_ASSERT_EQUAL_UINT(0, perf_ringbuf_count(rb));
 }
 
-TEST(RINGBUF, FullBuffer) {
+TEST(RINGBUF, FULLBUFFER) {
     size_t cap = 4;
 
     int vals[4] = {1,2,3,4};
@@ -66,7 +66,7 @@ TEST(RINGBUF, FullBuffer) {
     TEST_ASSERT_EQUAL_UINT(cap-1, perf_ringbuf_count(rb));
 }
 
-TEST(RINGBUF, WrapAround) {
+TEST(RINGBUF, WRAPAROUND) {
     int vals[10];
     void *out;
 
@@ -99,7 +99,7 @@ TEST(RINGBUF, WrapAround) {
     TEST_ASSERT_NULL(_rb);
 }
 
-TEST(RINGBUF, CountAccuracy) {
+TEST(RINGBUF, COUNTACCURACY) {
     int x;
 
     perf_ringbuf_t *_rb = perf_ringbuf_create(8);
@@ -124,7 +124,7 @@ TEST(RINGBUF, CountAccuracy) {
 }
 
 // Basic enqueue/dequeue behavior
-TEST(RINGBUF, EnqueueDequeue) {
+TEST(RINGBUF, ENQUEUEDEQUEUE) {
     int a = 1;
     int b = 2;
     int c = 3;
@@ -152,7 +152,7 @@ TEST(RINGBUF, EnqueueDequeue) {
 }
 
 // Peek without removing
-TEST(RINGBUF, Peek) {
+TEST(RINGBUF, PEEK) {
     int x = 42;
     int y = 43;
     int *out;
@@ -175,7 +175,7 @@ TEST(RINGBUF, Peek) {
 }
 
 // Peek at arbitrary offset
-TEST(RINGBUF, PeekAt) {
+TEST(RINGBUF, PEEKAT) {
     int v[3] = {10, 20, 30};
     int *out;
 
@@ -203,7 +203,7 @@ TEST(RINGBUF, PeekAt) {
 }
 
 // Advance (drop) multiple items
-TEST(RINGBUF, Advance) {
+TEST(RINGBUF, ADVANCE) {
     int v[4] = {7, 8, 9, 10};
     int *out;
 
@@ -235,7 +235,7 @@ TEST(RINGBUF, Advance) {
 }
 
 // Combined peek/advance/enqueue/dequeue
-TEST(RINGBUF, MixedOperations) {
+TEST(RINGBUF, MIXEDOPERATIONS) {
     int data[5] = {1,2,3,4,5};
     int *out;
 
@@ -267,16 +267,16 @@ TEST(RINGBUF, MixedOperations) {
 }
 
 TEST_GROUP_RUNNER(RINGBUF) {
-    RUN_TEST_CASE(RINGBUF, InvalidCapacity);
-    RUN_TEST_CASE(RINGBUF, ValidCreateDestroy);
-    RUN_TEST_CASE(RINGBUF, EmptyDequeue);
-    RUN_TEST_CASE(RINGBUF, SingleEnqueueDequeue);
-    RUN_TEST_CASE(RINGBUF, FullBuffer);
-    RUN_TEST_CASE(RINGBUF, WrapAround);
-    RUN_TEST_CASE(RINGBUF, CountAccuracy);
-    RUN_TEST_CASE(RINGBUF, EnqueueDequeue);
-    RUN_TEST_CASE(RINGBUF, Peek);
-    RUN_TEST_CASE(RINGBUF, PeekAt);
-    RUN_TEST_CASE(RINGBUF, Advance);
-    RUN_TEST_CASE(RINGBUF, MixedOperations);
+    RUN_TEST_CASE(RINGBUF, INVALIDCAPACITY);
+    RUN_TEST_CASE(RINGBUF, VALIDCREATEDESTROY);
+    RUN_TEST_CASE(RINGBUF, EMPTYDEQUEUE);
+    RUN_TEST_CASE(RINGBUF, SINGLEENQUEUEDEQUEUE);
+    RUN_TEST_CASE(RINGBUF, FULLBUFFER);
+    RUN_TEST_CASE(RINGBUF, WRAPAROUND);
+    RUN_TEST_CASE(RINGBUF, COUNTACCURACY);
+    RUN_TEST_CASE(RINGBUF, ENQUEUEDEQUEUE);
+    RUN_TEST_CASE(RINGBUF, PEEK);
+    RUN_TEST_CASE(RINGBUF, PEEKAT);
+    RUN_TEST_CASE(RINGBUF, ADVANCE);
+    RUN_TEST_CASE(RINGBUF, MIXEDOPERATIONS);
 }
