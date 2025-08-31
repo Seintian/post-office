@@ -21,7 +21,7 @@ TEST_TEAR_DOWN(ZEROCOPY) {
     perf_zcpool_destroy(&pool);
 }
 
-TEST(ZEROCOPY, InvalidCreate) {
+TEST(ZEROCOPY, INVALIDCREATE) {
     const perf_zcpool_t *p1 = perf_zcpool_create(0, 1024);
     TEST_ASSERT_NULL(p1);
     TEST_ASSERT_EQUAL_INT(ZCP_EINVAL, errno);
@@ -35,7 +35,7 @@ TEST(ZEROCOPY, InvalidCreate) {
     TEST_ASSERT_EQUAL_INT(ZCP_EINVAL, errno);
 }
 
-TEST(ZEROCOPY, AcquireReleaseBasic) {
+TEST(ZEROCOPY, ACQUIRERELEASEBASIC) {
     void *bufs[4];
     // Only 3 buffers can actually be acquired
     for (int i = 0; i < 3; i++) {
@@ -62,7 +62,7 @@ TEST(ZEROCOPY, AcquireReleaseBasic) {
     TEST_ASSERT_EQUAL_UINT(3, perf_zcpool_freecount(pool));
 }
 
-TEST(ZEROCOPY, BufferDistinctness) {
+TEST(ZEROCOPY, BUFFERDISTINCTNESS) {
     // can still only get 3 pointers
     void *a = perf_zcpool_acquire(pool);
     void *b = perf_zcpool_acquire(pool);
@@ -78,7 +78,7 @@ TEST(ZEROCOPY, BufferDistinctness) {
     perf_zcpool_release(pool, c);
 }
 
-TEST(ZEROCOPY, ReleaseInvalid) {
+TEST(ZEROCOPY, RELEASEINVALID) {
     // releasing NULL or foreign ptr should not crash
     int x;
     perf_zcpool_release(pool, &x);
@@ -87,8 +87,8 @@ TEST(ZEROCOPY, ReleaseInvalid) {
 }
 
 TEST_GROUP_RUNNER(ZEROCOPY) {
-    RUN_TEST_CASE(ZEROCOPY, InvalidCreate);
-    RUN_TEST_CASE(ZEROCOPY, AcquireReleaseBasic);
-    RUN_TEST_CASE(ZEROCOPY, BufferDistinctness);
-    RUN_TEST_CASE(ZEROCOPY, ReleaseInvalid);
+    RUN_TEST_CASE(ZEROCOPY, INVALIDCREATE);
+    RUN_TEST_CASE(ZEROCOPY, ACQUIRERELEASEBASIC);
+    RUN_TEST_CASE(ZEROCOPY, BUFFERDISTINCTNESS);
+    RUN_TEST_CASE(ZEROCOPY, RELEASEINVALID);
 }
