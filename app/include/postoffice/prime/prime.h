@@ -14,8 +14,8 @@
 #define _PRIME_H
 
 #include <stdbool.h>
-#include <sys/cdefs.h>
 #include <stddef.h>
+#include <sys/cdefs.h>
 
 /**
  * @brief checks if a number is prime

@@ -1,4 +1,5 @@
 #include "utils/errors.h"
+
 #include <string.h>
 
 #define BETWEEN(x, base, top) ((x) >= (base) && (x) <= (top))

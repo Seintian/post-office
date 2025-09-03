@@ -8,13 +8,14 @@
 #endif
 
 #include "net/framing.h"
-#include "perf/zerocopy.h"
 
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/uio.h>
 #include <unistd.h>
+
+#include "perf/zerocopy.h"
 
 // Configurable maximum payload length
 static uint32_t g_max_payload = FRAMING_DEFAULT_MAX_PAYLOAD;
@@ -34,7 +35,9 @@ int framing_init(uint32_t max_payload_bytes) {
     return 0;
 }
 
-uint32_t framing_get_max_payload(void) { return g_max_payload; }
+uint32_t framing_get_max_payload(void) {
+    return g_max_payload;
+}
 
 // NOTE: zcp_buffer_t is opaque; framing does not know its layout. We do not
 // allocate or access it here. Payload delivery via zero-copy will be wired

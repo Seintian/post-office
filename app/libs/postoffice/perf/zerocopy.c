@@ -3,8 +3,6 @@
 #endif
 
 #include "perf/zerocopy.h"
-#include "perf/ringbuf.h"
-#include "utils/errors.h"
 
 #include <errno.h>
 #include <linux/mman.h>
@@ -14,6 +12,9 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "perf/ringbuf.h"
+#include "utils/errors.h"
+
 struct perf_zcpool {
     void *base; // start of mapped region
     size_t buf_size;
@@ -21,7 +22,9 @@ struct perf_zcpool {
     perf_ringbuf_t *freeq; // ring buffer of free pointers
 };
 
-size_t perf_zcpool_bufsize(const perf_zcpool_t *pool) { return pool->buf_size; }
+size_t perf_zcpool_bufsize(const perf_zcpool_t *pool) {
+    return pool->buf_size;
+}
 
 perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
     if (buf_count < 1 || buf_size == 0 || buf_size > (2UL << 20)) {

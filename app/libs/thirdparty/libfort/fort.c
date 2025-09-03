@@ -41,6 +41,7 @@ SOFTWARE.
 #endif
 
 #include "libfort/fort.h"
+
 #include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -1442,9 +1443,13 @@ void *utf8catcodepoint(void *utf8_restrict str, utf8_int32_t chr, size_t n) {
     return s;
 }
 
-int utf8islower(utf8_int32_t chr) { return chr != utf8uprcodepoint(chr); }
+int utf8islower(utf8_int32_t chr) {
+    return chr != utf8uprcodepoint(chr);
+}
 
-int utf8isupper(utf8_int32_t chr) { return chr != utf8lwrcodepoint(chr); }
+int utf8isupper(utf8_int32_t chr) {
+    return chr != utf8lwrcodepoint(chr);
+}
 
 void utf8lwr(void *utf8_restrict str) {
     void *p, *pn;
@@ -2174,8 +2179,9 @@ f_string_buffer_t *cell_get_string_buffer(f_cell_t *cell);
 #define ROW_H
 
 /* #include "fort_utils.h" */ /* Commented by amalgamation script */
-#include "libfort/fort.h"
 #include <stdarg.h>
+
+#include "libfort/fort.h"
 /* #include "properties.h" */ /* Commented by amalgamation script */
 #ifdef FT_HAVE_WCHAR
 #include <wchar.h>
@@ -2651,13 +2657,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "libfort/fort.h"
 #include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
+
+#include "libfort/fort.h"
 
 /* #include "vector.h" */        /* Commented by amalgamation script */
 /* #include "fort_utils.h" */    /* Commented by amalgamation script */
@@ -3034,7 +3041,9 @@ int ft_wprintf_ln(ft_table_t *table, const wchar_t *fmt, ...) {
 
 #endif
 
-void ft_set_default_printf_field_separator(char separator) { g_col_separator = separator; }
+void ft_set_default_printf_field_separator(char separator) {
+    g_col_separator = separator;
+}
 
 static int ft_write_impl_(ft_table_t *table, const f_string_view_t *cell_content) {
     assert(table);
@@ -3727,13 +3736,21 @@ void (*fort_free)(void *ptr) = &free;
 void *(*fort_calloc)(size_t nmemb, size_t size) = &calloc;
 void *(*fort_realloc)(void *ptr, size_t size) = &realloc;
 #else
-static void *local_malloc(size_t size) { return malloc(size); }
+static void *local_malloc(size_t size) {
+    return malloc(size);
+}
 
-static void local_free(void *ptr) { free(ptr); }
+static void local_free(void *ptr) {
+    free(ptr);
+}
 
-static void *local_calloc(size_t nmemb, size_t size) { return calloc(nmemb, size); }
+static void *local_calloc(size_t nmemb, size_t size) {
+    return calloc(nmemb, size);
+}
 
-static void *local_realloc(void *ptr, size_t size) { return realloc(ptr, size); }
+static void *local_realloc(void *ptr, size_t size) {
+    return realloc(ptr, size);
+}
 
 void *(*fort_malloc)(size_t size) = &local_malloc;
 void (*fort_free)(void *ptr) = &local_free;
@@ -5089,7 +5106,9 @@ static f_row_t *create_row_impl(f_vector_t *cells) {
 }
 
 FT_INTERNAL
-f_row_t *create_row(void) { return create_row_impl(NULL); }
+f_row_t *create_row(void) {
+    return create_row_impl(NULL);
+}
 
 static void destroy_each_cell(f_vector_t *cells) {
     size_t i = 0;
@@ -5213,7 +5232,9 @@ f_cell_t *get_cell(f_row_t *row, size_t col) {
 }
 
 FT_INTERNAL
-const f_cell_t *get_cell_c(const f_row_t *row, size_t col) { return get_cell((f_row_t *)row, col); }
+const f_cell_t *get_cell_c(const f_row_t *row, size_t col) {
+    return get_cell((f_row_t *)row, col);
+}
 
 FT_INTERNAL
 f_cell_t *get_cell_and_create_if_not_exists(f_row_t *row, size_t col) {
@@ -6335,7 +6356,9 @@ size_t string_buffer_cod_width_capacity(const f_string_buffer_t *buffer) {
 }
 
 FT_INTERNAL
-size_t string_buffer_raw_capacity(const f_string_buffer_t *buffer) { return buffer->data_sz; }
+size_t string_buffer_raw_capacity(const f_string_buffer_t *buffer) {
+    return buffer->data_sz;
+}
 
 #ifdef FT_HAVE_UTF8
 /* User provided function to compute utf8 string visible width */
@@ -6603,7 +6626,9 @@ f_separator_t *create_separator(int enabled) {
 }
 
 FT_INTERNAL
-void destroy_separator(f_separator_t *sep) { F_FREE(sep); }
+void destroy_separator(f_separator_t *sep) {
+    F_FREE(sep);
+}
 
 FT_INTERNAL
 f_separator_t *copy_separator(f_separator_t *sep) {
@@ -7096,7 +7121,9 @@ f_status vector_swap(f_vector_t *cur_vec, f_vector_t *mv_vec, size_t pos) {
 }
 
 FT_INTERNAL
-void vector_clear(f_vector_t *vector) { vector->m_size = 0; }
+void vector_clear(f_vector_t *vector) {
+    vector->m_size = 0;
+}
 
 FT_INTERNAL
 int vector_erase(f_vector_t *vector, size_t index) {

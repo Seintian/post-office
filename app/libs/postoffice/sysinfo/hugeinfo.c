@@ -1,5 +1,5 @@
 #include "hugeinfo.h"
-#include "sysinfo/sysinfo.h"
+
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#include "sysinfo/sysinfo.h"
 
 #define HUGEPAGES_FILE "/sys/kernel/mm/hugepages"
 

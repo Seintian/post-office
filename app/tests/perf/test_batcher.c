@@ -1,10 +1,11 @@
-#include "perf/batcher.h"
-#include "perf/ringbuf.h"
-#include "unity/unity_fixture.h"
 #include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#include "perf/batcher.h"
+#include "perf/ringbuf.h"
+#include "unity/unity_fixture.h"
 
 TEST_GROUP(BATCHER);
 static perf_batcher_t *batcher;

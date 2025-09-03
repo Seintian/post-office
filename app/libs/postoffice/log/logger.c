@@ -3,8 +3,6 @@
 #endif
 
 #include "log/logger.h"
-#include "perf/ringbuf.h"
-#include "utils/errors.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -17,6 +15,9 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "perf/ringbuf.h"
+#include "utils/errors.h"
 
 #define MAX_RECORD_SIZE LOGGER_MSG_MAX * 2
 
@@ -52,7 +53,9 @@ static log_record_t *g_pool = NULL;
 static size_t g_pool_n = 0;
 
 // --- Helpers ---
-static inline uint64_t get_tid(void) { return (uint64_t)syscall(SYS_gettid); }
+static inline uint64_t get_tid(void) {
+    return (uint64_t)syscall(SYS_gettid);
+}
 
 static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
     // Format: ts.us TID LEVEL file:line func() - msg\n
@@ -198,7 +201,9 @@ int logger_set_level(logger_level_t level) {
     return 0;
 }
 
-logger_level_t logger_get_level(void) { return (logger_level_t)_logger_runtime_level; }
+logger_level_t logger_get_level(void) {
+    return (logger_level_t)_logger_runtime_level;
+}
 
 int logger_add_sink_console(bool use_stderr) {
     g_sinks_mask |= LOGGER_SINK_CONSOLE;

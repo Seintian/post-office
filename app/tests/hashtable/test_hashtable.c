@@ -1,8 +1,9 @@
 // tests/hashtable/test_hashtable.c
-#include "hashtable/hashtable.h"
-#include "unity/unity_fixture.h"
 #include <stdlib.h>
 #include <string.h>
+
+#include "hashtable/hashtable.h"
+#include "unity/unity_fixture.h"
 
 // Simple string hash and compare for tests
 static unsigned long test_hash(const void *key) {
@@ -25,7 +26,9 @@ TEST_SETUP(HASHTABLE) {
     TEST_ASSERT_NOT_NULL(ht);
 }
 
-TEST_TEAR_DOWN(HASHTABLE) { hashtable_destroy(&ht); }
+TEST_TEAR_DOWN(HASHTABLE) {
+    hashtable_destroy(&ht);
+}
 
 TEST(HASHTABLE, CREATEDEFAULT) {
     hashtable_t *h2 = hashtable_create(test_cmp, test_hash);

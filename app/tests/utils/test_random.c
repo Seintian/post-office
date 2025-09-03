@@ -1,15 +1,17 @@
-#include "unity/unity_fixture.h"
-#include "utils/random.h"
-
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "unity/unity_fixture.h"
+#include "utils/random.h"
+
 TEST_GROUP(RANDOM);
 
-TEST_SETUP(RANDOM) {}
-TEST_TEAR_DOWN(RANDOM) {}
+TEST_SETUP(RANDOM) {
+}
+TEST_TEAR_DOWN(RANDOM) {
+}
 
 TEST(RANDOM, SEED_DETERMINISM) {
     po_rand_seed((uint64_t)0xDEADBEEFCAFEBABEULL);

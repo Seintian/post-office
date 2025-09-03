@@ -2,11 +2,12 @@
 #define _GNU_SOURCE
 #endif
 
-#include "sysinfo/sysinfo.h"
-#include "unity/unity_fixture.h"
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+
+#include "sysinfo/sysinfo.h"
+#include "unity/unity_fixture.h"
 
 TEST_GROUP(SYSINFO);
 

@@ -1,7 +1,8 @@
-#include "utils/random.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "utils/random.h"
 
 int main(int argc, char **argv) {
     // Optional deterministic seed via argv[1]; otherwise auto-seed.

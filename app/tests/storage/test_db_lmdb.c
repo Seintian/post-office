@@ -2,14 +2,15 @@
 #define _GNU_SOURCE
 #endif
 
-#include "storage/db_lmdb.h"
-#include "unity/unity_fixture.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#include "storage/db_lmdb.h"
+#include "unity/unity_fixture.h"
 
 static const char *TEMPLATE = "/tmp/dbtestXXXXXX";
 static char *dir_template = NULL;

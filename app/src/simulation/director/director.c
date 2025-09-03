@@ -1,6 +1,7 @@
-#include "sysinfo/sysinfo.h"
 #include <stdio.h>
 #include <unistd.h>
+
+#include "sysinfo/sysinfo.h"
 
 int main() {
     po_sysinfo_t sysinfo;

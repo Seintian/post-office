@@ -2,12 +2,6 @@
 #define _GNU_SOURCE
 #endif
 
-#include "net/net.h"
-#include "net/poller.h"
-#include "perf/perf.h"
-#include "storage/db_lmdb.h"
-#include "unity/unity_fixture.h"
-
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +10,12 @@
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "net/net.h"
+#include "net/poller.h"
+#include "perf/perf.h"
+#include "storage/db_lmdb.h"
+#include "unity/unity_fixture.h"
 
 // Capture helper copied from perf tests
 #define CAPTURE_REPORT(buf, bufsize, call)                                                         \
@@ -143,4 +143,6 @@ TEST(APP, MAINLOOPENDTOEND) {
     close(sv[1]);
 }
 
-TEST_GROUP_RUNNER(APP) { RUN_TEST_CASE(APP, MAINLOOPENDTOEND); }
+TEST_GROUP_RUNNER(APP) {
+    RUN_TEST_CASE(APP, MAINLOOPENDTOEND);
+}

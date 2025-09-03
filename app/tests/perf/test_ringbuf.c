@@ -1,7 +1,8 @@
-#include "perf/ringbuf.h"
-#include "unity/unity_fixture.h"
 #include <errno.h>
 #include <stdlib.h>
+
+#include "perf/ringbuf.h"
+#include "unity/unity_fixture.h"
 
 static perf_ringbuf_t *rb;
 

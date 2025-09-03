@@ -1,10 +1,11 @@
-#include "log/logger.h"
-#include "unity/unity_fixture.h"
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#include "log/logger.h"
+#include "unity/unity_fixture.h"
 
 TEST_GROUP(LOGGER);
 
@@ -18,7 +19,9 @@ TEST_SETUP(LOGGER) {
     TEST_ASSERT_EQUAL_INT(0, logger_init(&cfg));
 }
 
-TEST_TEAR_DOWN(LOGGER) { logger_shutdown(); }
+TEST_TEAR_DOWN(LOGGER) {
+    logger_shutdown();
+}
 
 TEST(LOGGER, INITANDLEVEL) {
     TEST_ASSERT_EQUAL_INT(LOG_TRACE, logger_get_level());

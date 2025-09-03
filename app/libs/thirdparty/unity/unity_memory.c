@@ -6,8 +6,10 @@
 ========================================================================= */
 
 #include "unity_memory.h"
-#include "unity.h"
+
 #include <string.h>
+
+#include "unity.h"
 
 #define MALLOC_DONT_FAIL -1
 static int malloc_count;
@@ -25,7 +27,9 @@ void UnityMalloc_EndTest(void) {
     }
 }
 
-void UnityMalloc_MakeMallocFailAfterCount(int countdown) { malloc_fail_countdown = countdown; }
+void UnityMalloc_MakeMallocFailAfterCount(int countdown) {
+    malloc_fail_countdown = countdown;
+}
 
 /* These definitions are always included from unity_fixture_malloc_overrides.h */
 /* We undef to use them or avoid conflict with <stdlib.h> per the C standard */

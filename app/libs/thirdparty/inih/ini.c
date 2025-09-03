@@ -15,11 +15,11 @@ https://github.com/benhoyt/inih
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
+#include "inih/ini.h"
+
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
-
-#include "inih/ini.h"
 
 #if !INI_USE_STACK
 #if INI_CUSTOM_ALLOCATOR

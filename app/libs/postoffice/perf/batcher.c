@@ -3,7 +3,6 @@
 #endif
 
 #include "perf/batcher.h"
-#include "perf/ringbuf.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -15,6 +14,8 @@
 #include <sys/eventfd.h>
 #include <sys/uio.h>
 #include <unistd.h>
+
+#include "perf/ringbuf.h"
 
 struct perf_batcher {
     perf_ringbuf_t *rb;

@@ -1,11 +1,13 @@
 #include "utils/configs.h"
+
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "hashset/hashset.h"
 #include "hashtable/hashtable.h"
 #include "inih/ini.h"
 #include "utils/errors.h"
-#include <errno.h>
-#include <stdlib.h>
-#include <string.h>
 
 // djb2 string hash
 static unsigned long str_hash(const void *s) {
@@ -43,7 +45,9 @@ static char *get_full_key(const char *section, const char *key) {
     return full_key;
 }
 
-static bool is_empty(const char *str) { return !str || str[0] == '\0'; }
+static bool is_empty(const char *str) {
+    return !str || str[0] == '\0';
+}
 
 static int ini_handler_cb(void *user, const char *section, const char *name, const char *value) {
     if (!user) {

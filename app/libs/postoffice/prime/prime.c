@@ -6,6 +6,7 @@
  */
 
 #include "prime/prime.h"
+
 #include <stdlib.h>
 
 bool is_prime(size_t n) {

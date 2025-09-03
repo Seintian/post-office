@@ -2,9 +2,10 @@
 #ifndef _PERF_BATCHER_H
 #define _PERF_BATCHER_H
 
-#include "perf/ringbuf.h"
 #include <stdbool.h>
 #include <sys/types.h>
+
+#include "perf/ringbuf.h"
 
 #ifdef __cplusplus
 extern "C" {

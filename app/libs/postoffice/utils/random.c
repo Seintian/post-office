@@ -18,7 +18,9 @@
 
 static uint64_t s_state[4] = {0};
 
-static inline uint64_t rotl(const uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
+static inline uint64_t rotl(const uint64_t x, int k) {
+    return (x << k) | (x >> (64 - k));
+}
 
 static uint64_t xoshiro256ss(void) {
     const uint64_t result = rotl(s_state[1] * 5, 7) * 9;
@@ -98,7 +100,9 @@ uint64_t po_rand_u64(void) {
     return xoshiro256ss();
 }
 
-uint32_t po_rand_u32(void) { return (uint32_t)(po_rand_u64() >> 32); }
+uint32_t po_rand_u32(void) {
+    return (uint32_t)(po_rand_u64() >> 32);
+}
 
 int64_t po_rand_range_i64(int64_t min, int64_t max) {
     if (min > max) {

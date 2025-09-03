@@ -1,10 +1,11 @@
-#include "unity/unity_fixture.h"
-#include "utils/argv.h"
 #include <fcntl.h>  // for open, O_WRONLY
 #include <getopt.h> // for optind
 #include <stdio.h>  // for dprintf
 #include <stdlib.h> // for atoi, free
 #include <unistd.h> // for STDOUT_FILENO
+
+#include "unity/unity_fixture.h"
+#include "utils/argv.h"
 
 static int nullfd; // file descriptor for output
 

@@ -1,10 +1,11 @@
 #ifndef _STORAGE_DB_LMDB_H
 #define _STORAGE_DB_LMDB_H
 
-#include "lmdb/lmdb.h"
-#include "utils/errors.h"
 #include <stddef.h>
 #include <stdint.h>
+
+#include "lmdb/lmdb.h"
+#include "utils/errors.h"
 
 #ifdef __cplusplus
 extern "C" {

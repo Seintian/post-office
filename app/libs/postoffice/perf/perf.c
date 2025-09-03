@@ -3,11 +3,6 @@
 #endif
 
 #include "perf/perf.h"
-#include "hashtable/hashtable.h"
-#include "perf/batcher.h"
-#include "perf/ringbuf.h"
-#include "perf/zerocopy.h"
-#include "utils/errors.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -17,6 +12,12 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "hashtable/hashtable.h"
+#include "perf/batcher.h"
+#include "perf/ringbuf.h"
+#include "perf/zerocopy.h"
+#include "utils/errors.h"
 
 // -----------------------------------------------------------------------------
 // Internal Event Definitions

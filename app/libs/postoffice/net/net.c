@@ -4,6 +4,7 @@
  */
 
 #include "net/net.h"
+
 #include "net/framing.h"
 #include "net/protocol.h"
 

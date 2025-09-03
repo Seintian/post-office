@@ -8670,7 +8670,9 @@ MDB_txn *mdb_cursor_txn(MDB_cursor *mc) {
     return mc->mc_txn;
 }
 
-MDB_dbi mdb_cursor_dbi(MDB_cursor *mc) { return mc->mc_dbi; }
+MDB_dbi mdb_cursor_dbi(MDB_cursor *mc) {
+    return mc->mc_dbi;
+}
 
 /** Replace the key for a branch node with a new key.
  * Set #MDB_TXN_ERROR on failure.
@@ -10466,7 +10468,9 @@ int ESECT mdb_env_copyfd2(MDB_env *env, HANDLE fd, unsigned int flags) {
         return mdb_env_copyfd0(env, fd);
 }
 
-int ESECT mdb_env_copyfd(MDB_env *env, HANDLE fd) { return mdb_env_copyfd2(env, fd, 0); }
+int ESECT mdb_env_copyfd(MDB_env *env, HANDLE fd) {
+    return mdb_env_copyfd2(env, fd, 0);
+}
 
 int ESECT mdb_env_copy2(MDB_env *env, const char *path, unsigned int flags) {
     int rc;
@@ -10486,7 +10490,9 @@ int ESECT mdb_env_copy2(MDB_env *env, const char *path, unsigned int flags) {
     return rc;
 }
 
-int ESECT mdb_env_copy(MDB_env *env, const char *path) { return mdb_env_copy2(env, path, 0); }
+int ESECT mdb_env_copy(MDB_env *env, const char *path) {
+    return mdb_env_copy2(env, path, 0);
+}
 
 int ESECT mdb_env_set_flags(MDB_env *env, unsigned int flag, int onoff) {
     if (flag & ~CHANGEABLE)
@@ -10513,7 +10519,9 @@ int ESECT mdb_env_set_userctx(MDB_env *env, void *ctx) {
     return MDB_SUCCESS;
 }
 
-void *ESECT mdb_env_get_userctx(MDB_env *env) { return env ? env->me_userctx : NULL; }
+void *ESECT mdb_env_get_userctx(MDB_env *env) {
+    return env ? env->me_userctx : NULL;
+}
 
 int ESECT mdb_env_set_assert(MDB_env *env, MDB_assert_func *func) {
     if (!env)
@@ -10951,7 +10959,9 @@ int mdb_set_relctx(MDB_txn *txn, MDB_dbi dbi, void *ctx) {
     return MDB_SUCCESS;
 }
 
-int ESECT mdb_env_get_maxkeysize(MDB_env *env) { return ENV_MAXKEY(env); }
+int ESECT mdb_env_get_maxkeysize(MDB_env *env) {
+    return ENV_MAXKEY(env);
+}
 
 int ESECT mdb_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx) {
     unsigned int i, rdrs;

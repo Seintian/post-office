@@ -1,12 +1,15 @@
 // tests/net/test_protocol.c
+#include <string.h>
+
 #include "net/protocol.h"
 #include "unity/unity_fixture.h"
-#include <string.h>
 
 TEST_GROUP(PROTOCOL);
 
-TEST_SETUP(PROTOCOL) { /* no-op */ }
-TEST_TEAR_DOWN(PROTOCOL) { /* no-op */ }
+TEST_SETUP(PROTOCOL) { /* no-op */
+}
+TEST_TEAR_DOWN(PROTOCOL) { /* no-op */
+}
 
 TEST(PROTOCOL, INITANDBYTEORDERROUNDTRIP) {
     po_header_t h = {0};
@@ -39,7 +42,9 @@ TEST(PROTOCOL, INITANDBYTEORDERROUNDTRIP) {
     TEST_ASSERT_EQUAL_UINT32(0u, h2.payload_len);
 }
 
-TEST_GROUP_RUNNER(PROTOCOL) { RUN_TEST_CASE(PROTOCOL, INITANDBYTEORDERROUNDTRIP); }
+TEST_GROUP_RUNNER(PROTOCOL) {
+    RUN_TEST_CASE(PROTOCOL, INITANDBYTEORDERROUNDTRIP);
+}
 
 TEST(PROTOCOL, MESSAGESIZECOMPUTATION) {
     po_header_t h_host = {0};

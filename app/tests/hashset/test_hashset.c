@@ -1,8 +1,9 @@
 // tests/hashset/test_hashset.c
-#include "hashset/hashset.h"
-#include "unity/unity_fixture.h"
 #include <stdlib.h>
 #include <string.h>
+
+#include "hashset/hashset.h"
+#include "unity/unity_fixture.h"
 
 // Simple string hash and compare for tests
 static unsigned long test_hash(const void *key) {
@@ -25,7 +26,9 @@ TEST_SETUP(HASHSET) {
     TEST_ASSERT_NOT_NULL(set);
 }
 
-TEST_TEAR_DOWN(HASHSET) { hashset_destroy(&set); }
+TEST_TEAR_DOWN(HASHSET) {
+    hashset_destroy(&set);
+}
 
 TEST(HASHSET, CREATEDEFAULT) {
     hashset_t *s2 = hashset_create(test_cmp, test_hash);

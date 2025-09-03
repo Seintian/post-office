@@ -1,13 +1,17 @@
 // tests/net/test_net.c
-#include "net/net.h"
-#include "unity/unity_fixture.h"
 #include <string.h>
 #include <sys/socket.h>
 
+#include "net/net.h"
+#include "unity/unity_fixture.h"
+
 TEST_GROUP(NET);
 
-TEST_SETUP(NET) { framing_init(0); }
-TEST_TEAR_DOWN(NET) { /* nothing to cleanup */ }
+TEST_SETUP(NET) {
+    framing_init(0);
+}
+TEST_TEAR_DOWN(NET) { /* nothing to cleanup */
+}
 
 TEST(NET, SENDRECVEMPTYPAYLOAD) {
     int sv[2];

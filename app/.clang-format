@@ -1,5 +1,22 @@
-# .clang-format
 BasedOnStyle: LLVM
 IndentWidth: 4
 UseTab: Never
 ColumnLimit: 100
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: true
+SortIncludes: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^<[^>]+>$'
+    Priority: 1
+  - Regex: '^"thirdparty/.*"'
+    Priority: 2
+  - Regex: '^"postoffice/.*"'
+    Priority: 3
+  - Regex: '^".*"'
+    Priority: 4

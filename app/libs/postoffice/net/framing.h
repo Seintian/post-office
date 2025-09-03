@@ -19,9 +19,10 @@
 #ifndef _FRAMING_H
 #define _FRAMING_H
 
-#include "protocol.h"
 #include <stdint.h>
 #include <sys/cdefs.h>
+
+#include "protocol.h"
 
 #ifdef __cplusplus
 extern "C" {

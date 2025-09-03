@@ -1,6 +1,3 @@
-#include "unity/unity_fixture.h"
-#include "utils/files.h"
-
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -11,6 +8,9 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
+
+#include "unity/unity_fixture.h"
+#include "utils/files.h"
 
 TEST_GROUP(FILES);
 

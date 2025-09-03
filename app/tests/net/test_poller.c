@@ -1,14 +1,17 @@
 // tests/net/test_poller.c
-#include "net/poller.h"
-#include "unity/unity_fixture.h"
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "net/poller.h"
+#include "unity/unity_fixture.h"
+
 TEST_GROUP(POLLER);
 
-TEST_SETUP(POLLER) { /* no-op */ }
-TEST_TEAR_DOWN(POLLER) { /* no-op */ }
+TEST_SETUP(POLLER) { /* no-op */
+}
+TEST_TEAR_DOWN(POLLER) { /* no-op */
+}
 
 TEST(POLLER, CREATEANDDESTROY) {
     poller_t *p = poller_create();

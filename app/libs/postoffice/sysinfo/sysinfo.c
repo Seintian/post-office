@@ -3,9 +3,7 @@
 #endif
 
 #include "sysinfo/sysinfo.h"
-#include "fsinfo.h"
-#include "hugeinfo.h"
-#include "utils/errors.h"
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -18,6 +16,10 @@
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+#include "fsinfo.h"
+#include "hugeinfo.h"
+#include "utils/errors.h"
 
 #define CPUINFO_FILE "/proc/cpuinfo"
 #define MEMINFO_FILE "/proc/meminfo"

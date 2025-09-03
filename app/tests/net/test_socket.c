@@ -1,14 +1,17 @@
 // tests/net/test_socket.c
-#include "net/socket.h"
-#include "unity/unity_fixture.h"
 #include <fcntl.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 
+#include "net/socket.h"
+#include "unity/unity_fixture.h"
+
 TEST_GROUP(SOCKET);
 
-TEST_SETUP(SOCKET) { /* no setup required */ }
-TEST_TEAR_DOWN(SOCKET) { /* no teardown required */ }
+TEST_SETUP(SOCKET) { /* no setup required */
+}
+TEST_TEAR_DOWN(SOCKET) { /* no teardown required */
+}
 
 TEST(SOCKET, NONBLOCKINGHELPER) {
     int sv[2];

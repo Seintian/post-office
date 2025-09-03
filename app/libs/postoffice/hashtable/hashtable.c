@@ -4,11 +4,13 @@
  */
 
 #include "hashtable/hashtable.h"
-#include "prime/prime.h"
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "prime/prime.h"
 
 // *** MACROS *** //
 
@@ -253,9 +255,13 @@ int hashtable_contains_key(const hashtable_t *table, const void *key) {
     return 0;
 }
 
-size_t hashtable_size(const hashtable_t *table) { return table->size; }
+size_t hashtable_size(const hashtable_t *table) {
+    return table->size;
+}
 
-size_t hashtable_capacity(const hashtable_t *table) { return table->capacity; }
+size_t hashtable_capacity(const hashtable_t *table) {
+    return table->capacity;
+}
 
 void **hashtable_keyset(const hashtable_t *table) {
     if (table->size == 0)
@@ -345,9 +351,13 @@ bool hashtable_iter_next(hashtable_iter_t *it) {
     return false;
 }
 
-void *hashtable_iter_key(const hashtable_iter_t *it) { return it->current->key; }
+void *hashtable_iter_key(const hashtable_iter_t *it) {
+    return it->current->key;
+}
 
-void *hashtable_iter_value(const hashtable_iter_t *it) { return it->current->value; }
+void *hashtable_iter_value(const hashtable_iter_t *it) {
+    return it->current->value;
+}
 
 float hashtable_load_factor(const hashtable_t *table) {
     return (float)table->size / (float)table->capacity;

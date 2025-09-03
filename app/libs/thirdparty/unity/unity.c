@@ -1950,7 +1950,9 @@ void UnityDefaultTestRun(UnityTestFunction Func, const char *FuncName, const int
 #endif
 
 /*-----------------------------------------------*/
-void UnitySetTestFile(const char *filename) { Unity.TestFile = filename; }
+void UnitySetTestFile(const char *filename) {
+    Unity.TestFile = filename;
+}
 
 /*-----------------------------------------------*/
 void UnityBegin(const char *filename) {

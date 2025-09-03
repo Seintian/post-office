@@ -1,9 +1,10 @@
-#include "perf/zerocopy.h"
-#include "unity/unity_fixture.h"
-#include "utils/errors.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "perf/zerocopy.h"
+#include "unity/unity_fixture.h"
+#include "utils/errors.h"
 
 TEST_GROUP(ZEROCOPY);
 static perf_zcpool_t *pool;
@@ -16,7 +17,9 @@ TEST_SETUP(ZEROCOPY) {
     TEST_ASSERT_EQUAL_UINT(3, perf_zcpool_freecount(pool));
 }
 
-TEST_TEAR_DOWN(ZEROCOPY) { perf_zcpool_destroy(&pool); }
+TEST_TEAR_DOWN(ZEROCOPY) {
+    perf_zcpool_destroy(&pool);
+}
 
 TEST(ZEROCOPY, INVALIDCREATE) {
     const perf_zcpool_t *p1 = perf_zcpool_create(0, 1024);

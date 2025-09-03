@@ -21,6 +21,7 @@
  */
 
 #include "log_c/log.h"
+
 #include <stdio.h>  /* (ADDED) fprintf, sprintf, snprintf */
 #include <stdlib.h> /* (ADDED) exit */
 #include <string.h>
@@ -112,16 +113,22 @@ static void unlock(void) {
     }
 }
 
-const char *log_level_string(int level) { return level_strings[level]; }
+const char *log_level_string(int level) {
+    return level_strings[level];
+}
 
 void log_set_lock(log_LockFn fn, void *udata) {
     L.lock = fn;
     L.udata = udata;
 }
 
-void log_set_level(int level) { L.level = level; }
+void log_set_level(int level) {
+    L.level = level;
+}
 
-void log_set_quiet(bool enable) { L.quiet = enable; }
+void log_set_quiet(bool enable) {
+    L.quiet = enable;
+}
 
 int log_add_callback(log_LogFn fn, void *udata, int level) {
     for (int i = 0; i < MAX_CALLBACKS; i++) {
@@ -133,7 +140,9 @@ int log_add_callback(log_LogFn fn, void *udata, int level) {
     return -1;
 }
 
-int log_add_fp(FILE *fp, int level) { return log_add_callback(file_callback, fp, level); }
+int log_add_fp(FILE *fp, int level) {
+    return log_add_callback(file_callback, fp, level);
+}
 
 static void init_event(log_Event *ev, void *udata) {
     if (!ev->time) {

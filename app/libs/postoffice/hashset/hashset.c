@@ -1,8 +1,10 @@
 #include "hashset/hashset.h"
-#include "prime/prime.h"
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "prime/prime.h"
 
 // *** MACROS *** //
 
@@ -209,9 +211,13 @@ int hashset_contains(const hashset_t *set, const void *key) {
     return 0;
 }
 
-size_t hashset_size(const hashset_t *set) { return set->size; }
+size_t hashset_size(const hashset_t *set) {
+    return set->size;
+}
 
-size_t hashset_capacity(const hashset_t *set) { return set->capacity; }
+size_t hashset_capacity(const hashset_t *set) {
+    return set->capacity;
+}
 
 void **hashset_keys(const hashset_t *set) {
     if (set->size == 0)

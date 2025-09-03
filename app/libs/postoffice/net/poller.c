@@ -48,7 +48,9 @@ int poller_mod(const poller_t *p, int fd, uint32_t events) {
     return epoll_ctl(p->epfd, EPOLL_CTL_MOD, fd, &ev);
 }
 
-int poller_remove(const poller_t *p, int fd) { return epoll_ctl(p->epfd, EPOLL_CTL_DEL, fd, NULL); }
+int poller_remove(const poller_t *p, int fd) {
+    return epoll_ctl(p->epfd, EPOLL_CTL_DEL, fd, NULL);
+}
 
 int poller_wait(const poller_t *p, struct epoll_event *events, int max_events, int timeout) {
     if (max_events <= 0) {

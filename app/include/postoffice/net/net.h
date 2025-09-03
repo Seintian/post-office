@@ -9,11 +9,12 @@
 #ifndef _NET_H
 #define _NET_H
 
+#include <stdint.h>
+#include <sys/cdefs.h>
+
 #include "net/framing.h"
 #include "net/protocol.h"
 #include "net/socket.h"
-#include <stdint.h>
-#include <sys/cdefs.h>
 
 /**
  * @brief Send a protocol message on a connected socket.

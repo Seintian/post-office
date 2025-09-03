@@ -6,8 +6,10 @@
 ========================================================================= */
 
 #include "unity/unity_fixture.h"
-#include "unity_internals.h"
+
 #include <string.h>
+
+#include "unity_internals.h"
 
 struct UNITY_FIXTURE_T UnityFixture;
 
@@ -15,8 +17,10 @@ struct UNITY_FIXTURE_T UnityFixture;
  * Build with -D UNITY_OUTPUT_CHAR=outputChar and include <stdio.h>
  * int (*outputChar)(int) = putchar; */
 
-void setUp(void) { /*does nothing*/ }
-void tearDown(void) { /*does nothing*/ }
+void setUp(void) { /*does nothing*/
+}
+void tearDown(void) { /*does nothing*/
+}
 
 static void announceTestRun(unsigned int runNumber) {
     UnityPrint("Unity test run ");
@@ -127,7 +131,9 @@ struct PointerPair {
 static struct PointerPair pointer_store[UNITY_MAX_POINTERS];
 static int pointer_index = 0;
 
-void UnityPointer_Init(void) { pointer_index = 0; }
+void UnityPointer_Init(void) {
+    pointer_index = 0;
+}
 
 void UnityPointer_Set(void **pointer, void *newValue, UNITY_LINE_TYPE line) {
     if (pointer_index >= UNITY_MAX_POINTERS) {

@@ -1,11 +1,12 @@
 // tests/net/test_framing.c
-#include "net/framing.h"
-#include "net/protocol.h"
-#include "unity/unity_fixture.h"
 #include <errno.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+#include "net/framing.h"
+#include "net/protocol.h"
+#include "unity/unity_fixture.h"
 
 TEST_GROUP(FRAMING);
 
@@ -14,7 +15,8 @@ TEST_SETUP(FRAMING) {
     framing_init(0);
 }
 
-TEST_TEAR_DOWN(FRAMING) { /* nothing to cleanup */ }
+TEST_TEAR_DOWN(FRAMING) { /* nothing to cleanup */
+}
 
 TEST(FRAMING, ROUNDTRIPEMPTYPAYLOAD) {
     int sv[2];

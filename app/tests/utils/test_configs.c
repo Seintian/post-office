@@ -1,7 +1,8 @@
-#include "unity/unity_fixture.h"
-#include "utils/configs.h"
 #include <stdlib.h>
 #include <string.h>
+
+#include "unity/unity_fixture.h"
+#include "utils/configs.h"
 
 static const char good_ini[] = "[global]\n"
                                "key1 = hello\n"

@@ -2,10 +2,6 @@
 #define _GNU_SOURCE
 #endif
 
-#include "perf/perf.h"
-#include "unity/unity_fixture.h"
-#include "utils/errors.h"
-
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -13,6 +9,10 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "perf/perf.h"
+#include "unity/unity_fixture.h"
+#include "utils/errors.h"
 
 #define CAPTURE_REPORT(buf, bufsize, call)                                                         \
     do {                                                                                           \

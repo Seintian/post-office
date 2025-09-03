@@ -2,10 +2,11 @@
 /** \ingroup perf */
 #define _PO_PERF_H
 
-#include "utils/errors.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+
+#include "utils/errors.h"
 
 // -----------------------------------------------------------------------------
 // Public opaque types
