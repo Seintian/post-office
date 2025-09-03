@@ -50,15 +50,20 @@ typedef struct {
 │   │       │   ├── ticket_issuer.h
 │   │       │   ├── user.h
 │   │       │   ├── users_manager.h
-│   │       │   └── worker.h
+│   │       │   ├── worker.h
+│   │       ├── sysinfo/
+│   │       │   └── sysinfo.h
 │   │       │
-│   │       ├── net.h
-│   │       ├── storage.h
-│   │       ├── perf.h
+│   │       ├── log/
+│   │       │   └── logger.h
+│   │       ├── net/
+│   │       ├── perf/
+│   │       ├── storage/
 │   │       └── utils/
+│   │           ├── argv.h
 │   │           ├── configs.h
+│   │           ├── errors.h
 │   │           ├── files.h
-│   │           ├── logging.h
 │   │           └── random.h
 │   │
 │   ├── libs/                       ← vendored third‑party code
@@ -91,12 +96,20 @@ typedef struct {
 │   │   │   │   ├── logstore.h
 │   │   │   │   └── storage.c
 │   │   │   │
+│   │   │   ├── log/
+│   │   │   │   └── logger.c
+│   │   │   ├── sysinfo/
+│   │   │   │   ├── fsinfo.c
+│   │   │   │   ├── fsinfo.h
+│   │   │   │   ├── hugeinfo.c
+│   │   │   │   ├── hugeinfo.h
+│   │   │   │   └── sysinfo.c
 │   │   │   └── utils/
+│   │   │       ├── argv.c
 │   │   │       ├── configs.c
+│   │   │       ├── errors.c
 │   │   │       ├── files.c
-│   │   │       ├── logging.c
-│   │   │       ├── random.c
-│   │   │       └── (any internal headers)
+│   │   │       └── random.c
 │   │   │
 │   │   └── thirdparty/            ← all vendored external libs
 │   │       ├── inih/              ← ini.c, ini.h
@@ -126,14 +139,14 @@ typedef struct {
 │   │   │       └── worker/
 │   │   │           └── worker.c
 │   │   │
-│   │   └── (no modules/ stubs here—tests should go under `tests/`)  
+│   │   └── (no modules/ stubs here—tests should go under `tests/`)
 │   │
 │   ├── tests/                     ← unit & integration tests
 │   │   ├── core/                  ← tests for main, director, user, etc.
 │   │   ├── net/                   ← echo server/client, framing tests
 │   │   ├── perf/                  ← ringbuf, batcher, zerocopy tests
 │   │   ├── storage/               ← LMDB & logstore tests
-│   │   └── utils/                 ← configs, files, logging, random tests
+│   │   └── utils/                 ← argv, configs, files, random tests
 │   │
 │   ├── Makefile                   ← builds all src/core executables + libs + tests
 │   └── Doxyfile
