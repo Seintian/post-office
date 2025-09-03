@@ -25,15 +25,15 @@
 
 // *** STRUCTURES *** //
 
-typedef struct _hashset_node_t {
+typedef struct hashset_node {
     /** @brief Pointer to the key. */
     void* key;
 
     /** @brief Pointer to the next node in case of collisions. */
-    struct _hashset_node_t* next;
+    struct hashset_node* next;
 } __attribute__((packed)) hashset_node_t;
 
-struct _hashset_t {
+struct hashset {
     /** @brief Array of pointers to hash nodes (buckets). */
     hashset_node_t** buckets;
 

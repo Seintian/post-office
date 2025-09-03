@@ -32,10 +32,10 @@
 // *** STRUCTURES *** //
 
 /**
- * @struct _hashtable_node_t
+ * @struct hashtable_node
  * @brief Node structure to represent an entry in the hashtable.
  */
-typedef struct _hashtable_node_t {
+typedef struct hashtable_node {
     /** @brief Pointer to the key. */
     void *key;
 
@@ -43,14 +43,14 @@ typedef struct _hashtable_node_t {
     void *value;
 
     /** @brief Pointer to the next node in case of collisions. */
-    struct _hashtable_node_t *next;
+    struct hashtable_node *next;
 } __attribute__((packed)) hashtable_node_t;
 
 /**
- * @struct _hashtable_t
+ * @struct hashtable
  * @brief Structure to represent the hashtable.
  */
-struct _hashtable_t {
+struct hashtable {
     /** @brief Array of pointers to hash nodes (buckets). */
     hashtable_node_t **buckets;
 
@@ -67,7 +67,7 @@ struct _hashtable_t {
     size_t (*hash_func)(const void *);
 } __attribute__((packed));
 
-struct _hashtable_iter_t {
+struct hashtable_iter {
     const hashtable_t *table;  ///< Pointer to the hashtable being iterated.
     size_t index;              ///< Current index in the hashtable's bucket array.
     hashtable_node_t *current; ///< Pointer to the current node in the iteration.

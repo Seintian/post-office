@@ -10,7 +10,7 @@ extern "C" {
 #endif
 
 /// Opaque zero‑copy pool handle
-typedef struct _perf_zcpool_t perf_zcpool_t;
+typedef struct perf_zcpool perf_zcpool_t;
 
 /**
  * @brief Get the size of each buffer in the zero-copy pool.

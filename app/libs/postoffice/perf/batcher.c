@@ -17,7 +17,7 @@
 #include <stdio.h>
 
 
-struct _perf_batcher_t {
+struct perf_batcher {
     perf_ringbuf_t  *rb;
     int              efd;
     size_t           batch_size;

@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 /// Opaque ring‐buffer type
-typedef struct _perf_ringbuf_t perf_ringbuf_t;
+typedef struct perf_ringbuf perf_ringbuf_t;
 
 /**
  * @brief Tell the ring‐buffer module what your hardware cache‐line size is.

@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 /// Opaque HashSet type
-typedef struct _hashset_t hashset_t;
+typedef struct hashset hashset_t;
 
 /**
  * @brief Create a new HashSet with default capacity.

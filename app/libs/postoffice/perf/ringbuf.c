@@ -13,7 +13,7 @@
     head (read index)  and  tail (write index)  are each allocated
     on their own cache‐line so there's no false sharing.
 */
-struct _perf_ringbuf_t {
+struct perf_ringbuf {
     atomic_size_t *head;   // read index
     atomic_size_t *tail;   // write index
     size_t         cap;    // must be power‐of‐two

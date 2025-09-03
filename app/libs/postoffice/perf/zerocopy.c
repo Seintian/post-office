@@ -15,7 +15,7 @@
 #include <string.h>
 
 
-struct _perf_zcpool_t {
+struct perf_zcpool {
     void           *base;       // start of mapped region
     size_t          buf_size;   
     size_t          buf_count;

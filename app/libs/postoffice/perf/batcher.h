@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 /// Opaque batcher type
-typedef struct _perf_batcher_t perf_batcher_t;
+typedef struct perf_batcher perf_batcher_t;
 
 /**
  * @brief Create a blocking batcher over a ring buffer.

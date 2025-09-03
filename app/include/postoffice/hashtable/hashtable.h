@@ -1,6 +1,7 @@
 /**
  * @file hashtable.h
  * @brief Declares the HashTable API.
+ * @ingroup libraries
  * 
  * @see hashtable.c
  * @see prime.h

@@ -45,7 +45,7 @@ void perf_shutdown(FILE *out);
  * Create or retrieve a counter by name (synchronous).
  *
  * @param name  Counter name (string key)
- * @return pointer to the counter object, or NULL on failure
+ * @return 0 on success, -1 on failure (errno set)
  */
 int perf_counter_create(const char *name) __nonnull((1));
 
@@ -72,14 +72,14 @@ void perf_counter_add(const char *name, uint64_t delta) __nonnull((1));
  * Create or retrieve a timer by name (synchronous).
  *
  * @param name Timer name (string key)
- * @return pointer to timer object, or NULL on failure
+ * @return 0 on success, -1 on failure (errno set)
  */
 int perf_timer_create(const char *name) __nonnull((1));
 
 /**
  * Start a timer asynchronously.
  *
- * @param t  Timer pointer returned by perf_timer_create
+ * @param name  Timer name (string key)
  * @return 0 on success, -1 on failure
  */
 int perf_timer_start(const char *name) __nonnull((1));
@@ -87,7 +87,7 @@ int perf_timer_start(const char *name) __nonnull((1));
 /**
  * Stop a timer asynchronously and accumulate elapsed time.
  *
- * @param t Timer pointer
+ * @param name Timer name (string key)
  * @return 0 on success, -1 on failure
  */
 int perf_timer_stop(const char *name) __nonnull((1));
@@ -102,7 +102,7 @@ int perf_timer_stop(const char *name) __nonnull((1));
  * @param name  Name of histogram
  * @param bins  Array of bin thresholds
  * @param nbins Number of bins
- * @return pointer to histogram object, or NULL on failure
+ * @return 0 on success, -1 on failure (errno set)
  */
 int perf_histogram_create(
     const char *name,
@@ -115,6 +115,7 @@ int perf_histogram_create(
  *
  * @param name  Histogram name (string key)
  * @param value Value to record
+ * @return 0 on success, -1 on failure (errno set)
  */
 int perf_histogram_record(
     const char *name,
@@ -126,9 +127,10 @@ int perf_histogram_record(
 // -----------------------------------------------------------------------------
 
 /**
- * Print a synchronous report of all counters, timers, and histograms
- * to stdout. This function does not queue an event; it runs synchronously.
+ * Print a synchronous report of all counters, timers, and histograms.
+ * This function does not queue an event; it runs synchronously.
  *
+ * @param out  Output stream (e.g., stdout)
  * @return 0 on success, -1 on failure
  */
 int perf_report(FILE *out);

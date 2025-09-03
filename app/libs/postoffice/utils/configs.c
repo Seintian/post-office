@@ -24,7 +24,7 @@ static int str_cmp(const void *a, const void *b) {
 }
 
 // inih handler context
-struct _po_config_t {
+struct po_config {
     hashtable_t *entries;   // section.key-value pairs
     hashset_t *sections;    // set of section names
     bool strict;            // strict parsing mode
