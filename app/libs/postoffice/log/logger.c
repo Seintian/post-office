@@ -15,6 +15,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <syslog.h>
 
 #include "perf/ringbuf.h"
 #include "utils/errors.h"
@@ -47,6 +48,9 @@ static bool g_console_stderr = true;
 static _Atomic int g_running = 0;
 static _Atomic unsigned long g_dropped_new = 0;
 static _Atomic unsigned long g_overwritten_old = 0;
+// syslog state
+static int   g_syslog_open = 0;
+static char *g_syslog_ident = NULL;
 
 // Preallocated pool
 static log_record_t *g_pool = NULL;
@@ -85,7 +89,19 @@ static void write_record(const log_record_t *r) {
     if ((g_sinks_mask & LOGGER_SINK_FILE) && g_fp) {
         fputs(line, g_fp);
     }
-    // syslog could be added here if linked; omitted for simplicity
+    if ((g_sinks_mask & LOGGER_SINK_SYSLOG) && g_syslog_open) {
+        int pri;
+        switch (r->level) {
+            case LOG_FATAL: pri = LOG_CRIT; break;
+            case LOG_ERROR: pri = LOG_ERR; break;
+            case LOG_WARN:  pri = LOG_WARNING; break;
+            case LOG_INFO:  pri = LOG_INFO; break;
+            case LOG_DEBUG: // fallthrough
+            case LOG_TRACE: default: pri = LOG_DEBUG; break;
+        }
+        // Let syslog add timestamp/ident; send concise context
+        syslog(pri, "%s:%d %s() - %s", r->file, r->line, r->func, r->msg);
+    }
 }
 
 static void *worker_main(void *arg) {
@@ -190,6 +206,11 @@ void logger_shutdown(void) {
         fclose(g_fp);
         g_fp = NULL;
     }
+    if (g_syslog_open) {
+        closelog();
+        g_syslog_open = 0;
+    }
+    if (g_syslog_ident) { free(g_syslog_ident); g_syslog_ident = NULL; }
 }
 
 int logger_set_level(logger_level_t level) {
@@ -226,7 +247,15 @@ int logger_add_sink_file(const char *path, bool append) {
 }
 
 int logger_add_sink_syslog(const char *ident) {
-    (void)ident; // placeholder without linking syslog
+    // Open syslog once; store ident copy for lifecycle
+    if (!g_syslog_open) {
+        if (g_syslog_ident) { free(g_syslog_ident); g_syslog_ident = NULL; }
+        if (ident && *ident) {
+            g_syslog_ident = strdup(ident);
+        }
+        openlog(g_syslog_ident ? g_syslog_ident : "postoffice", LOG_PID | LOG_NDELAY, LOG_USER);
+        g_syslog_open = 1;
+    }
     g_sinks_mask |= LOGGER_SINK_SYSLOG;
     return 0;
 }

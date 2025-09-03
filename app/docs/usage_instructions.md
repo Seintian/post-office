@@ -7,13 +7,14 @@ This document provides detailed instructions on how to use the simulation projec
 - [Overview](#overview)
 - [Building the Project](#building-the-project)
 - [Running Modes](#running-modes)
-    - [Full Application](#full-application)
-    - [Simulation Only](#simulation-only)
+  - [Full Application](#1-full-application)
+  - [Simulation Only](#2-simulation-only)
 - [Command-Line Options](#command-line-options)
 - [Configuration Files](#configuration-files)
 - [Interactive Features](#interactive-features)
 - [Crash Handling](#crash-handling)
 - [Logging System](#logging-system)
+  - [Syslog Integration](#syslog-integration)
 - [Troubleshooting](#troubleshooting)
 
 \anchor overview
@@ -201,6 +202,36 @@ The application uses a centralized logging system with the following levels:
 - `FATAL`: Critical errors
 
 Logs are written to the `logs/` directory; some are also displayed in the terminal.
+
+### Syslog Integration
+
+You can forward logs to the system logger (syslog) in addition to the console:
+
+- Enable via CLI: add `--syslog` to enable the sink
+- Set ident string (appears as the program name in syslog): `--syslog-ident IDENT`
+- Example:
+
+```bash
+./bin/post_office_main --loglevel INFO --config config/timeout.ini --syslog --syslog-ident postoffice
+```
+
+For the helper smoke tool `logger_smoke` built under `app/tools/` (see `make tools`), you can quickly test syslog emission using environment variables:
+
+```bash
+# Build helper tools
+make -C app tools
+
+# Enable syslog for the smoke tool and set an ident (optional)
+SYSLOG=1 SYSLOG_IDENT=postoffice LOG_LEVEL=DEBUG ./app/bin/logger_smoke
+```
+
+Recommended syslog facility is `LOG_USER` (default). Levels are mapped as:
+
+- FATAL -> CRIT
+- ERROR -> ERR
+- WARN  -> WARNING
+- INFO  -> INFO
+- DEBUG/TRACE -> DEBUG
 
 \anchor troubleshooting
 
