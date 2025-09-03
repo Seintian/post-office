@@ -43,6 +43,7 @@ PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
 STORAGE_DIR			   = $(POSTOFFICE_LIBS_DIR)/storage
 UTILS_DIR			   = $(POSTOFFICE_LIBS_DIR)/utils
 LOG_DIR                = $(POSTOFFICE_LIBS_DIR)/log
+SYSINFO_DIR		       = $(POSTOFFICE_LIBS_DIR)/sysinfo
 
 ## Third-party Libraries
 INIH_DIR               = $(THIRDPARTY_LIBS_DIR)/inih
@@ -99,6 +100,9 @@ DEBUGGING_FLAGS = --coverage -O1 -fsanitize=address,alignment,shift,null,object-
 PRODUCTION_FLAGS = -O3 -DNDEBUG
 
 NON_DEBUGGING_FLAGS = $(UTILITY_FLAGS) $(OPT_FLAGS) $(SECURITY_FLAGS)
+
+# Third-party libs need optimization to satisfy _FORTIFY_SOURCE checks
+THIRDPARTY_CFLAGS = $(NON_DEBUGGING_FLAGS) -O2
 
 # Set CFLAGS: Production always gets utility + optimization + security.
 CFLAGS = $(NON_DEBUGGING_FLAGS)
@@ -170,7 +174,9 @@ TEST_MAIN_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)test_main
 
 # Libraries Files
 ## Post Office Libraries
-CORE_SRC        = $(shell find $(CORE_DIR) -name '*.c')
+# Exclude deprecated sysinfo sources under core/simulation (moved to top-level sysinfo module)
+CORE_SRC        = $(shell find $(CORE_DIR) -type f -name '*.c' \
+					   ! -path '$(CORE_DIR)/simulation/sysinfo/*')
 HASHTABLE_SRC   = $(wildcard $(HASHTABLE_DIR)/*.c)
 HASHSET_SRC     = $(wildcard $(HASHSET_DIR)/*.c)
 NET_SRC         = $(wildcard $(NET_DIR)/*.c)
@@ -179,6 +185,7 @@ PRIME_SRC       = $(wildcard $(PRIME_DIR)/*.c)
 STORAGE_SRC     = $(wildcard $(STORAGE_DIR)/*.c)
 UTILS_SRC       = $(wildcard $(UTILS_DIR)/*.c)
 LOG_SRC         = $(wildcard $(LOG_DIR)/*.c)
+SYSINFO_SRC     = $(wildcard $(SYSINFO_DIR)/*.c)
 
 ## Third-party Libraries
 INIH_SRC        = $(wildcard $(INIH_DIR)/*.c)
@@ -209,6 +216,7 @@ PRIME_OBJS          = $(patsubst $(PRIME_DIR)/%.c,$(BUILD_DIR)/prime/%.o,$(PRIME
 STORAGE_OBJS        = $(patsubst $(STORAGE_DIR)/%.c,$(BUILD_DIR)/storage/%.o,$(STORAGE_SRC))
 UTILS_OBJS          = $(patsubst $(UTILS_DIR)/%.c,$(BUILD_DIR)/utils/%.o,$(UTILS_SRC))
 LOG_OBJS            = $(patsubst $(LOG_DIR)/%.c,$(BUILD_DIR)/log/%.o,$(LOG_SRC))
+SYSINFO_OBJS        = $(patsubst $(SYSINFO_DIR)/%.c,$(BUILD_DIR)/sysinfo/%.o,$(SYSINFO_SRC))
 
 ## Third-party Libraries
 INIH_OBJS           = $(patsubst $(INIH_DIR)/%.c,$(BUILD_DIR)/inih/%.o,$(INIH_SRC))
@@ -220,8 +228,8 @@ LIBFORT_OBJS        = $(patsubst $(LIBFORT_DIR)/%.c,$(BUILD_DIR)/libfort/%.o,$(L
 # Common library objects needed by most executables
 DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(HASHTABLE_OBJS) \
                       $(PRIME_OBJS) $(LOG_C_OBJS) $(CORE_OBJS) \
-				  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
-				  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS)
+			  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
+			  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS) $(SYSINFO_OBJS)
 
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
@@ -481,6 +489,10 @@ $(LOG_OBJS): $(BUILD_DIR)/log/%.o: $(LOG_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
+$(SYSINFO_OBJS): $(BUILD_DIR)/sysinfo/%.o: $(SYSINFO_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
 # Rule for all test files
 $(TEST_OBJS): $(BUILD_DIR)/tests/%.o: $(TESTS_DIR)/%.c
 	@mkdir -p $(dir $@)
@@ -493,11 +505,11 @@ $(INIH_OBJS): $(BUILD_DIR)/inih/%.o: $(INIH_DIR)/%.c
 
 $(LIBFORT_OBJS): $(BUILD_DIR)/libfort/%.o: $(LIBFORT_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(NON_DEBUGGING_FLAGS) $(ALL_I) -c $< -o $@
+	$(CC) -MMD -MP $(THIRDPARTY_CFLAGS) $(ALL_I) -c $< -o $@
 
 $(LMDB_OBJS): $(BUILD_DIR)/lmdb/%.o: $(LMDB_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(NON_DEBUGGING_FLAGS) $(ALL_I) -c $< -o $@
+	$(CC) -MMD -MP $(THIRDPARTY_CFLAGS) $(ALL_I) -c $< -o $@
 
 $(LOG_C_OBJS): $(BUILD_DIR)/log_c/%.o: $(LOG_C_DIR)/%.c
 	@mkdir -p $(dir $@)
