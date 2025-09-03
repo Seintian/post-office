@@ -22,14 +22,26 @@ PROJECT_BRIEF          = "Post Office: modular C codebase with simulation proces
 
 # The INPUT tag is used to specify the files and/or directories that contain
 # documented source files. This tag can be used to specify absolute or relative paths.
-INPUT                  = ./src ./libs ./include
+INPUT                  = ./src ./libs ./include ./tests ./docs
 
 # The EXCLUDE tag can be used to specify files and/or directories that should be excluded from the input.
-EXCLUDE                = ./libs/unity ./libs/libfort ./libs/inih
+# Exclude third-party and build artifacts (keep scope under app/ only)
+EXCLUDE                = \
+	./libs/thirdparty/unity \
+	./libs/thirdparty/libfort \
+	./libs/thirdparty/inih \
+	./libs/thirdparty/lmdb \
+	./libs/thirdparty/log_c \
+	./include/thirdparty \
+	./build \
+	./bin \
+	./docs/html \
+	./docs/latex
 
 # The FILE_PATTERNS tag can be used to specify one or more wildcard patterns
 # (like *.cpp and *.h) to filter out the source-files in the directories.
-# FILE_PATTERNS          = *.c *.h
+# Document C sources/headers and Markdown pages
+FILE_PATTERNS          = *.c *.h *.md *.dox
 
 # If the value of the RECURSIVE tag is set to YES, doxygen will sub-divide
 # the directories and search for input files in them as well.
@@ -45,10 +57,15 @@ OPTIMIZE_OUTPUT_FOR_C  = YES
 # Extract documentation from all parts of the code.
 EXTRACT_ALL            = YES
 EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_LOCAL_CLASSES  = YES
 
 # Generate documentation for preprocessing directives.
-INCLUDE_PATH           = ./src ./src/simulation ./libs ./include
+INCLUDE_PATH           = ./src ./src/core ./libs ./include ./tests
 MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = NO
+STRIP_FROM_PATH        = .
+STRIP_FROM_INC_PATH    = ./include ./libs ./src
 
 #---------------------------------------------------------------------------
 # Configuration options related to source browsing
@@ -58,6 +75,14 @@ MACRO_EXPANSION        = YES
 SOURCE_BROWSER         = YES
 INLINE_SOURCES         = YES
 STRIP_CODE_COMMENTS    = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+VERBATIM_HEADERS       = YES
+FULL_PATH_NAMES        = NO
+SHOW_DIRECTORIES       = YES
+SHOW_FILES             = YES
+ALPHABETICAL_INDEX     = YES
+GENERATE_INDEX         = YES
 
 #---------------------------------------------------------------------------
 # Configuration options related to the output formats
@@ -66,6 +91,9 @@ STRIP_CODE_COMMENTS    = NO
 # If the GENERATE_HTML tag is set to YES (the default) Doxygen will generate HTML output.
 GENERATE_HTML          = YES
 HTML_OUTPUT            = html
+HTML_DYNAMIC_SECTIONS  = YES
+SEARCHENGINE           = YES
+GENERATE_DOCSET        = NO
 
 # Generate a tree view of the documentation.
 GENERATE_TREEVIEW      = YES
@@ -76,6 +104,7 @@ LATEX_OUTPUT           = latex
 
 # USE_PDFLATEX		   = YES
 PDF_HYPERLINKS         = YES
+USE_MDFILE_AS_MAINPAGE = docs/mainpage.md
 
 #---------------------------------------------------------------------------
 # Configuration options for diagrams and graphs
@@ -85,6 +114,15 @@ PDF_HYPERLINKS         = YES
 HAVE_DOT               = YES
 CALL_GRAPH             = YES
 CALLER_GRAPH           = YES
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+DOT_GRAPH_MAX_NODES    = 100
+MAX_DOT_GRAPH_DEPTH    = 0
+CLASS_DIAGRAMS         = YES
+DIRECTORY_GRAPH        = YES
+INCLUDED_BY_GRAPH      = YES
+INCLUDE_GRAPH          = YES
+DOT_TRANSPARENT        = YES
 
 #---------------------------------------------------------------------------
 # End of Doxyfile
