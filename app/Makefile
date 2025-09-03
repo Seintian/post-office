@@ -53,8 +53,8 @@ LOG_C_DIR              = $(THIRDPARTY_LIBS_DIR)/log_c
 UNITY_DIR              = $(THIRDPARTY_LIBS_DIR)/unity
 
 # Processes' sources directories
-MAIN_DIR               = $(SRC_DIR)/core/main
-SIMULATION_DIR         = $(SRC_DIR)/core/simulation
+MAIN_DIR               = $(SRC_DIR)/main
+SIMULATION_DIR         = $(SRC_DIR)/simulation
 DIRECTOR_DIR           = $(SIMULATION_DIR)/director
 TICKET_ISSUER_DIR      = $(SIMULATION_DIR)/ticket_issuer
 USERS_MANAGER_DIR      = $(SIMULATION_DIR)/users_manager
@@ -69,7 +69,7 @@ EXPLODE_INI_PATH       = $(CONFIG_DIR)/explode.ini
 
 INCLUDES_I = -I$(POSTOFFICE_INCLUDE_DIR) -I$(THIRDPARTY_INCLUDE_DIR)
 LIBS_I     = -I$(POSTOFFICE_LIBS_DIR) -I$(THIRDPARTY_LIBS_DIR)
-CORE_I     = -I$(SRC_DIR)/core -I$(SIMULATION_DIR)
+CORE_I     = -I$(SRC_DIR) -I$(SIMULATION_DIR)
 
 ALL_I      = $(INCLUDES_I) $(LIBS_I) $(CORE_I)
 

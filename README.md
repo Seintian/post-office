@@ -119,27 +119,26 @@ typedef struct {
 │   │       └── unity/             ← unity.c, unity.h, unity_internals.h
 │   │
 │   ├── src/                       ← "your" executables entrypoints
-│   │   ├── core/
-│   │   │   ├── main/              ← simulation dashboard
-│   │   │   │   └── main.c
-│   │   │   │
-│   │   │   └── simulation/
-│   │   │       ├── director/      ← Director process
-│   │   │       │   └── director.c
-│   │   │       │
-│   │   │       ├── ticket_issuer/
-│   │   │       │   └── ticket_issuer.c
-│   │   │       │
-│   │   │       ├── user/
-│   │   │       │   └── user.c
-│   │   │       │
-│   │   │       ├── users_manager/
-│   │   │       │   └── users_manager.c
-│   │   │       │
-│   │   │       └── worker/
-│   │   │           └── worker.c
+│   │   ├── main/                  ← simulation dashboard
+│   │   │   └── main.c
 │   │   │
-│   │   └── (no modules/ stubs here—tests should go under `tests/`)
+│   │   └── simulation/
+│   │       ├── director/          ← Director process
+│   │       │   └── director.c
+│   │       │
+│   │       ├── ticket_issuer/
+│   │       │   └── ticket_issuer.c
+│   │       │
+│   │       ├── user/
+│   │       │   └── user.c
+│   │       │
+│   │       ├── users_manager/
+│   │       │   └── users_manager.c
+│   │       │
+│   │       └── worker/
+│   │           └── worker.c
+│   │
+│   │   (no modules/ stubs here—tests should go under `tests/`)
 │   │
 │   ├── tests/                     ← unit & integration tests
 │   │   ├── core/                  ← tests for main, director, user, etc.
@@ -148,7 +147,7 @@ typedef struct {
 │   │   ├── storage/               ← LMDB & logstore tests
 │   │   └── utils/                 ← argv, configs, files, random tests
 │   │
-│   ├── Makefile                   ← builds all src/core executables + libs + tests
+│   ├── Makefile                   ← builds all src executables + libs + tests
 │   └── Doxyfile
 │  
 └── project                       # Project paperwork, drafts, PDFs

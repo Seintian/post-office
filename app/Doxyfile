@@ -61,7 +61,7 @@ EXTRACT_PRIVATE        = YES
 EXTRACT_LOCAL_CLASSES  = YES
 
 # Generate documentation for preprocessing directives.
-INCLUDE_PATH           = ./src ./src/core ./libs ./include ./tests
+INCLUDE_PATH           = ./src ./libs ./include ./tests
 MACRO_EXPANSION        = YES
 EXPAND_ONLY_PREDEF     = NO
 STRIP_FROM_PATH        = .
