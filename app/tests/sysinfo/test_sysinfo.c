@@ -3,7 +3,7 @@
 #endif
 
 #include "unity/unity_fixture.h"
-#include "core/simulation/sysinfo.h"
+#include "sysinfo/sysinfo.h"
 #include <string.h>
 #include <errno.h>
 #include <stdio.h>

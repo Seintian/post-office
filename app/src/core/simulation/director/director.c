@@ -1,4 +1,4 @@
-#include "core/simulation/sysinfo.h"
+#include "sysinfo/sysinfo.h"
 #include <unistd.h>
 #include <stdio.h>
 
