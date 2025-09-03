@@ -3,36 +3,56 @@
 #endif
 
 #include "db_lmdb.h"
-#include <stdlib.h>
-#include <string.h>
 #include <errno.h>
 #include <stdio.h>
-
+#include <stdlib.h>
+#include <string.h>
 
 /** Internal LMDB ↔ DB_E* mapping */
 static int _map_lmdb_error(int rc) {
     switch (rc) {
-        case MDB_SUCCESS:            return DB_EOK;
-        case MDB_KEYEXIST:           return DB_EKEYEXIST;
-        case MDB_NOTFOUND:           return DB_ENOTFOUND;
-        case MDB_PAGE_NOTFOUND:      return DB_EPAGENOTFOUND;
-        case MDB_CORRUPTED:          return DB_ECORRUPTED;
-        case MDB_PANIC:              return DB_EPANIC;
-        case MDB_VERSION_MISMATCH:   return DB_EVERSION;
-        case MDB_INVALID:            return DB_EINVALID;
-        case MDB_MAP_FULL:           return DB_EMAPFULL;
-        case MDB_DBS_FULL:           return DB_EDBSFULL;
-        case MDB_READERS_FULL:       return DB_EREADERSFULL;
-        case MDB_TXN_FULL:           return DB_ETXNFULL;
-        case MDB_CURSOR_FULL:        return DB_ECURSORFULL;
-        case MDB_PAGE_FULL:          return DB_EPAGEFULL;
-        case MDB_MAP_RESIZED:        return DB_EMAPRESIZED;
-        case MDB_INCOMPATIBLE:       return DB_EINCOMP;
-        case MDB_BAD_RSLOT:          return DB_EBADRSLOT;
-        case MDB_BAD_TXN:            return DB_EBADTXN;
-        case MDB_BAD_VALSIZE:        return DB_EBADVALSIZE;
-        case MDB_BAD_DBI:            return DB_EBADDBI;
-        default:                     return DB_EINVALID;
+    case MDB_SUCCESS:
+        return DB_EOK;
+    case MDB_KEYEXIST:
+        return DB_EKEYEXIST;
+    case MDB_NOTFOUND:
+        return DB_ENOTFOUND;
+    case MDB_PAGE_NOTFOUND:
+        return DB_EPAGENOTFOUND;
+    case MDB_CORRUPTED:
+        return DB_ECORRUPTED;
+    case MDB_PANIC:
+        return DB_EPANIC;
+    case MDB_VERSION_MISMATCH:
+        return DB_EVERSION;
+    case MDB_INVALID:
+        return DB_EINVALID;
+    case MDB_MAP_FULL:
+        return DB_EMAPFULL;
+    case MDB_DBS_FULL:
+        return DB_EDBSFULL;
+    case MDB_READERS_FULL:
+        return DB_EREADERSFULL;
+    case MDB_TXN_FULL:
+        return DB_ETXNFULL;
+    case MDB_CURSOR_FULL:
+        return DB_ECURSORFULL;
+    case MDB_PAGE_FULL:
+        return DB_EPAGEFULL;
+    case MDB_MAP_RESIZED:
+        return DB_EMAPRESIZED;
+    case MDB_INCOMPATIBLE:
+        return DB_EINCOMP;
+    case MDB_BAD_RSLOT:
+        return DB_EBADRSLOT;
+    case MDB_BAD_TXN:
+        return DB_EBADTXN;
+    case MDB_BAD_VALSIZE:
+        return DB_EBADVALSIZE;
+    case MDB_BAD_DBI:
+        return DB_EBADDBI;
+    default:
+        return DB_EINVALID;
     }
 }
 
@@ -43,19 +63,14 @@ struct db_env {
 
 struct db_bucket {
     MDB_env *env;
-    MDB_dbi  dbi;
+    MDB_dbi dbi;
 };
 
 //----------------------------------------------------------------------
 // db_env_open
 //----------------------------------------------------------------------
 
-int db_env_open(
-    const char *path,
-    size_t      max_databases,
-    size_t      map_size,
-    db_env_t  **out_env
-) {
+int db_env_open(const char *path, size_t max_databases, size_t map_size, db_env_t **out_env) {
     MDB_env *env;
     int rc = mdb_env_create(&env);
     if (rc != MDB_SUCCESS) {
@@ -99,7 +114,7 @@ int db_env_open(
     }
     dbenv->env = env;
 
-    *out_env   = dbenv;
+    *out_env = dbenv;
     return 0;
 }
 
@@ -123,11 +138,7 @@ void db_env_close(db_env_t **dbenv) {
 // db_bucket_open
 //----------------------------------------------------------------------
 
-int db_bucket_open(
-    db_env_t    *dbenv,
-    const char  *name,
-    db_bucket_t **out_bucket
-) {
+int db_bucket_open(db_env_t *dbenv, const char *name, db_bucket_t **out_bucket) {
     MDB_txn *txn;
     int rc = mdb_txn_begin(dbenv->env, NULL, 0, &txn);
     if (rc != MDB_SUCCESS) {
@@ -178,13 +189,7 @@ void db_bucket_close(db_bucket_t **bucket) {
 // db_put
 //----------------------------------------------------------------------
 
-int db_put(
-    db_bucket_t  *bucket,
-    const void   *key,
-    size_t        keylen,
-    const void   *val,
-    size_t        vallen
-) {
+int db_put(db_bucket_t *bucket, const void *key, size_t keylen, const void *val, size_t vallen) {
     if (keylen == 0) {
         errno = EINVAL;
         return -1;
@@ -197,8 +202,8 @@ int db_put(
         return -1;
     }
 
-    MDB_val mdb_key  = { .mv_size = keylen, .mv_data = (void*)key  };
-    MDB_val mdb_val  = { .mv_size = vallen, .mv_data = (void*)val };
+    MDB_val mdb_key = {.mv_size = keylen, .mv_data = (void *)key};
+    MDB_val mdb_val = {.mv_size = vallen, .mv_data = (void *)val};
 
     rc = mdb_put(txn, bucket->dbi, &mdb_key, &mdb_val, 0);
     if (rc != MDB_SUCCESS) {
@@ -220,13 +225,7 @@ int db_put(
 // db_get
 //----------------------------------------------------------------------
 
-int db_get(
-    db_bucket_t  *bucket,
-    const void   *key,
-    size_t        keylen,
-    void        **out_value,
-    size_t       *out_len
-) {
+int db_get(db_bucket_t *bucket, const void *key, size_t keylen, void **out_value, size_t *out_len) {
     if (keylen == 0) {
         errno = EINVAL;
         return -1;
@@ -239,7 +238,7 @@ int db_get(
         return -1;
     }
 
-    MDB_val mdb_key = { .mv_size = keylen, .mv_data = (void*)key };
+    MDB_val mdb_key = {.mv_size = keylen, .mv_data = (void *)key};
     MDB_val mdb_val;
 
     rc = mdb_get(txn, bucket->dbi, &mdb_key, &mdb_val);
@@ -263,7 +262,7 @@ int db_get(
     }
     memcpy(buf, mdb_val.mv_data, mdb_val.mv_size);
     *out_value = buf;
-    *out_len   = mdb_val.mv_size;
+    *out_len = mdb_val.mv_size;
 
     mdb_txn_commit(txn);
     return 0;
@@ -273,11 +272,7 @@ int db_get(
 // db_delete
 //----------------------------------------------------------------------
 
-int db_delete(
-    db_bucket_t *bucket,
-    const void  *key,
-    size_t       keylen
-) {
+int db_delete(db_bucket_t *bucket, const void *key, size_t keylen) {
     if (keylen == 0) {
         errno = EINVAL;
         return -1;
@@ -290,7 +285,7 @@ int db_delete(
         return -1;
     }
 
-    MDB_val mdb_key = { .mv_size = keylen, .mv_data = (void*)key };
+    MDB_val mdb_key = {.mv_size = keylen, .mv_data = (void *)key};
     rc = mdb_del(txn, bucket->dbi, &mdb_key, NULL);
     if (rc == MDB_NOTFOUND) {
         mdb_txn_abort(txn);
@@ -315,18 +310,11 @@ int db_delete(
 // db_iterate
 //----------------------------------------------------------------------
 
-int db_iterate(
-    db_bucket_t *bucket,
-    int (*cb)(
-        const void *key,
-        size_t keylen,
-        const void *val,
-        size_t vallen,
-        void *udata
-    ),
-    void *udata
-) {
-    MDB_txn   *txn;
+int db_iterate(db_bucket_t *bucket,
+               int (*cb)(const void *key, size_t keylen, const void *val, size_t vallen,
+                         void *udata),
+               void *udata) {
+    MDB_txn *txn;
     MDB_cursor *cursor;
     int rc = mdb_txn_begin(bucket->env, NULL, MDB_RDONLY, &txn);
     if (rc != MDB_SUCCESS) {

@@ -34,7 +34,6 @@ SRC_DIR                = src
 
 # Libraries Directories
 ## Post Office Libraries
-CORE_DIR               = $(POSTOFFICE_LIBS_DIR)/core
 HASHTABLE_DIR          = $(POSTOFFICE_LIBS_DIR)/hashtable
 HASHSET_DIR            = $(POSTOFFICE_LIBS_DIR)/hashset
 NET_DIR                = $(POSTOFFICE_LIBS_DIR)/net
@@ -175,9 +174,7 @@ TEST_MAIN_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)test_main
 
 # Libraries Files
 ## Post Office Libraries
-# Exclude deprecated sysinfo sources under core/simulation (moved to top-level sysinfo module)
-CORE_SRC        = $(shell find $(CORE_DIR) -type f -name '*.c' \
-					   ! -path '$(CORE_DIR)/simulation/sysinfo/*')
+
 HASHTABLE_SRC   = $(wildcard $(HASHTABLE_DIR)/*.c)
 HASHSET_SRC     = $(wildcard $(HASHSET_DIR)/*.c)
 NET_SRC         = $(wildcard $(NET_DIR)/*.c)
@@ -208,7 +205,7 @@ TEST_SRC              = $(shell find $(TESTS_DIR) -name '*.c')
 
 # Object Files
 ## Post Office Libraries
-CORE_OBJS           = $(patsubst $(CORE_DIR)/%.c,$(BUILD_DIR)/core/%.o,$(CORE_SRC))
+
 HASHTABLE_OBJS      = $(patsubst $(HASHTABLE_DIR)/%.c,$(BUILD_DIR)/hashtable/%.o,$(HASHTABLE_SRC))
 HASHSET_OBJS        = $(patsubst $(HASHSET_DIR)/%.c,$(BUILD_DIR)/hashset/%.o,$(HASHSET_SRC))
 NET_OBJS            = $(patsubst $(NET_DIR)/%.c,$(BUILD_DIR)/net/%.o,$(NET_SRC))
@@ -228,9 +225,9 @@ LIBFORT_OBJS        = $(patsubst $(LIBFORT_DIR)/%.c,$(BUILD_DIR)/libfort/%.o,$(L
 
 # Common library objects needed by most executables
 DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(HASHTABLE_OBJS) \
-                      $(PRIME_OBJS) $(LOG_C_OBJS) $(CORE_OBJS) \
-			  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
-			  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS) $(SYSINFO_OBJS)
+                      $(PRIME_OBJS) $(LOG_C_OBJS) \
+					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
+					  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS) $(SYSINFO_OBJS)
 
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
@@ -339,7 +336,7 @@ dev: clean
 # Build and run tests
 test: $(TEST_MAIN_EXEC)
 	@echo "> Makefile: Running tests..."
-	@PO_TEST_MUTE_CONSOLE=1 $(TEST_MAIN_EXEC) $(TEST_MAIN_ARGS)
+	@$(TEST_MAIN_EXEC) $(TEST_MAIN_ARGS)
 
 # Rule for generating compile_commands.json
 _compile_commands: clean
@@ -395,6 +392,7 @@ help:
 	@echo "    test: Compile and run test executable"
 	@echo "    help: Display this help message"
 	@echo "    tools: Build tools under tools/ (helper utilities)"
+	@echo "    format: Run clang-format on all .c/.h files under this directory (recursively)"
 
 # *** Rules *** #
 
@@ -455,10 +453,6 @@ $(USER_APP_OBJS): $(BUILD_DIR)/user/%.o: $(USER_DIR)/%.c
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 # Rule for our internal libraries
-$(CORE_OBJS): $(BUILD_DIR)/core/%.o: $(CORE_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
-
 $(HASHTABLE_OBJS): $(BUILD_DIR)/hashtable/%.o: $(HASHTABLE_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
@@ -565,4 +559,22 @@ clean-tools:
 		echo "> Makefile: Aborted."; \
 	fi; \
 	rm -f $$TMP
+
+# --- Formatting ---
+
+.PHONY: format
+format:
+	@echo "> Makefile: Formatting all .c/.h files..."
+	@if ! command -v clang-format >/dev/null 2>&1; then \
+		echo "> Makefile: ERROR: clang-format not found. Please install it and retry."; \
+		exit 1; \
+	fi
+	@FILES="$$(find . -type f \( -name '*.c' -o -name '*.h' \))"; \
+	if [ -z "$$FILES" ]; then \
+		echo "> Makefile: No .c/.h files found."; \
+	else \
+		echo "> Makefile: Running: clang-format -i $$FILES"; \
+		clang-format -i $$FILES; \
+		echo "> Makefile: clang-format completed for all files."; \
+	fi
 

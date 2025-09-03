@@ -7,8 +7,8 @@
 #ifndef POSTOFFICE_UTILS_RANDOM_H
 #define POSTOFFICE_UTILS_RANDOM_H
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {

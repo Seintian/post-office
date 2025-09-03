@@ -1,10 +1,10 @@
-#include "unity/unity_fixture.h"
 #include "log/logger.h"
-#include <stdio.h>
-#include <unistd.h>
+#include "unity/unity_fixture.h"
 #include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 TEST_GROUP(LOGGER);
 
@@ -18,9 +18,7 @@ TEST_SETUP(LOGGER) {
     TEST_ASSERT_EQUAL_INT(0, logger_init(&cfg));
 }
 
-TEST_TEAR_DOWN(LOGGER) {
-    logger_shutdown();
-}
+TEST_TEAR_DOWN(LOGGER) { logger_shutdown(); }
 
 TEST(LOGGER, INITANDLEVEL) {
     TEST_ASSERT_EQUAL_INT(LOG_TRACE, logger_get_level());
@@ -77,7 +75,7 @@ TEST(LOGGER, OVERFLOWEMITSERROR) {
     // Flood the logger in bursts to allow the worker to run and persist notices
     for (int b = 0; b < 50; ++b) {
         for (int i = 0; i < 200; ++i) {
-            LOG_INFO("spam %d", b*200 + i);
+            LOG_INFO("spam %d", b * 200 + i);
         }
         usleep(5 * 1000); // 5ms between bursts
     }
@@ -95,7 +93,7 @@ TEST(LOGGER, OVERFLOWEMITSERROR) {
     long sz = ftell(fp);
     TEST_ASSERT(sz > 0);
     rewind(fp);
-    char *buf = (char*)malloc((size_t)sz + 1);
+    char *buf = (char *)malloc((size_t)sz + 1);
     TEST_ASSERT_NOT_NULL(buf);
     size_t rd = fread(buf, 1, (size_t)sz, fp);
     fclose(fp);

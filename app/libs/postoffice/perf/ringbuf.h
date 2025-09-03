@@ -2,10 +2,9 @@
 #ifndef _PERF_RINGBUF_H
 #define _PERF_RINGBUF_H
 
-#include <stddef.h>
+#include "sys/cdefs.h" // for __nonnull
 #include <stdatomic.h>
-#include "sys/cdefs.h"  // for __nonnull
-
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -15,39 +15,36 @@ struct UNITY_FIXTURE_T UnityFixture;
  * Build with -D UNITY_OUTPUT_CHAR=outputChar and include <stdio.h>
  * int (*outputChar)(int) = putchar; */
 
-void setUp(void)    { /*does nothing*/ }
+void setUp(void) { /*does nothing*/ }
 void tearDown(void) { /*does nothing*/ }
 
-static void announceTestRun(unsigned int runNumber)
-{
+static void announceTestRun(unsigned int runNumber) {
     UnityPrint("Unity test run ");
-    UnityPrintNumberUnsigned(runNumber+1);
+    UnityPrintNumberUnsigned(runNumber + 1);
     UnityPrint(" of ");
     UnityPrintNumberUnsigned(UnityFixture.RepeatCount);
     UNITY_PRINT_EOL();
 }
 
-int UnityMain(int argc, const char* argv[], void (*runAllTests)(void))
-{
+int UnityMain(int argc, const char *argv[], void (*runAllTests)(void)) {
     int result = UnityGetCommandLineOptions(argc, argv);
     unsigned int r;
     if (result != 0)
         return result;
 
-    for (r = 0; r < UnityFixture.RepeatCount; r++)
-    {
+    for (r = 0; r < UnityFixture.RepeatCount; r++) {
         UnityBegin(argv[0]);
         announceTestRun(r);
         runAllTests();
-        if (!UnityFixture.Verbose) UNITY_PRINT_EOL();
+        if (!UnityFixture.Verbose)
+            UNITY_PRINT_EOL();
         UnityEnd();
     }
 
     return (int)Unity.TestFailures;
 }
 
-static int selected(const char* filter, const char* select, const char* name)
-{
+static int selected(const char *filter, const char *select, const char *name) {
     if (filter == 0 && select == 0)
         return 1;
     if (filter && strstr(name, filter))
@@ -57,43 +54,29 @@ static int selected(const char* filter, const char* select, const char* name)
     return 0;
 }
 
-static int testSelected(const char* test)
-{
+static int testSelected(const char *test) {
     return selected(UnityFixture.NameFilter, UnityFixture.Name, test);
 }
 
-static int groupSelected(const char* group)
-{
+static int groupSelected(const char *group) {
     return selected(UnityFixture.GroupFilter, UnityFixture.Group, group);
 }
 
-void UnityTestRunner(unityfunction* setup,
-                     unityfunction* testBody,
-                     unityfunction* teardown,
-                     const char* printableName,
-                     const char* group,
-                     const char* name,
-                     const char* file,
-                     unsigned int line)
-{
-    if (testSelected(name) && groupSelected(group))
-    {
+void UnityTestRunner(unityfunction *setup, unityfunction *testBody, unityfunction *teardown,
+                     const char *printableName, const char *group, const char *name,
+                     const char *file, unsigned int line) {
+    if (testSelected(name) && groupSelected(group)) {
         Unity.TestFile = file;
         Unity.CurrentTestName = printableName;
         Unity.CurrentTestLineNumber = line;
-        if (UnityFixture.Verbose)
-        {
+        if (UnityFixture.Verbose) {
             UnityPrint(printableName);
-        #ifndef UNITY_REPEAT_TEST_NAME
+#ifndef UNITY_REPEAT_TEST_NAME
             Unity.CurrentTestName = NULL;
-        #endif
-        }
-        else if (UnityFixture.Silent)
-        {
+#endif
+        } else if (UnityFixture.Silent) {
             /* Do Nothing */
-        }
-        else
-        {
+        } else {
             UNITY_OUTPUT_CHAR('.');
         }
 
@@ -103,42 +86,32 @@ void UnityTestRunner(unityfunction* setup,
         if (!UnityFixture.DryRun) {
             UNITY_EXEC_TIME_START();
 
-            if (TEST_PROTECT())
-            {
+            if (TEST_PROTECT()) {
                 setup();
                 testBody();
             }
-            if (TEST_PROTECT())
-            {
+            if (TEST_PROTECT()) {
                 teardown();
             }
         }
 
-        if (TEST_PROTECT())
-        {
+        if (TEST_PROTECT()) {
             UnityPointer_UndoAllSets();
         }
         UnityConcludeFixtureTest();
     }
 }
 
-void UnityIgnoreTest(const char* printableName, const char* group, const char* name)
-{
-    if (testSelected(name) && groupSelected(group))
-    {
+void UnityIgnoreTest(const char *printableName, const char *group, const char *name) {
+    if (testSelected(name) && groupSelected(group)) {
         Unity.NumberOfTests++;
         Unity.TestIgnores++;
-        if (UnityFixture.Verbose)
-        {
+        if (UnityFixture.Verbose) {
             UnityPrint(printableName);
             UNITY_PRINT_EOL();
-        }
-        else if (UnityFixture.Silent)
-        {
+        } else if (UnityFixture.Silent) {
             /* Do Nothing */
-        }
-        else
-        {
+        } else {
             UNITY_OUTPUT_CHAR('!');
         }
     }
@@ -146,28 +119,20 @@ void UnityIgnoreTest(const char* printableName, const char* group, const char* n
 
 /*-------------------------------------------------------- */
 /*Automatic pointer restoration functions */
-struct PointerPair
-{
-    void** pointer;
-    void* old_value;
+struct PointerPair {
+    void **pointer;
+    void *old_value;
 };
 
 static struct PointerPair pointer_store[UNITY_MAX_POINTERS];
 static int pointer_index = 0;
 
-void UnityPointer_Init(void)
-{
-    pointer_index = 0;
-}
+void UnityPointer_Init(void) { pointer_index = 0; }
 
-void UnityPointer_Set(void** pointer, void* newValue, UNITY_LINE_TYPE line)
-{
-    if (pointer_index >= UNITY_MAX_POINTERS)
-    {
+void UnityPointer_Set(void **pointer, void *newValue, UNITY_LINE_TYPE line) {
+    if (pointer_index >= UNITY_MAX_POINTERS) {
         UNITY_TEST_FAIL(line, "Too many pointers set");
-    }
-    else
-    {
+    } else {
         pointer_store[pointer_index].pointer = pointer;
         pointer_store[pointer_index].old_value = *pointer;
         *pointer = newValue;
@@ -175,18 +140,14 @@ void UnityPointer_Set(void** pointer, void* newValue, UNITY_LINE_TYPE line)
     }
 }
 
-void UnityPointer_UndoAllSets(void)
-{
-    while (pointer_index > 0)
-    {
+void UnityPointer_UndoAllSets(void) {
+    while (pointer_index > 0) {
         pointer_index--;
-        *(pointer_store[pointer_index].pointer) =
-            pointer_store[pointer_index].old_value;
+        *(pointer_store[pointer_index].pointer) = pointer_store[pointer_index].old_value;
     }
 }
 
-int UnityGetCommandLineOptions(int argc, const char* argv[])
-{
+int UnityGetCommandLineOptions(int argc, const char *argv[]) {
     int i;
     UnityFixture.Verbose = 0;
     UnityFixture.Silent = 0;
@@ -200,10 +161,8 @@ int UnityGetCommandLineOptions(int argc, const char* argv[])
     if (argc == 1)
         return 0;
 
-    for (i = 1; i < argc; )
-    {
-        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
-        {
+    for (i = 1; i < argc;) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             /* Usage */
             UnityPrint("Runs a series of unit tests.");
             UNITY_PRINT_EOL();
@@ -241,76 +200,55 @@ int UnityGetCommandLineOptions(int argc, const char* argv[])
             UnityPrint("More information about Unity: https://www.throwtheswitch.org/unity");
             UNITY_PRINT_EOL();
 #endif
-            return 1;  /* Exit without running the tests */
-        }
-        else if (strcmp(argv[i], "-v") == 0)
-        {
+            return 1; /* Exit without running the tests */
+        } else if (strcmp(argv[i], "-v") == 0) {
             UnityFixture.Verbose = 1;
             i++;
-        }
-        else if (strcmp(argv[i], "-s") == 0)
-        {
+        } else if (strcmp(argv[i], "-s") == 0) {
             UnityFixture.Silent = 1;
             i++;
-        }
-        else if (strcmp(argv[i], "-d") == 0)
-        {
+        } else if (strcmp(argv[i], "-d") == 0) {
             UnityFixture.DryRun = 1;
             i++;
-        }
-        else if (strcmp(argv[i], "-g") == 0)
-        {
+        } else if (strcmp(argv[i], "-g") == 0) {
             i++;
             if (i >= argc)
                 return 1;
             UnityFixture.GroupFilter = argv[i];
             i++;
-        }
-        else if (strcmp(argv[i], "-G") == 0)
-        {
+        } else if (strcmp(argv[i], "-G") == 0) {
             i++;
             if (i >= argc)
                 return 1;
-            UnityFixture.Group= argv[i];
+            UnityFixture.Group = argv[i];
             i++;
-        }
-        else if (strcmp(argv[i], "-n") == 0)
-        {
+        } else if (strcmp(argv[i], "-n") == 0) {
             i++;
             if (i >= argc)
                 return 1;
             UnityFixture.NameFilter = argv[i];
             i++;
-        }
-        else if (strcmp(argv[i], "-N") == 0)
-        {
+        } else if (strcmp(argv[i], "-N") == 0) {
             i++;
             if (i >= argc)
                 return 1;
             UnityFixture.Name = argv[i];
             i++;
-        }
-        else if (strcmp(argv[i], "-r") == 0)
-        {
+        } else if (strcmp(argv[i], "-r") == 0) {
             UnityFixture.RepeatCount = 2;
             i++;
-            if (i < argc)
-            {
-                if (*(argv[i]) >= '0' && *(argv[i]) <= '9')
-                {
+            if (i < argc) {
+                if (*(argv[i]) >= '0' && *(argv[i]) <= '9') {
                     unsigned int digit = 0;
                     UnityFixture.RepeatCount = 0;
-                    while (argv[i][digit] >= '0' && argv[i][digit] <= '9')
-                    {
+                    while (argv[i][digit] >= '0' && argv[i][digit] <= '9') {
                         UnityFixture.RepeatCount *= 10;
                         UnityFixture.RepeatCount += (unsigned int)argv[i][digit++] - '0';
                     }
                     i++;
                 }
             }
-        }
-        else
-        {
+        } else {
             /* ignore unknown parameter */
             i++;
         }
@@ -318,25 +256,19 @@ int UnityGetCommandLineOptions(int argc, const char* argv[])
     return 0;
 }
 
-void UnityConcludeFixtureTest(void)
-{
-    if (Unity.CurrentTestIgnored)
-    {
+void UnityConcludeFixtureTest(void) {
+    if (Unity.CurrentTestIgnored) {
         Unity.TestIgnores++;
         UNITY_PRINT_EOL();
-    }
-    else if (!Unity.CurrentTestFailed)
-    {
-        if (UnityFixture.Verbose)
-        {
+    } else if (!Unity.CurrentTestFailed) {
+        if (UnityFixture.Verbose) {
             UnityPrint(" ");
             UnityPrint(UnityStrPass);
             UNITY_EXEC_TIME_STOP();
             UNITY_PRINT_EXEC_TIME();
             UNITY_PRINT_EOL();
         }
-    }
-    else /* Unity.CurrentTestFailed */
+    } else /* Unity.CurrentTestFailed */
     {
         Unity.TestFailures++;
         UNITY_PRINT_EOL();

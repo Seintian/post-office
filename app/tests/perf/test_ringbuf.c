@@ -1,17 +1,15 @@
-#include "unity/unity_fixture.h"
 #include "perf/ringbuf.h"
+#include "unity/unity_fixture.h"
 #include <errno.h>
 #include <stdlib.h>
-
 
 static perf_ringbuf_t *rb;
 
 TEST_GROUP(RINGBUF);
 
-
 TEST_SETUP(RINGBUF) {
     perf_ringbuf_set_cacheline(64);
-    rb = perf_ringbuf_create(4);  // 4 (power-of-two) -> 3 usable slots
+    rb = perf_ringbuf_create(4); // 4 (power-of-two) -> 3 usable slots
     TEST_ASSERT_NOT_NULL(rb);
 }
 
@@ -56,21 +54,21 @@ TEST(RINGBUF, SINGLEENQUEUEDEQUEUE) {
 TEST(RINGBUF, FULLBUFFER) {
     size_t cap = 4;
 
-    int vals[4] = {1,2,3,4};
+    int vals[4] = {1, 2, 3, 4};
     // can hold cap-1 items = 3
-    for (int i = 0; i < (int)(cap-1); i++) {
+    for (int i = 0; i < (int)(cap - 1); i++) {
         TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_enqueue(rb, &vals[i]));
     }
     // now full
     TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_enqueue(rb, &vals[3]));
-    TEST_ASSERT_EQUAL_UINT(cap-1, perf_ringbuf_count(rb));
+    TEST_ASSERT_EQUAL_UINT(cap - 1, perf_ringbuf_count(rb));
 }
 
 TEST(RINGBUF, WRAPAROUND) {
     int vals[10];
     void *out;
 
-    perf_ringbuf_t *_rb = perf_ringbuf_create(8);  // 8 slots, 7 usable
+    perf_ringbuf_t *_rb = perf_ringbuf_create(8); // 8 slots, 7 usable
     TEST_ASSERT_NOT_NULL(_rb);
 
     // enqueue 6 items
@@ -81,7 +79,7 @@ TEST(RINGBUF, WRAPAROUND) {
     // dequeue 4 items
     for (int i = 0; i < 4; i++) {
         TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(_rb, &out));
-        TEST_ASSERT_EQUAL_INT(i, *(int*)out);
+        TEST_ASSERT_EQUAL_INT(i, *(int *)out);
     }
     // enqueue 4 more, wrap head
     for (int i = 6; i < 10; i++) {
@@ -91,7 +89,7 @@ TEST(RINGBUF, WRAPAROUND) {
     // now dequeue all remaining (total 6): values 4,5,6,7,8,9
     for (int j = 0; j < 6; j++) {
         TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(_rb, &out));
-        TEST_ASSERT_EQUAL_INT(j+4, *(int*)out);
+        TEST_ASSERT_EQUAL_INT(j + 4, *(int *)out);
     }
     TEST_ASSERT_EQUAL_UINT(0, perf_ringbuf_count(_rb));
 
@@ -107,7 +105,8 @@ TEST(RINGBUF, COUNTACCURACY) {
     // empty
     TEST_ASSERT_EQUAL_UINT(0, perf_ringbuf_count(_rb));
     // enqueue 5
-    for (int i = 0; i < 5; i++) perf_ringbuf_enqueue(_rb, &x);
+    for (int i = 0; i < 5; i++)
+        perf_ringbuf_enqueue(_rb, &x);
     TEST_ASSERT_EQUAL_UINT(5, perf_ringbuf_count(_rb));
     // dequeue 2
     for (int i = 0; i < 2; i++) {
@@ -116,7 +115,8 @@ TEST(RINGBUF, COUNTACCURACY) {
     }
     TEST_ASSERT_EQUAL_UINT(3, perf_ringbuf_count(_rb));
     // enqueue 2 more
-    for (int i = 0; i < 2; i++) perf_ringbuf_enqueue(_rb, &x);
+    for (int i = 0; i < 2; i++)
+        perf_ringbuf_enqueue(_rb, &x);
     TEST_ASSERT_EQUAL_UINT(5, perf_ringbuf_count(_rb));
 
     perf_ringbuf_destroy(&_rb);
@@ -129,7 +129,7 @@ TEST(RINGBUF, ENQUEUEDEQUEUE) {
     int b = 2;
     int c = 3;
     int *p;
-    
+
     TEST_ASSERT_EQUAL_UINT64(0, perf_ringbuf_count(rb));
 
     TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_enqueue(rb, &a));
@@ -140,14 +140,14 @@ TEST(RINGBUF, ENQUEUEDEQUEUE) {
     TEST_ASSERT_EQUAL_UINT64(3, perf_ringbuf_count(rb));
 
     // dequeue in FIFO order
-    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void**)&p));
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void **)&p));
     TEST_ASSERT_EQUAL_PTR(&a, p);
-    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void**)&p));
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void **)&p));
     TEST_ASSERT_EQUAL_PTR(&b, p);
-    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void**)&p));
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void **)&p));
     TEST_ASSERT_EQUAL_PTR(&c, p);
     // now empty
-    TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_dequeue(rb, (void**)&p));
+    TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_dequeue(rb, (void **)&p));
     TEST_ASSERT_EQUAL_UINT64(0, perf_ringbuf_count(rb));
 }
 
@@ -158,7 +158,7 @@ TEST(RINGBUF, PEEK) {
     int *out;
 
     // empty peek fails
-    TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_peek(rb, (void**)&out));
+    TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_peek(rb, (void **)&out));
 
     perf_ringbuf_enqueue(rb, &x);
     perf_ringbuf_enqueue(rb, &y);
@@ -166,10 +166,10 @@ TEST(RINGBUF, PEEK) {
     TEST_ASSERT_EQUAL_UINT64(2, perf_ringbuf_count(rb));
 
     // peek twice still same head, count unchanged
-    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek(rb, (void**)&out));
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek(rb, (void **)&out));
     TEST_ASSERT_EQUAL_PTR(&x, out);
     TEST_ASSERT_EQUAL_UINT64(2, perf_ringbuf_count(rb));
-    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek(rb, (void**)&out));
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek(rb, (void **)&out));
     TEST_ASSERT_EQUAL_PTR(&x, out);
     TEST_ASSERT_EQUAL_UINT64(2, perf_ringbuf_count(rb));
 }
@@ -179,10 +179,8 @@ TEST(RINGBUF, PEEKAT) {
     int v[3] = {10, 20, 30};
     int *out;
 
-    
-
     // empty peek_at fails
-    TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_peek_at(rb, 0, (void**)&out));
+    TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_peek_at(rb, 0, (void **)&out));
 
     perf_ringbuf_enqueue(rb, &v[0]);
     perf_ringbuf_enqueue(rb, &v[1]);
@@ -190,24 +188,22 @@ TEST(RINGBUF, PEEKAT) {
     // buffer is full now (3/3)
 
     // valid offsets
-    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek_at(rb, 0, (void**)&out));
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek_at(rb, 0, (void **)&out));
     TEST_ASSERT_EQUAL_PTR(&v[0], out);
-    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek_at(rb, 1, (void**)&out));
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek_at(rb, 1, (void **)&out));
     TEST_ASSERT_EQUAL_PTR(&v[1], out);
-    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek_at(rb, 2, (void**)&out));
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek_at(rb, 2, (void **)&out));
     TEST_ASSERT_EQUAL_PTR(&v[2], out);
 
     // out-of-range
-    TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_peek_at(rb, 3, (void**)&out));
-    TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_peek_at(rb, 100, (void**)&out));
+    TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_peek_at(rb, 3, (void **)&out));
+    TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_peek_at(rb, 100, (void **)&out));
 }
 
 // Advance (drop) multiple items
 TEST(RINGBUF, ADVANCE) {
     int v[4] = {7, 8, 9, 10};
     int *out;
-
-    
 
     // enqueue only 3 (max)
     perf_ringbuf_enqueue(rb, &v[0]);
@@ -223,7 +219,7 @@ TEST(RINGBUF, ADVANCE) {
     TEST_ASSERT_EQUAL_UINT64(1, perf_ringbuf_count(rb));
 
     // peek now shows the third element
-    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek(rb, (void**)&out));
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek(rb, (void **)&out));
     TEST_ASSERT_EQUAL_PTR(&v[2], out);
 
     // advance the rest
@@ -236,22 +232,20 @@ TEST(RINGBUF, ADVANCE) {
 
 // Combined peek/advance/enqueue/dequeue
 TEST(RINGBUF, MIXEDOPERATIONS) {
-    int data[5] = {1,2,3,4,5};
+    int data[5] = {1, 2, 3, 4, 5};
     int *out;
-
-    
 
     // fill to 3 items
     for (int i = 0; i < 3; i++)
         TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_enqueue(rb, &data[i]));
 
     // drop first via dequeue and advance
-    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void**)&out));
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void **)&out));
     TEST_ASSERT_EQUAL_PTR(&data[0], out);
-    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_advance(rb, 1));  // removes data[1]
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_advance(rb, 1)); // removes data[1]
     // now only data[2] remains
     TEST_ASSERT_EQUAL_UINT64(1, perf_ringbuf_count(rb));
-    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek(rb, (void**)&out));
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_peek(rb, (void **)&out));
     TEST_ASSERT_EQUAL_PTR(&data[2], out);
 
     // add two more
@@ -261,7 +255,7 @@ TEST(RINGBUF, MIXEDOPERATIONS) {
 
     // dequeue all
     for (int i = 0; i < 3; i++) {
-        TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void**)&out));
+        TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void **)&out));
     }
     TEST_ASSERT_EQUAL_UINT64(0, perf_ringbuf_count(rb));
 }

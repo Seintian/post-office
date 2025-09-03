@@ -174,9 +174,13 @@ TEST(FILES, MKDIR_P_AND_JOIN) {
     rmdir(p1);
     rmdir(root);
     free(root);
-    free(p1); free(p2); free(p3);
-    free(with_slash); free(no_slash);
-    free(only_leaf); free(only_base);
+    free(p1);
+    free(p2);
+    free(p3);
+    free(with_slash);
+    free(no_slash);
+    free(only_leaf);
+    free(only_base);
 }
 
 TEST_GROUP_RUNNER(FILES) {

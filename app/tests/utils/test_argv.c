@@ -1,13 +1,12 @@
 #include "unity/unity_fixture.h"
 #include "utils/argv.h"
-#include <getopt.h>  // for optind
-#include <unistd.h>  // for STDOUT_FILENO
-#include <stdlib.h>  // for atoi, free
-#include <fcntl.h>   // for open, O_WRONLY
-#include <stdio.h>   // for dprintf
+#include <fcntl.h>  // for open, O_WRONLY
+#include <getopt.h> // for optind
+#include <stdio.h>  // for dprintf
+#include <stdlib.h> // for atoi, free
+#include <unistd.h> // for STDOUT_FILENO
 
-
-static int nullfd;  // file descriptor for output
+static int nullfd; // file descriptor for output
 
 // Helper to parse arguments
 static int do_parse(int argc, char **argv, po_args_t *args) {
@@ -29,7 +28,7 @@ TEST_TEAR_DOWN(ARGV) {
 
 TEST(ARGV, DEFAULTVALUES) {
     po_args_t args;
-    char *argv[] = { "prog" };
+    char *argv[] = {"prog"};
     int rc = do_parse(1, argv, &args);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_FALSE(args.help);
@@ -40,7 +39,7 @@ TEST(ARGV, DEFAULTVALUES) {
 
 TEST(ARGV, HELPSHORT) {
     po_args_t args;
-    char *argv[] = { "prog", "-h" };
+    char *argv[] = {"prog", "-h"};
     int rc = do_parse(2, argv, &args);
     TEST_ASSERT_EQUAL_INT(1, rc);
     TEST_ASSERT_TRUE(args.help);
@@ -48,7 +47,7 @@ TEST(ARGV, HELPSHORT) {
 
 TEST(ARGV, HELPLONG) {
     po_args_t args;
-    char *argv[] = { "prog", "--help" };
+    char *argv[] = {"prog", "--help"};
     int rc = do_parse(2, argv, &args);
     TEST_ASSERT_EQUAL_INT(1, rc);
     TEST_ASSERT_TRUE(args.help);
@@ -56,7 +55,7 @@ TEST(ARGV, HELPLONG) {
 
 TEST(ARGV, VERSIONSHORT) {
     po_args_t args;
-    char *argv[] = { "prog", "-v" };
+    char *argv[] = {"prog", "-v"};
     int rc = do_parse(2, argv, &args);
     TEST_ASSERT_EQUAL_INT(1, rc);
     TEST_ASSERT_TRUE(args.version);
@@ -64,7 +63,7 @@ TEST(ARGV, VERSIONSHORT) {
 
 TEST(ARGV, VERSIONLONG) {
     po_args_t args;
-    char *argv[] = { "prog", "--version" };
+    char *argv[] = {"prog", "--version"};
     int rc = do_parse(2, argv, &args);
     TEST_ASSERT_EQUAL_INT(1, rc);
     TEST_ASSERT_TRUE(args.version);
@@ -72,7 +71,7 @@ TEST(ARGV, VERSIONLONG) {
 
 TEST(ARGV, CONFIGOPTION) {
     po_args_t args;
-    char *argv[] = { "prog", "-c", "conf.ini" };
+    char *argv[] = {"prog", "-c", "conf.ini"};
     int rc = do_parse(3, argv, &args);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_STRING("conf.ini", args.config_file);
@@ -81,7 +80,7 @@ TEST(ARGV, CONFIGOPTION) {
 
 TEST(ARGV, CONFIGLONG) {
     po_args_t args;
-    char *argv[] = { "prog", "--config", "app.ini" };
+    char *argv[] = {"prog", "--config", "app.ini"};
     int rc = do_parse(3, argv, &args);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_STRING("app.ini", args.config_file);
@@ -90,7 +89,7 @@ TEST(ARGV, CONFIGLONG) {
 
 TEST(ARGV, LOGLEVEL) {
     po_args_t args;
-    char *argv[] = { "prog", "-l", "2" };
+    char *argv[] = {"prog", "-l", "2"};
     int rc = do_parse(3, argv, &args);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_INT(2, args.loglevel);

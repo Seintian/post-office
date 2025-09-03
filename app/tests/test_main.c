@@ -1,6 +1,5 @@
 #include "unity/unity_fixture.h"
 
-
 // declare all your group runners:
 extern TEST_GROUP_RUNNER(ARGV);
 extern TEST_GROUP_RUNNER(CONFIGS);
@@ -21,7 +20,7 @@ extern TEST_GROUP_RUNNER(APP);
 extern TEST_GROUP_RUNNER(LOGGER);
 extern TEST_GROUP_RUNNER(FILES);
 extern TEST_GROUP_RUNNER(RANDOM);
-
+extern TEST_GROUP_RUNNER(PRIME);
 
 static void RunAllTests(void) {
     RUN_TEST_GROUP(ARGV);
@@ -43,8 +42,7 @@ static void RunAllTests(void) {
     RUN_TEST_GROUP(LOGGER);
     RUN_TEST_GROUP(FILES);
     RUN_TEST_GROUP(RANDOM);
+    RUN_TEST_GROUP(PRIME);
 }
 
-int main(int argc, const char *argv[]) {
-    return UnityMain(argc, argv, RunAllTests);
-}
+int main(int argc, const char *argv[]) { return UnityMain(argc, argv, RunAllTests); }

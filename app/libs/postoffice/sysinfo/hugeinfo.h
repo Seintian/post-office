@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
-#include <stddef.h>
 #include "sysinfo/sysinfo.h"
+#include <stddef.h>
 
 // Enumerate available hugepage sizes in kB. Returns 0 on success, -1 on error.
 int list_hugepage_sizes(unsigned long *sizes_kB, size_t max, size_t *count);

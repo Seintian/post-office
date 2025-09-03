@@ -9,12 +9,11 @@
 #ifndef _NET_H
 #define _NET_H
 
+#include "net/framing.h"
+#include "net/protocol.h"
+#include "net/socket.h"
 #include <stdint.h>
 #include <sys/cdefs.h>
-#include "net/protocol.h"
-#include "net/framing.h"
-#include "net/socket.h"
-
 
 /**
  * @brief Send a protocol message on a connected socket.
@@ -29,8 +28,8 @@
  * @param payload_len Length of the payload in bytes.
  * @return 0 on success, or a negative error code on failure.
  */
-int net_send_message(int fd, uint8_t msg_type, uint8_t flags,
-                     const uint8_t *payload, uint32_t payload_len) __nonnull((4));
+int net_send_message(int fd, uint8_t msg_type, uint8_t flags, const uint8_t *payload,
+                     uint32_t payload_len) __nonnull((4));
 
 /**
  * @brief Receive the next protocol message from a socket.
@@ -47,7 +46,6 @@ int net_send_message(int fd, uint8_t msg_type, uint8_t flags,
  * @note The caller is responsible for releasing the returned payload buffer
  * (via zcp_release(*payload_out)) when finished with it.
  */
-int net_recv_message(int fd, po_header_t *header_out, zcp_buffer_t **payload_out)
-    __nonnull((2,3));
+int net_recv_message(int fd, po_header_t *header_out, zcp_buffer_t **payload_out) __nonnull((2, 3));
 
 #endif // _NET_H

@@ -3,37 +3,39 @@
 #endif
 
 #include "sysinfo/sysinfo.h"
-#include "utils/errors.h"
-#include "hugeinfo.h"
 #include "fsinfo.h"
+#include "hugeinfo.h"
+#include "utils/errors.h"
+#include <arpa/inet.h>
 #include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/resource.h>
+#include <fcntl.h>
 #include <net/if.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
-#include <fcntl.h>
+#include <unistd.h>
 
-
-#define CPUINFO_FILE    "/proc/cpuinfo"
-#define MEMINFO_FILE    "/proc/meminfo"
-#define NETINFO_FILE    "/proc/net/dev"
-#define OSINFO_FILE     "/etc/os-release"
-#define SOMAXCONN_FILE  "/proc/sys/net/core/somaxconn"
-
+#define CPUINFO_FILE "/proc/cpuinfo"
+#define MEMINFO_FILE "/proc/meminfo"
+#define NETINFO_FILE "/proc/net/dev"
+#define OSINFO_FILE "/etc/os-release"
+#define SOMAXCONN_FILE "/proc/sys/net/core/somaxconn"
 
 static int load_cpuinfo(po_sysinfo_t *info) {
-    if (!info) { errno = EINVAL; return -1; }
+    if (!info) {
+        errno = EINVAL;
+        return -1;
+    }
 
     // Logical processors
 #ifdef _SC_NPROCESSORS_ONLN
     long lp = sysconf(_SC_NPROCESSORS_ONLN);
-    if (lp < 1) lp = 1;
+    if (lp < 1)
+        lp = 1;
     info->logical_processors = lp;
 #else
     info->logical_processors = 1;
@@ -49,13 +51,17 @@ static int load_cpuinfo(po_sysinfo_t *info) {
                 const char *colon = strchr(line, ':');
                 if (colon) {
                     int v = atoi(colon + 1);
-                    if (v > 0) { phys = v; break; }
+                    if (v > 0) {
+                        phys = v;
+                        break;
+                    }
                 }
             }
         }
         fclose(f);
     }
-    if (phys <= 0) phys = (int)info->logical_processors;
+    if (phys <= 0)
+        phys = (int)info->logical_processors;
     info->physical_cores = phys;
 
     // Cache/sysconf values (best-effort)
@@ -89,12 +95,16 @@ static int load_cpuinfo(po_sysinfo_t *info) {
 }
 
 static long parse_meminfo_value_kb_to_bytes(long kb) {
-    if (kb < 0) return -1;
+    if (kb < 0)
+        return -1;
     return kb * 1024L;
 }
 
 static int load_memoryinfo(po_sysinfo_t *info) {
-    if (!info) { errno = EINVAL; return -1; }
+    if (!info) {
+        errno = EINVAL;
+        return -1;
+    }
 
     long total_kb = -1, free_kb = -1;
     FILE *f = fopen(MEMINFO_FILE, "r");
@@ -105,16 +115,19 @@ static int load_memoryinfo(po_sysinfo_t *info) {
         char line[256];
         while (fgets(line, sizeof(line), f)) {
             if (sscanf(line, "%63[^:]: %ld %15s", key, &val, unit) >= 2) {
-                if (strcmp(key, "MemTotal") == 0) total_kb = val;
-                else if (strcmp(key, "MemFree") == 0) free_kb = val;
+                if (strcmp(key, "MemTotal") == 0)
+                    total_kb = val;
+                else if (strcmp(key, "MemFree") == 0)
+                    free_kb = val;
             }
         }
         fclose(f);
     }
-    if (total_kb < 0 || free_kb < 0) return -1;
+    if (total_kb < 0 || free_kb < 0)
+        return -1;
 
     info->total_ram = parse_meminfo_value_kb_to_bytes(total_kb);
-    info->free_ram  = parse_meminfo_value_kb_to_bytes(free_kb);
+    info->free_ram = parse_meminfo_value_kb_to_bytes(free_kb);
 
 #ifdef _SC_PAGESIZE
     info->page_size = sysconf(_SC_PAGESIZE);
@@ -179,7 +192,10 @@ static int load_filesysteminfo(po_sysinfo_t *info) {
 }
 
 static int load_networkinfo(po_sysinfo_t *info) {
-    if (!info) { errno = EINVAL; return -1; }
+    if (!info) {
+        errno = EINVAL;
+        return -1;
+    }
 
     // Choose first non-loopback interface from /proc/net/dev
     char chosen[IFNAMSIZ] = {0};
@@ -189,19 +205,23 @@ static int load_networkinfo(po_sysinfo_t *info) {
         int line_no = 0;
         while (fgets(line, sizeof(line), f)) {
             line_no++;
-            if (line_no <= 2) continue; // skip headers
+            if (line_no <= 2)
+                continue; // skip headers
             char *colon = strchr(line, ':');
-            if (!colon) continue;
+            if (!colon)
+                continue;
             // interface name is before ':' possibly with spaces
             char name[IFNAMSIZ] = {0};
             size_t len = 0;
             char *p = line;
-            while (*p == ' ') p++;
-            while (p[len] && p[len] != ':' && len < IFNAMSIZ-1) len++;
+            while (*p == ' ')
+                p++;
+            while (p[len] && p[len] != ':' && len < IFNAMSIZ - 1)
+                len++;
             strncpy(name, p, len);
             name[len] = '\0';
             if (strcmp(name, "lo") != 0) {
-                strncpy(chosen, name, IFNAMSIZ-1);
+                strncpy(chosen, name, IFNAMSIZ - 1);
                 break;
             }
         }
@@ -209,12 +229,17 @@ static int load_networkinfo(po_sysinfo_t *info) {
     }
 
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd < 0) { info->mtu = 0; return 0; }
+    if (fd < 0) {
+        info->mtu = 0;
+        return 0;
+    }
 
     struct ifreq ifr;
     memset(&ifr, 0, sizeof(ifr));
-    if (chosen[0] == '\0') strncpy(ifr.ifr_name, "lo", IFNAMSIZ - 1);
-    else strncpy(ifr.ifr_name, chosen, IFNAMSIZ - 1);
+    if (chosen[0] == '\0')
+        strncpy(ifr.ifr_name, "lo", IFNAMSIZ - 1);
+    else
+        strncpy(ifr.ifr_name, chosen, IFNAMSIZ - 1);
     ifr.ifr_name[IFNAMSIZ - 1] = '\0';
 
     if (ioctl(fd, SIOCGIFMTU, &ifr) == 0)
@@ -226,15 +251,24 @@ static int load_networkinfo(po_sysinfo_t *info) {
 }
 
 static int load_kernelinfo(po_sysinfo_t *info) {
-    if (!info) { errno = EINVAL; return -1; }
+    if (!info) {
+        errno = EINVAL;
+        return -1;
+    }
 
     int fd = open(SOMAXCONN_FILE, O_RDONLY);
-    if (fd < 0) { info->somaxconn = 0; return 0; }
+    if (fd < 0) {
+        info->somaxconn = 0;
+        return 0;
+    }
 
     char buf[32];
     ssize_t n = read(fd, buf, sizeof(buf) - 1);
     close(fd);
-    if (n <= 0) { info->somaxconn = 0; return 0; }
+    if (n <= 0) {
+        info->somaxconn = 0;
+        return 0;
+    }
 
     buf[n] = '\0';
     info->somaxconn = atoi(buf);
@@ -247,9 +281,12 @@ int po_sysinfo_collect(po_sysinfo_t *info) {
         return -1;
     }
 
-    if (load_cpuinfo(info) != 0) return -1;
-    if (load_memoryinfo(info) != 0) return -1;
-    if (load_resource_limits(info) != 0) return -1;
+    if (load_cpuinfo(info) != 0)
+        return -1;
+    if (load_memoryinfo(info) != 0)
+        return -1;
+    if (load_resource_limits(info) != 0)
+        return -1;
     (void)load_filesysteminfo(info); // best-effort
     (void)load_networkinfo(info);    // best-effort
     (void)load_kernelinfo(info);     // best-effort
@@ -264,28 +301,28 @@ void po_sysinfo_print(const po_sysinfo_t *info, FILE *out) {
         return;
 
     fprintf(out, "System Information:\n");
-    fprintf(out, "  Physical Cores: %d\n",              info->physical_cores);
-    fprintf(out, "  Logical Processors: %lld\n",         (long long)info->logical_processors);
-    fprintf(out, "  L1 Cache Size: %lld bytes\n",        (long long)info->cache_l1);
-    fprintf(out, "  Data Cache L1 Size: %lld bytes\n",   (long long)info->dcache_l1);
+    fprintf(out, "  Physical Cores: %d\n", info->physical_cores);
+    fprintf(out, "  Logical Processors: %lld\n", (long long)info->logical_processors);
+    fprintf(out, "  L1 Cache Size: %lld bytes\n", (long long)info->cache_l1);
+    fprintf(out, "  Data Cache L1 Size: %lld bytes\n", (long long)info->dcache_l1);
     fprintf(out, "  Data Cache Line Size: %lld bytes\n", (long long)info->dcache_lnsize);
-    fprintf(out, "  L2 Cache Size: %lld bytes\n",        (long long)info->cache_l2);
-    fprintf(out, "  L3 Cache Size: %lld bytes\n",        (long long)info->cache_l3);
-    fprintf(out, "  Total RAM: %lld bytes\n",            (long long)info->total_ram);
-    fprintf(out, "  Free RAM: %lld bytes\n",             (long long)info->free_ram);
-    fprintf(out, "  Page Size: %lld bytes\n",            (long long)info->page_size);
-    fprintf(out, "  Huge Page Size: %lu kB\n",          info->hugepage_info.size_kB);
-    fprintf(out, "  Number of Huge Pages: %ld\n",       info->hugepage_info.nr);
-    fprintf(out, "  Free Huge Pages: %ld\n",            info->hugepage_info.free);
-    fprintf(out, "  Overcommit Huge Pages: %ld\n",      info->hugepage_info.overcommit);
-    fprintf(out, "  Surplus Huge Pages: %ld\n",         info->hugepage_info.surplus);
-    fprintf(out, "  Reserved Huge Pages: %ld\n",        info->hugepage_info.reserved);
-    fprintf(out, "  Max Open Files: %llu\n",             (unsigned long long)info->max_open_files);
-    fprintf(out, "  Max Processes: %llu\n",              (unsigned long long)info->max_processes);
-    fprintf(out, "  Max Stack Size: %llu bytes\n",       (unsigned long long)info->max_stack_size);
-    fprintf(out, "  Free Disk Space: %llu bytes\n",      (unsigned long long)info->disk_free);
-    fprintf(out, "  Filesystem Type: %s\n",             info->fs_type);
-    fprintf(out, "  MTU: %d\n",                         info->mtu);
-    fprintf(out, "  Somaxconn: %d\n",                   info->somaxconn);
-    fprintf(out, "  Is Little Endian: %d\n",            info->is_little_endian);
+    fprintf(out, "  L2 Cache Size: %lld bytes\n", (long long)info->cache_l2);
+    fprintf(out, "  L3 Cache Size: %lld bytes\n", (long long)info->cache_l3);
+    fprintf(out, "  Total RAM: %lld bytes\n", (long long)info->total_ram);
+    fprintf(out, "  Free RAM: %lld bytes\n", (long long)info->free_ram);
+    fprintf(out, "  Page Size: %lld bytes\n", (long long)info->page_size);
+    fprintf(out, "  Huge Page Size: %lu kB\n", info->hugepage_info.size_kB);
+    fprintf(out, "  Number of Huge Pages: %ld\n", info->hugepage_info.nr);
+    fprintf(out, "  Free Huge Pages: %ld\n", info->hugepage_info.free);
+    fprintf(out, "  Overcommit Huge Pages: %ld\n", info->hugepage_info.overcommit);
+    fprintf(out, "  Surplus Huge Pages: %ld\n", info->hugepage_info.surplus);
+    fprintf(out, "  Reserved Huge Pages: %ld\n", info->hugepage_info.reserved);
+    fprintf(out, "  Max Open Files: %llu\n", (unsigned long long)info->max_open_files);
+    fprintf(out, "  Max Processes: %llu\n", (unsigned long long)info->max_processes);
+    fprintf(out, "  Max Stack Size: %llu bytes\n", (unsigned long long)info->max_stack_size);
+    fprintf(out, "  Free Disk Space: %llu bytes\n", (unsigned long long)info->disk_free);
+    fprintf(out, "  Filesystem Type: %s\n", info->fs_type);
+    fprintf(out, "  MTU: %d\n", info->mtu);
+    fprintf(out, "  Somaxconn: %d\n", info->somaxconn);
+    fprintf(out, "  Is Little Endian: %d\n", info->is_little_endian);
 }

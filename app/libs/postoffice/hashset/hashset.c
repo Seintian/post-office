@@ -1,15 +1,14 @@
 #include "hashset/hashset.h"
 #include "prime/prime.h"
-#include <stdlib.h>
 #include <errno.h>
 #include <stdio.h>
-
+#include <stdlib.h>
 
 // *** MACROS *** //
 
 /**
  * @brief Initial capacity of the hash table.
- * 
+ *
  * @note The initial capacity is a prime number to reduce collisions.
  */
 #define INITIAL_CAPACITY 17
@@ -27,15 +26,15 @@
 
 typedef struct hashset_node {
     /** @brief Pointer to the key. */
-    void* key;
+    void *key;
 
     /** @brief Pointer to the next node in case of collisions. */
-    struct hashset_node* next;
+    struct hashset_node *next;
 } __attribute__((packed)) hashset_node_t;
 
 struct hashset {
     /** @brief Array of pointers to hash nodes (buckets). */
-    hashset_node_t** buckets;
+    hashset_node_t **buckets;
 
     /** @brief The current capacity of the hash set. */
     size_t capacity;
@@ -44,24 +43,24 @@ struct hashset {
     size_t size;
 
     /** @brief Function pointer for comparing keys. */
-    int (*compare)(const void*, const void*);
+    int (*compare)(const void *, const void *);
 
     /** @brief Function pointer for hashing keys. */
-    size_t (*hash_func)(const void*);
+    size_t (*hash_func)(const void *);
 } __attribute__((packed));
 
 // *** STATIC *** //
 
 /**
  * @brief Creates a new hashset node.
- * 
+ *
  * @param[in] key Pointer to the key.
  * @return Pointer to the created hashset node, or NULL if memory allocation fails.
- * 
+ *
  * @note The caller is responsible for freeing the memory allocated for the node.
  */
-static hashset_node_t* hashset_node_create(void* key) {
-    hashset_node_t* node = malloc(sizeof(hashset_node_t));
+static hashset_node_t *hashset_node_create(void *key) {
+    hashset_node_t *node = malloc(sizeof(hashset_node_t));
     if (!node)
         return NULL;
 
@@ -73,23 +72,23 @@ static hashset_node_t* hashset_node_create(void* key) {
 
 /**
  * @brief Resizes the hash set to a new capacity.
- * 
+ *
  * @param[in] set Pointer to the hash set.
  * @param[in] new_capacity New capacity for the hash set.
  * @return 0 on success, -1 on failure.
  */
-static int hashset_resize(hashset_t* set, size_t new_capacity) {
+static int hashset_resize(hashset_t *set, size_t new_capacity) {
     new_capacity = next_prime(new_capacity);
 
-    hashset_node_t** new_buckets = calloc(new_capacity, sizeof(hashset_node_t*));
+    hashset_node_t **new_buckets = calloc(new_capacity, sizeof(hashset_node_t *));
     if (!new_buckets)
         return -1;
 
     for (size_t i = 0; i < set->capacity; i++) {
-        hashset_node_t* node = set->buckets[i];
+        hashset_node_t *node = set->buckets[i];
 
         while (node) {
-            hashset_node_t* next_node = node->next;
+            hashset_node_t *next_node = node->next;
             size_t new_hash = set->hash_func(node->key);
             size_t new_index = new_hash % new_capacity;
 
@@ -109,11 +108,8 @@ static int hashset_resize(hashset_t* set, size_t new_capacity) {
 
 // *** API *** //
 
-hashset_t *hashset_create_sized(
-    int (*compare)(const void*, const void*),
-    unsigned long (*hash_func)(const void*),
-    size_t initial_capacity
-) {
+hashset_t *hashset_create_sized(int (*compare)(const void *, const void *),
+                                unsigned long (*hash_func)(const void *), size_t initial_capacity) {
     hashset_t *set = malloc(sizeof(*set));
     if (!set)
         return NULL;
@@ -123,7 +119,7 @@ hashset_t *hashset_create_sized(
     set->compare = compare;
     set->hash_func = hash_func;
 
-    set->buckets = calloc(set->capacity, sizeof(hashset_node_t*));
+    set->buckets = calloc(set->capacity, sizeof(hashset_node_t *));
     if (!set->buckets) {
         free(set);
         return NULL;
@@ -132,10 +128,8 @@ hashset_t *hashset_create_sized(
     return set;
 }
 
-hashset_t *hashset_create(
-    int (*compare)(const void*, const void*),
-    unsigned long (*hash_func)(const void*)
-) {
+hashset_t *hashset_create(int (*compare)(const void *, const void *),
+                          unsigned long (*hash_func)(const void *)) {
     return hashset_create_sized(compare, hash_func, INITIAL_CAPACITY);
 }
 
@@ -143,16 +137,13 @@ hashset_t *hashset_create(
 
 int hashset_add(hashset_t *set, void *key) {
     float load_factor = hashset_load_factor(set);
-    if (
-        load_factor > LOAD_FACTOR_UP_THRESHOLD
-        && hashset_resize(set, set->capacity * 2) == -1
-        && load_factor > LOAD_FACTOR_UP_TOLERANCE
-    )
+    if (load_factor > LOAD_FACTOR_UP_THRESHOLD && hashset_resize(set, set->capacity * 2) == -1 &&
+        load_factor > LOAD_FACTOR_UP_TOLERANCE)
         return -1;
 
     size_t hash = set->hash_func(key) % set->capacity;
 
-    hashset_node_t* node = set->buckets[hash];
+    hashset_node_t *node = set->buckets[hash];
     while (node) {
         if (set->compare(node->key, key) == 0)
             return 0;
@@ -160,7 +151,7 @@ int hashset_add(hashset_t *set, void *key) {
         node = node->next;
     }
 
-    hashset_node_t* new_node = hashset_node_create(key);
+    hashset_node_t *new_node = hashset_node_create(key);
     if (!new_node)
         return -1;
 
@@ -176,8 +167,8 @@ int hashset_remove(hashset_t *set, const void *key) {
         return 0;
 
     size_t hash = set->hash_func(key) % set->capacity;
-    hashset_node_t* node = set->buckets[hash];
-    hashset_node_t* prev = NULL;
+    hashset_node_t *node = set->buckets[hash];
+    hashset_node_t *prev = NULL;
 
     while (node) {
         if (set->compare(node->key, key) == 0) {
@@ -189,11 +180,9 @@ int hashset_remove(hashset_t *set, const void *key) {
             free(node);
             set->size--;
 
-            if (
-                hashset_load_factor(set) < LOAD_FACTOR_DOWN_THRESHOLD
-                && set->capacity / 2 >= INITIAL_CAPACITY
-                && hashset_resize(set, set->capacity / 2) == -1
-            )
+            if (hashset_load_factor(set) < LOAD_FACTOR_DOWN_THRESHOLD &&
+                set->capacity / 2 >= INITIAL_CAPACITY &&
+                hashset_resize(set, set->capacity / 2) == -1)
                 return -1;
 
             return 1;
@@ -208,7 +197,7 @@ int hashset_remove(hashset_t *set, const void *key) {
 
 int hashset_contains(const hashset_t *set, const void *key) {
     size_t hash = set->hash_func(key) % set->capacity;
-    hashset_node_t* node = set->buckets[hash];
+    hashset_node_t *node = set->buckets[hash];
 
     while (node) {
         if (set->compare(node->key, key) == 0)
@@ -220,25 +209,21 @@ int hashset_contains(const hashset_t *set, const void *key) {
     return 0;
 }
 
-size_t hashset_size(const hashset_t *set) {
-    return set->size;
-}
+size_t hashset_size(const hashset_t *set) { return set->size; }
 
-size_t hashset_capacity(const hashset_t *set) {
-    return set->capacity;
-}
+size_t hashset_capacity(const hashset_t *set) { return set->capacity; }
 
 void **hashset_keys(const hashset_t *set) {
     if (set->size == 0)
         return NULL;
 
-    void **keys = malloc(set->size * sizeof(void*));
+    void **keys = malloc(set->size * sizeof(void *));
     if (!keys)
         return NULL;
 
     size_t index = 0;
     for (size_t i = 0; i < set->capacity && index < set->size; i++) {
-        hashset_node_t* node = set->buckets[i];
+        hashset_node_t *node = set->buckets[i];
 
         while (node) {
             keys[index++] = node->key;
@@ -254,9 +239,9 @@ void hashset_clear(hashset_t *set) {
         return;
 
     for (size_t i = 0; i < set->capacity; i++) {
-        hashset_node_t* node = set->buckets[i];
+        hashset_node_t *node = set->buckets[i];
         while (node) {
-            hashset_node_t* next = node->next;
+            hashset_node_t *next = node->next;
             free(node);
             node = next;
         }

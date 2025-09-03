@@ -34,10 +34,9 @@ typedef struct hashset hashset_t;
  * @param[in] hash_func Function to hash keys: returns unsigned long hash.
  * @return Pointer to the new set, or NULL on failure.
  */
-hashset_t *hashset_create(
-    int (*compare)(const void*, const void*),
-    unsigned long (*hash_func)(const void*)
-) __attribute_malloc__ __nonnull((1,2));
+hashset_t *hashset_create(int (*compare)(const void *, const void *),
+                          unsigned long (*hash_func)(const void *)) __attribute_malloc__
+    __nonnull((1, 2));
 
 /**
  * @brief Create a new HashSet with specified initial capacity.
@@ -47,11 +46,9 @@ hashset_t *hashset_create(
  * @param[in] initial_capacity Prime number initial capacity.
  * @return Pointer to the new set, or NULL on failure.
  */
-hashset_t *hashset_create_sized(
-    int (*compare)(const void*, const void*),
-    unsigned long (*hash_func)(const void*),
-    size_t initial_capacity
-) __attribute_malloc__ __nonnull((1,2));
+hashset_t *hashset_create_sized(int (*compare)(const void *, const void *),
+                                unsigned long (*hash_func)(const void *),
+                                size_t initial_capacity) __attribute_malloc__ __nonnull((1, 2));
 
 /**
  * @brief Insert a key into the set.
@@ -63,7 +60,7 @@ hashset_t *hashset_create_sized(
  * @param[in] key  The key to insert.
  * @return 1 if inserted, 0 if already present, -1 on error.
  */
-int hashset_add(hashset_t *set, void *key) __nonnull((1,2));
+int hashset_add(hashset_t *set, void *key) __nonnull((1, 2));
 
 /**
  * @brief Remove a key from the set.
@@ -72,7 +69,7 @@ int hashset_add(hashset_t *set, void *key) __nonnull((1,2));
  * @param[in] key  The key to remove.
  * @return 1 if removed, 0 if not found.
  */
-int hashset_remove(hashset_t *set, const void *key) __nonnull((1,2));
+int hashset_remove(hashset_t *set, const void *key) __nonnull((1, 2));
 
 /**
  * @brief Check if a key exists in the set.
@@ -81,7 +78,7 @@ int hashset_remove(hashset_t *set, const void *key) __nonnull((1,2));
  * @param[in] key  The key to find.
  * @return 1 if present, 0 otherwise.
  */
-int hashset_contains(const hashset_t *set, const void *key) __nonnull((1,2));
+int hashset_contains(const hashset_t *set, const void *key) __nonnull((1, 2));
 
 /**
  * @brief Get the number of keys in the set.
@@ -107,7 +104,7 @@ size_t hashset_capacity(const hashset_t *set) __nonnull((1));
  *
  * @param[in] set The set to extract keys from.
  * @return Array of keys, or NULL on error.
- * 
+ *
  * @note The array is NOT NULL-terminated. Use size() to determine length.
  */
 void **hashset_keys(const hashset_t *set) __attribute_malloc__ __nonnull((1));

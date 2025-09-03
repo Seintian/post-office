@@ -1,19 +1,20 @@
 // tests/hashset/test_hashset.c
-#include "unity/unity_fixture.h"
 #include "hashset/hashset.h"
-#include <string.h>
+#include "unity/unity_fixture.h"
 #include <stdlib.h>
+#include <string.h>
 
 // Simple string hash and compare for tests
 static unsigned long test_hash(const void *key) {
     const char *s = key;
     unsigned long h = 5381;
     int c;
-    while ((c = *s++)) h = ((h << 5) + h) + (unsigned char)c;
+    while ((c = *s++))
+        h = ((h << 5) + h) + (unsigned char)c;
     return h;
 }
 static int test_cmp(const void *a, const void *b) {
-    return strcmp((const char*)a, (const char*)b);
+    return strcmp((const char *)a, (const char *)b);
 }
 
 TEST_GROUP(HASHSET);
@@ -24,9 +25,7 @@ TEST_SETUP(HASHSET) {
     TEST_ASSERT_NOT_NULL(set);
 }
 
-TEST_TEAR_DOWN(HASHSET) {
-    hashset_destroy(&set);
-}
+TEST_TEAR_DOWN(HASHSET) { hashset_destroy(&set); }
 
 TEST(HASHSET, CREATEDEFAULT) {
     hashset_t *s2 = hashset_create(test_cmp, test_hash);
@@ -76,8 +75,10 @@ TEST(HASHSET, KEYSARRAY) {
     int found1 = 0;
     int found2 = 0;
     for (size_t i = 0; i < hashset_size(set); i++) {
-        if (strcmp((char*)keys[i], "k1") == 0) found1++;
-        if (strcmp((char*)keys[i], "k2") == 0) found2++;
+        if (strcmp((char *)keys[i], "k1") == 0)
+            found1++;
+        if (strcmp((char *)keys[i], "k2") == 0)
+            found2++;
     }
     free(keys);
     TEST_ASSERT_EQUAL_INT(1, found1);
@@ -116,7 +117,8 @@ TEST(HASHSET, RESIZEUP) {
     TEST_ASSERT_TRUE(cap2 > initial);
     // cleanup keys
     void **keys = hashset_keys(small);
-    for (size_t i = 0; i < hashset_size(small); i++) free(keys[i]);
+    for (size_t i = 0; i < hashset_size(small); i++)
+        free(keys[i]);
     free(keys);
     hashset_destroy(&small);
 }

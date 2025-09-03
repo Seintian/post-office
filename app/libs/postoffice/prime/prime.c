@@ -1,13 +1,12 @@
 /**
  * @file prime.c
  * @brief Implementation of functions for prime number operations.
- * 
+ *
  * @see prime.h
  */
 
-#include <stdlib.h>
 #include "prime/prime.h"
-
+#include <stdlib.h>
 
 bool is_prime(size_t n) {
     if (n <= 1)

@@ -2,29 +2,29 @@
 #define _GNU_SOURCE
 #endif
 
-#include "unity/unity_fixture.h"
 #include "perf/perf.h"
+#include "unity/unity_fixture.h"
 #include "utils/errors.h"
 
-#include <stdio.h>
-#include <string.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
+#include <unistd.h>
 
-
-#define CAPTURE_REPORT(buf, bufsize, call) do {   \
-    FILE *tmp = tmpfile();                        \
-    TEST_ASSERT_NOT_NULL(tmp);                    \
-    call(tmp);                                    \
-    fflush(tmp);                                  \
-    rewind(tmp);                                  \
-    size_t len = fread(buf, 1, bufsize - 1, tmp); \
-    buf[len] = '\0';                              \
-    fclose(tmp);                                  \
-} while (0)
+#define CAPTURE_REPORT(buf, bufsize, call)                                                         \
+    do {                                                                                           \
+        FILE *tmp = tmpfile();                                                                     \
+        TEST_ASSERT_NOT_NULL(tmp);                                                                 \
+        call(tmp);                                                                                 \
+        fflush(tmp);                                                                               \
+        rewind(tmp);                                                                               \
+        size_t len = fread(buf, 1, bufsize - 1, tmp);                                              \
+        buf[len] = '\0';                                                                           \
+        fclose(tmp);                                                                               \
+    } while (0)
 
 TEST_GROUP(PERF);
 

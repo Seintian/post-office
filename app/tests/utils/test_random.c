@@ -2,9 +2,9 @@
 #include "utils/random.h"
 
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 
 TEST_GROUP(RANDOM);
 
@@ -54,11 +54,13 @@ TEST(RANDOM, SHUFFLE_PERMUTES) {
     enum { N = 10 };
     int arr[N];
     int orig[N];
-    for (size_t i = 0; i < (size_t)N; ++i) arr[i] = (int)i, orig[i] = (int)i;
+    for (size_t i = 0; i < (size_t)N; ++i)
+        arr[i] = (int)i, orig[i] = (int)i;
     po_rand_shuffle(arr, (size_t)N, sizeof(arr[0]));
 
     // Same multiset of elements
-    int counts[N]; memset(counts, 0, sizeof(counts));
+    int counts[N];
+    memset(counts, 0, sizeof(counts));
     for (size_t i = 0; i < (size_t)N; ++i) {
         TEST_ASSERT_TRUE(arr[i] >= 0 && arr[i] < (int)N);
         counts[arr[i]]++;
@@ -69,13 +71,21 @@ TEST(RANDOM, SHUFFLE_PERMUTES) {
 
     // At least one element moved (highly likely; check deterministically by re-seeding if equal)
     bool same = true;
-    for (size_t i = 0; i < (size_t)N; ++i) if (arr[i] != orig[i]) { same = false; break; }
+    for (size_t i = 0; i < (size_t)N; ++i)
+        if (arr[i] != orig[i]) {
+            same = false;
+            break;
+        }
     if (same) {
         // Re-seed and shuffle again to break equality case (rare)
         po_rand_seed((uint64_t)2222ULL);
         po_rand_shuffle(arr, (size_t)N, sizeof(arr[0]));
         same = true;
-        for (size_t i = 0; i < (size_t)N; ++i) if (arr[i] != orig[i]) { same = false; break; }
+        for (size_t i = 0; i < (size_t)N; ++i)
+            if (arr[i] != orig[i]) {
+                same = false;
+                break;
+            }
     }
     TEST_ASSERT_FALSE(same);
 }

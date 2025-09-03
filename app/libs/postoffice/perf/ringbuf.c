@@ -3,31 +3,31 @@
 #endif
 
 #include "perf/ringbuf.h"
-#include <stdlib.h>
-#include <errno.h>
-#include <string.h>
-#include <stdatomic.h>
 #include <assert.h>
+#include <errno.h>
+#include <stdatomic.h>
+#include <stdlib.h>
+#include <string.h>
 
 /*
     head (read index)  and  tail (write index)  are each allocated
     on their own cache‐line so there's no false sharing.
 */
 struct perf_ringbuf {
-    atomic_size_t *head;   // read index
-    atomic_size_t *tail;   // write index
-    size_t         cap;    // must be power‐of‐two
-    size_t         mask;   // cap - 1
-    void         **slots;  // array[cap]
+    atomic_size_t *head; // read index
+    atomic_size_t *tail; // write index
+    size_t cap;          // must be power‐of‐two
+    size_t mask;         // cap - 1
+    void **slots;        // array[cap]
 };
 
 static size_t _cacheline = 64;
 
 void perf_ringbuf_set_cacheline(size_t cacheline_bytes) {
-    if (cacheline_bytes && !(cacheline_bytes & (cacheline_bytes - 1))) 
+    if (cacheline_bytes && !(cacheline_bytes & (cacheline_bytes - 1)))
         _cacheline = cacheline_bytes;
     else
-        _cacheline = 64;  // default
+        _cacheline = 64; // default
 }
 
 perf_ringbuf_t *perf_ringbuf_create(size_t capacity) {
@@ -40,17 +40,17 @@ perf_ringbuf_t *perf_ringbuf_create(size_t capacity) {
     if (!rb)
         return NULL;
 
-    rb->cap   = capacity;
-    rb->mask  = capacity - 1;
-    rb->slots = calloc(capacity, sizeof(void*));
+    rb->cap = capacity;
+    rb->mask = capacity - 1;
+    rb->slots = calloc(capacity, sizeof(void *));
     if (!rb->slots) {
         free(rb);
         return NULL;
     }
 
     // align head and tail on separate cache lines
-    if (posix_memalign((void**)&rb->head, _cacheline, sizeof(*rb->head)) != 0 ||
-        posix_memalign((void**)&rb->tail, _cacheline, sizeof(*rb->tail)) != 0) {
+    if (posix_memalign((void **)&rb->head, _cacheline, sizeof(*rb->head)) != 0 ||
+        posix_memalign((void **)&rb->tail, _cacheline, sizeof(*rb->tail)) != 0) {
         free(rb->slots);
         free(rb);
         return NULL;
@@ -112,7 +112,7 @@ int perf_ringbuf_peek(const perf_ringbuf_t *rb, void **out) {
     size_t head = atomic_load_explicit(rb->head, memory_order_acquire);
     size_t tail = atomic_load_explicit(rb->tail, memory_order_acquire);
 
-    if (head == tail)               // empty?
+    if (head == tail) // empty?
         return -1;
 
     if (out)

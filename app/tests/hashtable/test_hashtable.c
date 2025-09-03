@@ -1,19 +1,20 @@
 // tests/hashtable/test_hashtable.c
-#include "unity/unity_fixture.h"
 #include "hashtable/hashtable.h"
-#include <string.h>
+#include "unity/unity_fixture.h"
 #include <stdlib.h>
+#include <string.h>
 
 // Simple string hash and compare for tests
 static unsigned long test_hash(const void *key) {
     const char *s = key;
     unsigned long h = 5381;
     int c;
-    while ((c = *s++)) h = ((h << 5) + h) + (unsigned char)c;
+    while ((c = *s++))
+        h = ((h << 5) + h) + (unsigned char)c;
     return h;
 }
 static int test_cmp(const void *a, const void *b) {
-    return strcmp((const char*)a, (const char*)b);
+    return strcmp((const char *)a, (const char *)b);
 }
 
 TEST_GROUP(HASHTABLE);
@@ -24,9 +25,7 @@ TEST_SETUP(HASHTABLE) {
     TEST_ASSERT_NOT_NULL(ht);
 }
 
-TEST_TEAR_DOWN(HASHTABLE) {
-    hashtable_destroy(&ht);
-}
+TEST_TEAR_DOWN(HASHTABLE) { hashtable_destroy(&ht); }
 
 TEST(HASHTABLE, CREATEDEFAULT) {
     hashtable_t *h2 = hashtable_create(test_cmp, test_hash);
@@ -79,13 +78,15 @@ TEST(HASHTABLE, KEYSETANDVALUES) {
     TEST_ASSERT_NOT_NULL(keys);
     // two keys
     int count = 0;
-    for (size_t i = 0; i < hashtable_size(ht); i++) count++;
+    for (size_t i = 0; i < hashtable_size(ht); i++)
+        count++;
     free(keys);
     // values
     void **vals = hashtable_values(ht);
     TEST_ASSERT_NOT_NULL(vals);
     count = 0;
-    for (size_t i = 0; i < hashtable_size(ht); i++) count++;
+    for (size_t i = 0; i < hashtable_size(ht); i++)
+        count++;
     free(vals);
 }
 
@@ -102,7 +103,7 @@ TEST(HASHTABLE, CLEAR) {
 static int map_sum;
 static void map_fn(void *key, void *value) {
     (void)key;
-    map_sum += atoi((char*)value);
+    map_sum += atoi((char *)value);
 }
 
 TEST(HASHTABLE, MAP) {
@@ -125,7 +126,7 @@ TEST(HASHTABLE, REPLACE) {
     hashtable_put(ht, "k", "v1");
     int rc = hashtable_replace(ht, "k", "v2");
     TEST_ASSERT_EQUAL_INT(1, rc);
-    TEST_ASSERT_EQUAL_STRING("v2", (char*)hashtable_get(ht, "k"));
+    TEST_ASSERT_EQUAL_STRING("v2", (char *)hashtable_get(ht, "k"));
     rc = hashtable_replace(ht, "x", "v");
     TEST_ASSERT_EQUAL_INT(0, rc);
 }
@@ -147,7 +148,7 @@ TEST(HASHTABLE, MERGE) {
     hashtable_put(ht, "a", "1");
     hashtable_put(src, "b", "2");
     hashtable_merge(ht, src);
-    TEST_ASSERT_EQUAL_STRING("2", (char*)hashtable_get(ht, "b"));
+    TEST_ASSERT_EQUAL_STRING("2", (char *)hashtable_get(ht, "b"));
     hashtable_destroy(&src);
 }
 

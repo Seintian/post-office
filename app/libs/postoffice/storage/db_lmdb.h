@@ -1,18 +1,17 @@
 #ifndef _STORAGE_DB_LMDB_H
 #define _STORAGE_DB_LMDB_H
 
-#include <stddef.h>
-#include <stdint.h>
 #include "lmdb/lmdb.h"
 #include "utils/errors.h"
-
+#include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /** Opaque handle for an LMDB environment. */
-typedef struct db_env   db_env_t;
+typedef struct db_env db_env_t;
 
 /** Opaque handle for a named "bucket" (database) within an environment. */
 typedef struct db_bucket db_bucket_t;
@@ -26,12 +25,8 @@ typedef struct db_bucket db_bucket_t;
  * @param out_env        Receives a pointer to the new environment on success.
  * @return 0 on success, or a negative DB_E* code on failure.
  */
-int db_env_open(
-    const char   *path,
-    size_t        max_databases,
-    size_t        map_size,
-    db_env_t    **out_env
-) __nonnull((1,4));
+int db_env_open(const char *path, size_t max_databases, size_t map_size, db_env_t **out_env)
+    __nonnull((1, 4));
 
 /**
  * @brief Close and free the environment (and all its buckets).
@@ -50,11 +45,7 @@ void db_env_close(db_env_t **env) __nonnull((1));
  * @param out_bucket Receives the bucket handle.
  * @return 0 on success, or a negative DB_E* code on failure.
  */
-int db_bucket_open(
-    db_env_t    *env,
-    const char  *name,
-    db_bucket_t **out_bucket
-) __nonnull((1,2,3));
+int db_bucket_open(db_env_t *env, const char *name, db_bucket_t **out_bucket) __nonnull((1, 2, 3));
 
 /**
  * @brief Close a bucket handle (no-op if not opened).
@@ -75,13 +66,8 @@ void db_bucket_close(db_bucket_t **bucket);
  * @param vallen   Length of value in bytes.
  * @return 0 on success, DB_E* on error.
  */
-int db_put(
-    db_bucket_t  *bucket,
-    const void   *key,
-    size_t        keylen,
-    const void   *val,
-    size_t        vallen
-) __nonnull((1,2,4));
+int db_put(db_bucket_t *bucket, const void *key, size_t keylen, const void *val, size_t vallen)
+    __nonnull((1, 2, 4));
 
 /**
  * @brief Retrieve a value for the given key.
@@ -96,13 +82,8 @@ int db_put(
  * @param out_len   Receives the length of the returned data.
  * @return 0 on success, DB_ENOTFOUND if key not found, or other DB_E* on error.
  */
-int db_get(
-    db_bucket_t  *bucket,
-    const void   *key,
-    size_t        keylen,
-    void        **out_value,
-    size_t       *out_len
-) __nonnull((1,2,4,5));
+int db_get(db_bucket_t *bucket, const void *key, size_t keylen, void **out_value, size_t *out_len)
+    __nonnull((1, 2, 4, 5));
 
 /**
  * @brief Delete a key/value pair if present.
@@ -112,11 +93,7 @@ int db_get(
  * @param keylen  Length of key.
  * @return 0 if deleted, DB_ENOTFOUND if not present, or other DB_E* on error.
  */
-int db_delete(
-    db_bucket_t *bucket,
-    const void  *key,
-    size_t       keylen
-) __nonnull((1,2));
+int db_delete(db_bucket_t *bucket, const void *key, size_t keylen) __nonnull((1, 2));
 
 /**
  * @brief Iterate all key/value pairs in the bucket in lex order.
@@ -130,13 +107,10 @@ int db_delete(
  * @param udata   User pointer passed through to `cb`.
  * @return 0 on full iteration, or `cb`'s non‑zero value, or DB_E* on error.
  */
-int db_iterate(
-    db_bucket_t  *bucket,
-    int (*cb)(const void *key, size_t keylen,
-              const void *val, size_t vallen,
-              void        *udata),
-    void         *udata
-) __nonnull((1,2));
+int db_iterate(db_bucket_t *bucket,
+               int (*cb)(const void *key, size_t keylen, const void *val, size_t vallen,
+                         void *udata),
+               void *udata) __nonnull((1, 2));
 
 #ifdef __cplusplus
 }

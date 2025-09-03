@@ -6,28 +6,25 @@
 #include "perf/ringbuf.h"
 #include "utils/errors.h"
 
-#include <sys/mman.h>
-#include <linux/mman.h>
-#include <unistd.h>
 #include <errno.h>
-#include <stdlib.h>
+#include <linux/mman.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
-
+#include <sys/mman.h>
+#include <unistd.h>
 
 struct perf_zcpool {
-    void           *base;       // start of mapped region
-    size_t          buf_size;   
-    size_t          buf_count;
-    perf_ringbuf_t *freeq;      // ring buffer of free pointers
+    void *base; // start of mapped region
+    size_t buf_size;
+    size_t buf_count;
+    perf_ringbuf_t *freeq; // ring buffer of free pointers
 };
 
-size_t perf_zcpool_bufsize(const perf_zcpool_t *pool) {
-    return pool->buf_size;
-}
+size_t perf_zcpool_bufsize(const perf_zcpool_t *pool) { return pool->buf_size; }
 
 perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
-    if (buf_count < 1 || buf_size == 0 || buf_size > (2UL<<20)) {
+    if (buf_count < 1 || buf_size == 0 || buf_size > (2UL << 20)) {
         errno = ZCP_EINVAL;
         return NULL;
     }
@@ -38,24 +35,11 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
     size_t aligned = (region_size + page_2mb - 1) & ~(page_2mb - 1);
 
     // Try mmap with 2 MiB huge pages
-    void *base = mmap(
-        NULL,
-        aligned,
-        PROT_READ | PROT_WRITE,
-        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | (21 << MAP_HUGE_SHIFT),
-        -1,
-        0
-    );
+    void *base = mmap(NULL, aligned, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | (21 << MAP_HUGE_SHIFT), -1, 0);
     if (base == MAP_FAILED) {
         // fallback to normal pages
-        base = mmap(
-            NULL,
-            aligned,
-            PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_ANONYMOUS,
-            -1,
-            0
-        );
+        base = mmap(NULL, aligned, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (base == MAP_FAILED) {
             errno = ZCP_EMMAP;
             return NULL;
@@ -68,10 +52,10 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
         return NULL;
     }
 
-    p->base      = base;
-    p->buf_size  = buf_size;
+    p->base = base;
+    p->buf_size = buf_size;
     p->buf_count = buf_count;
-    p->freeq     = perf_ringbuf_create(buf_count);
+    p->freeq = perf_ringbuf_create(buf_count);
     if (!p->freeq) {
         munmap(base, aligned);
         free(p);
@@ -80,7 +64,7 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
 
     // Populate free list with each buffer pointer
     for (size_t i = 0; i < buf_count; i++) {
-        void *ptr = (char*)base + i * buf_size;
+        void *ptr = (char *)base + i * buf_size;
         perf_ringbuf_enqueue(p->freeq, ptr);
     }
 
@@ -130,8 +114,8 @@ void perf_zcpool_release(perf_zcpool_t *p, void *buffer) {
     }
 
     uintptr_t start = (uintptr_t)p->base;
-    uintptr_t end   = start + p->buf_count * p->buf_size;
-    uintptr_t ptr   = (uintptr_t)buffer;
+    uintptr_t end = start + p->buf_count * p->buf_size;
+    uintptr_t ptr = (uintptr_t)buffer;
     // only release if pointer is exactly one of our buffers
     if (ptr < start || ptr >= end || ((ptr - start) % p->buf_size) != 0)
         return;

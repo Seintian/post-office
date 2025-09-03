@@ -5,22 +5,21 @@
 #include "perf/batcher.h"
 #include "perf/ringbuf.h"
 
-#include <sys/eventfd.h>
-#include <unistd.h>
 #include <errno.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
 #include <limits.h>
-#include <sys/uio.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
-
+#include <stdlib.h>
+#include <string.h>
+#include <sys/eventfd.h>
+#include <sys/uio.h>
+#include <unistd.h>
 
 struct perf_batcher {
-    perf_ringbuf_t  *rb;
-    int              efd;
-    size_t           batch_size;
+    perf_ringbuf_t *rb;
+    int efd;
+    size_t batch_size;
 };
 
 perf_batcher_t *perf_batcher_create(perf_ringbuf_t *rb, size_t batch_size) {
@@ -71,7 +70,7 @@ int perf_batcher_enqueue(perf_batcher_t *b, void *item) {
 
     // Enqueue into ring
     if (perf_ringbuf_enqueue(b->rb, item) < 0) {
-        errno = EAGAIN;  // full
+        errno = EAGAIN; // full
         return -1;
     }
 
@@ -110,7 +109,7 @@ int perf_batcher_flush(perf_batcher_t *b, int fd) {
 
         uint32_t len = *(uint32_t *)frame; // first 4B = length
         iov[i].iov_base = frame;
-        iov[i].iov_len  = len;
+        iov[i].iov_len = len;
     }
 
     ssize_t written = writev(fd, iov, (int)i);
@@ -126,8 +125,7 @@ int perf_batcher_flush(perf_batcher_t *b, int fd) {
         if (consumed >= (ssize_t)len) {
             perf_ringbuf_dequeue(b->rb, NULL); // drop from queue
             consumed -= len;
-        }
-        else {
+        } else {
             // Partial write - adjust the frame pointer
             char *base = iov[j].iov_base;
             base += consumed;
@@ -148,14 +146,14 @@ ssize_t perf_batcher_next(perf_batcher_t *b, void **out) {
     // Block until at least one event arrives
     uint64_t cnt;
     if (read(b->efd, &cnt, sizeof(cnt)) != sizeof(cnt))
-        return -1;  // efd closed or error
+        return -1; // efd closed or error
 
     // Now drain up to batch_size items
     size_t n = 0;
     for (; n < b->batch_size; n++) {
         void *item;
         if (perf_ringbuf_dequeue(b->rb, &item) < 0)
-            break;  // empty
+            break; // empty
 
         out[n] = item;
     }

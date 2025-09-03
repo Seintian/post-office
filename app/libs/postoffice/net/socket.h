@@ -11,13 +11,13 @@
 #ifndef _SOCKET_H
 #define _SOCKET_H
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/cdefs.h>
-#include <netdb.h>
-#include <unistd.h>
 #include <fcntl.h>
+#include <netdb.h>
 #include <stddef.h>
+#include <sys/cdefs.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,7 +49,7 @@ int socket_listen(const char *address, const char *port, int backlog) __nonnull(
  * @param port Remote port string.
  * @return Connected socket fd (non-blocking) on success, -1 on immediate error.
  */
-int socket_connect(const char *address, const char *port) __nonnull((1,2));
+int socket_connect(const char *address, const char *port) __nonnull((1, 2));
 
 /**
  * @brief Accept a new connection on a listening socket.

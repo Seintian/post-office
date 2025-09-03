@@ -4,20 +4,19 @@
 
 #include "perf/perf.h"
 #include "hashtable/hashtable.h"
-#include "utils/errors.h"
-#include "perf/ringbuf.h"
 #include "perf/batcher.h"
+#include "perf/ringbuf.h"
 #include "perf/zerocopy.h"
+#include "utils/errors.h"
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include <stdatomic.h>
 #include <errno.h>
 #include <pthread.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
 #include <unistd.h>
-
 
 // -----------------------------------------------------------------------------
 // Internal Event Definitions
@@ -32,10 +31,9 @@ typedef enum {
 
 typedef struct {
     perf_ev_type_t type;
-    const char    *name;
-    uint64_t       arg;   // delta for counters, value for histogram
+    const char *name;
+    uint64_t arg; // delta for counters, value for histogram
 } perf_event_t;
-
 
 // -----------------------------------------------------------------------------
 // Internal Structures & Global Context
@@ -44,7 +42,7 @@ struct perf_counter {
     atomic_uint_fast64_t value;
 };
 
-struct perf_timer   {
+struct perf_timer {
     struct timespec start;
     atomic_uint_fast64_t total_ns;
 };
@@ -57,18 +55,17 @@ struct perf_histogram {
 
 static struct {
     // core hash tables
-    hashtable_t     *counters;
-    hashtable_t     *timers;
-    hashtable_t     *histograms;
-    int              initialized;
+    hashtable_t *counters;
+    hashtable_t *timers;
+    hashtable_t *histograms;
+    int initialized;
 
     // async infrastructure
-    perf_ringbuf_t  *event_q;
-    perf_batcher_t  *ev_batcher;
-    perf_zcpool_t   *fmt_pool;
-    pthread_t        worker_tid;
+    perf_ringbuf_t *event_q;
+    perf_batcher_t *ev_batcher;
+    perf_zcpool_t *fmt_pool;
+    pthread_t worker_tid;
 } ctx = {0};
-
 
 // -----------------------------------------------------------------------------
 // Utility: hash & compare strings
@@ -82,9 +79,8 @@ static unsigned long hash_string(const void *k) {
 }
 
 static int compare_strings(const void *a, const void *b) {
-    return strcmp((const char*)a, (const char*)b);
+    return strcmp((const char *)a, (const char *)b);
 }
-
 
 // -----------------------------------------------------------------------------
 // Worker Thread: drain events and dispatch into hash tables
@@ -126,8 +122,9 @@ static void dispatch_event(const perf_event_t *e) {
         struct timespec end;
         clock_gettime(CLOCK_MONOTONIC, &end);
 
-        uint64_t start_ns = (uint64_t)tmr->start.tv_sec * 1000000000UL + (uint64_t)tmr->start.tv_nsec;
-        uint64_t end_ns   = (uint64_t)end.tv_sec * 1000000000UL + (uint64_t)end.tv_nsec;
+        uint64_t start_ns =
+            (uint64_t)tmr->start.tv_sec * 1000000000UL + (uint64_t)tmr->start.tv_nsec;
+        uint64_t end_ns = (uint64_t)end.tv_sec * 1000000000UL + (uint64_t)end.tv_nsec;
         atomic_fetch_add(&tmr->total_ns, end_ns - start_ns);
 
         break;
@@ -183,18 +180,15 @@ static void *perf_worker(void *_) {
 
 static size_t next_pow2(size_t x) {
     size_t p = 1;
-    while (p < x) p <<= 1;
+    while (p < x)
+        p <<= 1;
     return p;
 }
 
 // -----------------------------------------------------------------------------
 // Public API
 // -----------------------------------------------------------------------------
-int perf_init(
-    size_t expected_counters,
-    size_t expected_timers,
-    size_t expected_histograms
-) {
+int perf_init(size_t expected_counters, size_t expected_timers, size_t expected_histograms) {
     if (ctx.initialized) {
         errno = PERF_EALREADY;
         return -1;
@@ -202,24 +196,29 @@ int perf_init(
 
     memset(&ctx, 0, sizeof(ctx));
 
-    ctx.counters   = hashtable_create_sized(compare_strings, hash_string, expected_counters);
-    if (!ctx.counters) goto fail;
+    ctx.counters = hashtable_create_sized(compare_strings, hash_string, expected_counters);
+    if (!ctx.counters)
+        goto fail;
 
-    ctx.timers     = hashtable_create_sized(compare_strings, hash_string, expected_timers);
-    if (!ctx.timers) goto fail;
+    ctx.timers = hashtable_create_sized(compare_strings, hash_string, expected_timers);
+    if (!ctx.timers)
+        goto fail;
     ctx.histograms = hashtable_create_sized(compare_strings, hash_string, expected_histograms);
-    if (!ctx.histograms) goto fail;
+    if (!ctx.histograms)
+        goto fail;
 
-    ctx.event_q    = perf_ringbuf_create(
-        next_pow2((expected_counters + expected_timers + expected_histograms) * 2)
-    );
-    if (!ctx.event_q) goto fail;
+    ctx.event_q = perf_ringbuf_create(
+        next_pow2((expected_counters + expected_timers + expected_histograms) * 2));
+    if (!ctx.event_q)
+        goto fail;
 
     ctx.ev_batcher = perf_batcher_create(ctx.event_q, 64);
-    if (!ctx.ev_batcher) goto fail;
+    if (!ctx.ev_batcher)
+        goto fail;
 
-    ctx.fmt_pool   = perf_zcpool_create(256, sizeof(perf_event_t));
-    if (!ctx.fmt_pool) goto fail;
+    ctx.fmt_pool = perf_zcpool_create(256, sizeof(perf_event_t));
+    if (!ctx.fmt_pool)
+        goto fail;
 
     if (pthread_create(&ctx.worker_tid, NULL, perf_worker, NULL) != 0)
         goto fail;
@@ -230,13 +229,19 @@ int perf_init(
 fail:
     int last_errno = errno;
 
-    if (ctx.fmt_pool)   perf_zcpool_destroy(&ctx.fmt_pool);
-    if (ctx.ev_batcher) perf_batcher_destroy(&ctx.ev_batcher);
-    if (ctx.event_q)    perf_ringbuf_destroy(&ctx.event_q);
+    if (ctx.fmt_pool)
+        perf_zcpool_destroy(&ctx.fmt_pool);
+    if (ctx.ev_batcher)
+        perf_batcher_destroy(&ctx.ev_batcher);
+    if (ctx.event_q)
+        perf_ringbuf_destroy(&ctx.event_q);
 
-    if (ctx.counters)   hashtable_destroy(&ctx.counters);
-    if (ctx.timers)     hashtable_destroy(&ctx.timers);
-    if (ctx.histograms) hashtable_destroy(&ctx.histograms);
+    if (ctx.counters)
+        hashtable_destroy(&ctx.counters);
+    if (ctx.timers)
+        hashtable_destroy(&ctx.timers);
+    if (ctx.histograms)
+        hashtable_destroy(&ctx.histograms);
 
     memset(&ctx, 0, sizeof(ctx));
 
@@ -260,9 +265,12 @@ void perf_shutdown(FILE *out) {
     perf_report(out);
 
     // destroy async infra
-    if (ctx.ev_batcher) perf_batcher_destroy(&ctx.ev_batcher);
-    if (ctx.event_q)    perf_ringbuf_destroy(&ctx.event_q);
-    if (ctx.fmt_pool)   perf_zcpool_destroy(&ctx.fmt_pool);
+    if (ctx.ev_batcher)
+        perf_batcher_destroy(&ctx.ev_batcher);
+    if (ctx.event_q)
+        perf_ringbuf_destroy(&ctx.event_q);
+    if (ctx.fmt_pool)
+        perf_zcpool_destroy(&ctx.fmt_pool);
 
     // free counters
     hashtable_iter_t *it = hashtable_iterator(ctx.counters);
@@ -271,7 +279,8 @@ void perf_shutdown(FILE *out) {
         free(hashtable_iter_value(it));
     }
     free(it);
-    if (ctx.counters) hashtable_destroy(&ctx.counters);
+    if (ctx.counters)
+        hashtable_destroy(&ctx.counters);
 
     // free timers
     it = hashtable_iterator(ctx.timers);
@@ -280,7 +289,8 @@ void perf_shutdown(FILE *out) {
         free(hashtable_iter_value(it));
     }
     free(it);
-    if (ctx.timers) hashtable_destroy(&ctx.timers);
+    if (ctx.timers)
+        hashtable_destroy(&ctx.timers);
 
     // free histograms
     it = hashtable_iterator(ctx.histograms);
@@ -292,7 +302,8 @@ void perf_shutdown(FILE *out) {
         free(h);
     }
     free(it);
-    if (ctx.histograms) hashtable_destroy(&ctx.histograms);
+    if (ctx.histograms)
+        hashtable_destroy(&ctx.histograms);
 
     memset(&ctx, 0, sizeof(ctx));
 }
@@ -306,7 +317,7 @@ int perf_counter_create(const char *name) {
     perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
     e->type = EV_COUNTER_ADD;
     e->name = name;
-    e->arg  = 0;
+    e->arg = 0;
     if (perf_batcher_enqueue(ctx.ev_batcher, e) < 0) {
         errno = PERF_EBUSY;
         return -1;
@@ -328,7 +339,7 @@ void perf_counter_inc(const char *name) {
 
     e->type = EV_COUNTER_ADD;
     e->name = name;
-    e->arg  = 1;
+    e->arg = 1;
 
     perf_batcher_enqueue(ctx.ev_batcher, e);
 }
@@ -345,7 +356,7 @@ void perf_counter_add(const char *name, uint64_t delta) {
 
     e->type = EV_COUNTER_ADD;
     e->name = name;
-    e->arg  = delta;
+    e->arg = delta;
 
     perf_batcher_enqueue(ctx.ev_batcher, e);
 }
@@ -405,11 +416,7 @@ int perf_timer_stop(const char *name) {
     return perf_batcher_enqueue(ctx.ev_batcher, e) == 0 ? 0 : -1;
 }
 
-int perf_histogram_create(
-    const char *name,
-    const uint64_t *bins,
-    size_t nbins
-) {
+int perf_histogram_create(const char *name, const uint64_t *bins, size_t nbins) {
     if (nbins == 0) {
         errno = EINVAL;
         return -1;
@@ -430,14 +437,14 @@ int perf_histogram_create(
     if (!h)
         return -1;
 
-    h->nbins   = nbins;
-    h->bins    = malloc(nbins * sizeof(*h->bins));
+    h->nbins = nbins;
+    h->bins = malloc(nbins * sizeof(*h->bins));
     if (!h->bins) {
         free(h);
         return -1;
     }
 
-    h->counts  = calloc(nbins, sizeof(*h->counts));
+    h->counts = calloc(nbins, sizeof(*h->counts));
     if (!h->counts) {
         free(h->bins);
         free(h);
@@ -461,7 +468,7 @@ int perf_histogram_record(const char *h, uint64_t value) {
 
     e->type = EV_HISTOGRAM_RECORD;
     e->name = h;
-    e->arg  = value;
+    e->arg = value;
 
     if (perf_batcher_enqueue(ctx.ev_batcher, e) < 0)
         return -1;
@@ -475,18 +482,18 @@ int perf_report(FILE *out) {
     fprintf(out, "-- Counters --\n");
     hashtable_iter_t *it = hashtable_iterator(ctx.counters);
     while (hashtable_iter_next(it)) {
-        fprintf(out, "%s: %lu\n",
-            (char *)hashtable_iter_key(it),
-            (unsigned long)atomic_load(&((struct perf_counter*)hashtable_iter_value(it))->value));
+        fprintf(
+            out, "%s: %lu\n", (char *)hashtable_iter_key(it),
+            (unsigned long)atomic_load(&((struct perf_counter *)hashtable_iter_value(it))->value));
     }
     free(it);
 
     fprintf(out, "-- Timers (ns) --\n");
     it = hashtable_iterator(ctx.timers);
     while (hashtable_iter_next(it)) {
-        fprintf(out, "%s: %lu\n",
-            (char *)hashtable_iter_key(it),
-            (unsigned long)atomic_load(&((struct perf_timer*)hashtable_iter_value(it))->total_ns));
+        fprintf(
+            out, "%s: %lu\n", (char *)hashtable_iter_key(it),
+            (unsigned long)atomic_load(&((struct perf_timer *)hashtable_iter_value(it))->total_ns));
     }
     free(it);
 
@@ -496,9 +503,8 @@ int perf_report(FILE *out) {
         struct perf_histogram *h = hashtable_iter_value(it);
         fprintf(out, "%s:\n", (char *)hashtable_iter_key(it));
         for (size_t i = 0; i < h->nbins; i++) {
-            fprintf(out, "  <= %lu: %lu\n",
-               (unsigned long)h->bins[i],
-               (unsigned long)atomic_load(&h->counts[i]));
+            fprintf(out, "  <= %lu: %lu\n", (unsigned long)h->bins[i],
+                    (unsigned long)atomic_load(&h->counts[i]));
         }
     }
     free(it);

@@ -1,12 +1,11 @@
 #include "utils/configs.h"
-#include "utils/errors.h"
-#include "hashtable/hashtable.h"
 #include "hashset/hashset.h"
+#include "hashtable/hashtable.h"
 #include "inih/ini.h"
+#include "utils/errors.h"
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-
 
 // djb2 string hash
 static unsigned long str_hash(const void *s) {
@@ -25,9 +24,9 @@ static int str_cmp(const void *a, const void *b) {
 
 // inih handler context
 struct po_config {
-    hashtable_t *entries;   // section.key-value pairs
-    hashset_t *sections;    // set of section names
-    bool strict;            // strict parsing mode
+    hashtable_t *entries; // section.key-value pairs
+    hashset_t *sections;  // set of section names
+    bool strict;          // strict parsing mode
 };
 
 static char *get_full_key(const char *section, const char *key) {
@@ -44,16 +43,9 @@ static char *get_full_key(const char *section, const char *key) {
     return full_key;
 }
 
-static bool is_empty(const char *str) {
-    return !str || str[0] == '\0';
-}
+static bool is_empty(const char *str) { return !str || str[0] == '\0'; }
 
-static int ini_handler_cb(
-    void *user,
-    const char *section,
-    const char *name,
-    const char *value
-) {
+static int ini_handler_cb(void *user, const char *section, const char *name, const char *value) {
     if (!user) {
         errno = INIH_ENOUSER;
         return STOP_PARSING;
@@ -64,9 +56,12 @@ static int ini_handler_cb(
         int last_errno = errno;
         errno = 0;
 
-        if (is_empty(section))              errno = INIH_ENOSECTION;
-        if (errno == 0 && is_empty(name))   errno = INIH_ENOKEY;
-        if (errno == 0 && is_empty(value))  errno = INIH_ENOVALUE;
+        if (is_empty(section))
+            errno = INIH_ENOSECTION;
+        if (errno == 0 && is_empty(name))
+            errno = INIH_ENOKEY;
+        if (errno == 0 && is_empty(value))
+            errno = INIH_ENOVALUE;
         if (errno != 0)
             return STOP_PARSING;
 
@@ -89,8 +84,7 @@ static int ini_handler_cb(
             errno = INIH_EDUPKEY;
             return STOP_PARSING;
         }
-    }
-    else if (hashtable_put(ctx->entries, full_key, value_copy) != 1) {
+    } else if (hashtable_put(ctx->entries, full_key, value_copy) != 1) {
         free(value_copy);
         free(full_key);
         return STOP_PARSING;
@@ -107,8 +101,7 @@ static int ini_handler_cb(
             errno = INIH_EDUPSECTION;
             return STOP_PARSING;
         }
-    }
-    else if (hashset_add(ctx->sections, section_key) != 1) {
+    } else if (hashset_add(ctx->sections, section_key) != 1) {
         free(section_key);
         return STOP_PARSING;
     }
@@ -116,11 +109,7 @@ static int ini_handler_cb(
     return CONTINUE_PARSING;
 }
 
-static int _po_config_load(
-    const char *filename,
-    po_config_t **cfg_out,
-    bool strict
-) {
+static int _po_config_load(const char *filename, po_config_t **cfg_out, bool strict) {
     if (!filename || !cfg_out) {
         errno = EINVAL;
         return -1;
@@ -135,8 +124,10 @@ static int _po_config_load(
     ctx->sections = hashset_create(&str_cmp, &str_hash);
 
     if (!ctx->entries || !ctx->sections) {
-        if (ctx->entries) hashtable_destroy(&ctx->entries);
-        if (ctx->sections) hashset_destroy(&ctx->sections);
+        if (ctx->entries)
+            hashtable_destroy(&ctx->entries);
+        if (ctx->sections)
+            hashset_destroy(&ctx->sections);
         free(ctx);
         return -1;
     }
@@ -204,12 +195,8 @@ void po_config_free(po_config_t **cfg) {
     *cfg = NULL;
 }
 
-int po_config_get_str(
-    const po_config_t *cfg,
-    const char *section,
-    const char *key,
-    const char **out_value
-) {
+int po_config_get_str(const po_config_t *cfg, const char *section, const char *key,
+                      const char **out_value) {
     char *full_key = get_full_key(section, key);
     if (!full_key)
         return -1;
@@ -225,12 +212,8 @@ int po_config_get_str(
     return 0;
 }
 
-int po_config_get_int(
-    const po_config_t *cfg,
-    const char *section,
-    const char *key,
-    int *out_value
-) {
+int po_config_get_int(const po_config_t *cfg, const char *section, const char *key,
+                      int *out_value) {
     const char *v;
     if (po_config_get_str(cfg, section, key, &v) != 0)
         return -1;
@@ -250,12 +233,8 @@ int po_config_get_int(
     return 0;
 }
 
-int po_config_get_long(
-    const po_config_t *cfg,
-    const char *section,
-    const char *key,
-    long *out_value
-) {
+int po_config_get_long(const po_config_t *cfg, const char *section, const char *key,
+                       long *out_value) {
     const char *v;
     if (po_config_get_str(cfg, section, key, &v) != 0)
         return -1;
@@ -271,12 +250,8 @@ int po_config_get_long(
     return 0;
 }
 
-int po_config_get_bool(
-    const po_config_t *cfg,
-    const char *section,
-    const char *key,
-    bool *out_value
-) {
+int po_config_get_bool(const po_config_t *cfg, const char *section, const char *key,
+                       bool *out_value) {
     const char *v;
     if (po_config_get_str(cfg, section, key, &v) != 0)
         return -1;
@@ -284,8 +259,7 @@ int po_config_get_bool(
     if (strcmp(v, "0") == 0 || strcmp(v, "false") == 0) {
         *out_value = false;
         return 0;
-    }
-    else if (strcmp(v, "1") == 0 || strcmp(v, "true") == 0) {
+    } else if (strcmp(v, "1") == 0 || strcmp(v, "true") == 0) {
         *out_value = true;
         return 0;
     }

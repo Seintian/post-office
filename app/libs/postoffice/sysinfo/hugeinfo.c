@@ -4,8 +4,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #define HUGEPAGES_FILE "/sys/kernel/mm/hugepages"
@@ -52,35 +52,30 @@ int list_hugepage_sizes(unsigned long *sizes_kB, size_t max, size_t *count) {
 int get_hugepage_info(unsigned long size_kB, hugepage_info_t *info) {
     char path[256];
 
-    #define SAFE_SNPRINTF(buf, size, fmt, ...)                      \
-        do {                                                        \
-            if (snprintf((buf), (size), (fmt), __VA_ARGS__) < 0) {  \
-                errno = EINVAL;                                     \
-                return -1;                                          \
-            }                                                       \
-        } while (0)
+#define SAFE_SNPRINTF(buf, size, fmt, ...)                                                         \
+    do {                                                                                           \
+        if (snprintf((buf), (size), (fmt), __VA_ARGS__) < 0) {                                     \
+            errno = EINVAL;                                                                        \
+            return -1;                                                                             \
+        }                                                                                          \
+    } while (0)
 
-    #define R(name, field) do {                      \
-        SAFE_SNPRINTF(                               \
-            path,                                    \
-            sizeof(path),                            \
-            HUGEPAGES_FILE "/hugepages-%lukB/%s",    \
-            size_kB,                                 \
-            name                                     \
-        );                                           \
-        if (read_long(path, &info->field) < 0)       \
-            return -1;                               \
+#define R(name, field)                                                                             \
+    do {                                                                                           \
+        SAFE_SNPRINTF(path, sizeof(path), HUGEPAGES_FILE "/hugepages-%lukB/%s", size_kB, name);    \
+        if (read_long(path, &info->field) < 0)                                                     \
+            return -1;                                                                             \
     } while (0)
 
     info->size_kB = size_kB;
-    R("nr_hugepages",            nr);
-    R("free_hugepages",          free);
+    R("nr_hugepages", nr);
+    R("free_hugepages", free);
     R("nr_overcommit_hugepages", overcommit);
-    R("surplus_hugepages",       surplus);
-    R("resv_hugepages",          reserved);
+    R("surplus_hugepages", surplus);
+    R("resv_hugepages", reserved);
 
-    #undef R
-    #undef SAFE_SNPRINTF
+#undef R
+#undef SAFE_SNPRINTF
 
     return 0;
 }

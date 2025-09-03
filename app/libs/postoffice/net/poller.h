@@ -9,9 +9,9 @@
 #ifndef _POLLER_H
 #define _POLLER_H
 
-#include <sys/epoll.h>
 #include <stdint.h>
 #include <sys/cdefs.h>
+#include <sys/epoll.h>
 
 /** Forward declaration of the internal poller structure. */
 typedef struct poller poller_t;
@@ -63,6 +63,6 @@ int poller_remove(const poller_t *poller, int fd) __nonnull((1));
  * @return Number of events returned, or -1 on error.
  */
 int poller_wait(const poller_t *poller, struct epoll_event *events, int max_events, int timeout)
-    __nonnull((1,2));
+    __nonnull((1, 2));
 
 #endif // _POLLER_H

@@ -1,6 +1,6 @@
+#include <postoffice/log/logger.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <postoffice/log/logger.h>
 
 int main(void) {
     logger_config cfg = {

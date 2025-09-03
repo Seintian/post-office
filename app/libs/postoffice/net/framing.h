@@ -19,9 +19,9 @@
 #ifndef _FRAMING_H
 #define _FRAMING_H
 
+#include "protocol.h"
 #include <stdint.h>
 #include <sys/cdefs.h>
-#include "protocol.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -79,8 +79,7 @@ uint32_t framing_get_max_payload(void);
  * poller, use a non-blocking, incremental decoder variant (not exported
  * here) implemented internally in the framing module.
  */
-int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out)
-    __nonnull((2,3));
+int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out) __nonnull((2, 3));
 
 /**
  * @brief Write a message to a socket from a contiguous payload buffer.
@@ -97,8 +96,8 @@ int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
  * @param payload_len Length of payload in bytes.
  * @return 0 on success, -1 on error (errno set), or -2 if the peer closed socket.
  */
-int framing_write_msg(int fd, const po_header_t *header, const uint8_t *payload, uint32_t payload_len)
-    __nonnull((2));
+int framing_write_msg(int fd, const po_header_t *header, const uint8_t *payload,
+                      uint32_t payload_len) __nonnull((2));
 
 /**
  * @brief Write a message to a socket using a zero-copy payload buffer.
@@ -117,7 +116,7 @@ int framing_write_msg(int fd, const po_header_t *header, const uint8_t *payload,
  * @return 0 on success, -1 on error (errno set), -2 if peer closed.
  */
 int framing_write_zcp(int fd, const po_header_t *header, const zcp_buffer_t *payload)
-    __nonnull((2,3));
+    __nonnull((2, 3));
 
 #ifdef __cplusplus
 }

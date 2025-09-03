@@ -3,19 +3,18 @@
  * @brief Implementation of a generic hashtable data structure.
  */
 
+#include "hashtable/hashtable.h"
+#include "prime/prime.h"
+#include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <errno.h>
-#include "prime/prime.h"
-#include "hashtable/hashtable.h"
-
 
 // *** MACROS *** //
 
 /**
  * @brief Initial capacity of the hashtable.
- * 
+ *
  * @note The initial capacity is a prime number to reduce collisions.
  */
 #define INITIAL_CAPACITY 17
@@ -77,11 +76,11 @@ struct hashtable_iter {
 
 /**
  * @brief Creates a new hashtable node.
- * 
+ *
  * @param[in] key Pointer to the key.
  * @param[in] value Pointer to the value.
  * @return Pointer to the created hashtable node, or NULL if memory allocation fails.
- * 
+ *
  * @note The caller is responsible for freeing the memory allocated for the node.
  */
 static hashtable_node_t *hashtable_node_create(void *key, void *value) {
@@ -98,7 +97,7 @@ static hashtable_node_t *hashtable_node_create(void *key, void *value) {
 
 /**
  * @brief Resizes the hashtable to a new capacity.
- * 
+ *
  * @param[in] table Pointer to the hashtable.
  * @param[in] new_capacity The new capacity to resize to.
  * @return -1 on failure, 0 on success
@@ -106,7 +105,7 @@ static hashtable_node_t *hashtable_node_create(void *key, void *value) {
 static int hashtable_resize(hashtable_t *table, size_t new_capacity) {
     new_capacity = next_prime(new_capacity);
 
-    hashtable_node_t **new_buckets = calloc(new_capacity, sizeof(hashtable_node_t*));
+    hashtable_node_t **new_buckets = calloc(new_capacity, sizeof(hashtable_node_t *));
     if (!new_buckets)
         return -1;
 
@@ -134,11 +133,9 @@ static int hashtable_resize(hashtable_t *table, size_t new_capacity) {
 
 // *** API *** //
 
-hashtable_t *hashtable_create_sized(
-    int (*compare)(const void *, const void *),
-    unsigned long (*hash_func)(const void *),
-    size_t base_capacity
-) {
+hashtable_t *hashtable_create_sized(int (*compare)(const void *, const void *),
+                                    unsigned long (*hash_func)(const void *),
+                                    size_t base_capacity) {
     hashtable_t *table = malloc(sizeof(hashtable_t));
     if (!table)
         return NULL;
@@ -148,7 +145,7 @@ hashtable_t *hashtable_create_sized(
     table->compare = compare;
     table->hash_func = hash_func;
 
-    table->buckets = calloc(table->capacity, sizeof(hashtable_node_t*));
+    table->buckets = calloc(table->capacity, sizeof(hashtable_node_t *));
     if (!table->buckets) {
         free(table);
         return NULL;
@@ -157,7 +154,8 @@ hashtable_t *hashtable_create_sized(
     return table;
 }
 
-hashtable_t *hashtable_create(int (*compare)(const void *, const void *), unsigned long (*hash_func)(const void *)) {
+hashtable_t *hashtable_create(int (*compare)(const void *, const void *),
+                              unsigned long (*hash_func)(const void *)) {
     return hashtable_create_sized(compare, hash_func, INITIAL_CAPACITY);
 }
 
@@ -165,11 +163,9 @@ hashtable_t *hashtable_create(int (*compare)(const void *, const void *), unsign
 
 int hashtable_put(hashtable_t *table, void *key, void *value) {
     float load_factor = hashtable_load_factor(table);
-    if (
-        load_factor > LOAD_FACTOR_UP_THRESHOLD
-        && hashtable_resize(table, table->capacity * 2) == -1 
-        && load_factor > LOAD_FACTOR_UP_TOLERANCE
-    )
+    if (load_factor > LOAD_FACTOR_UP_THRESHOLD &&
+        hashtable_resize(table, table->capacity * 2) == -1 &&
+        load_factor > LOAD_FACTOR_UP_TOLERANCE)
         return -1;
 
     size_t hash = table->hash_func(key) % table->capacity;
@@ -196,11 +192,9 @@ int hashtable_put(hashtable_t *table, void *key, void *value) {
 }
 
 int hashtable_remove(hashtable_t *table, const void *key) {
-    if (
-        hashtable_load_factor(table) < LOAD_FACTOR_DOWN_THRESHOLD
-        && table->capacity / 2 >= INITIAL_CAPACITY
-        && hashtable_resize(table, table->capacity / 2) == -1
-    )
+    if (hashtable_load_factor(table) < LOAD_FACTOR_DOWN_THRESHOLD &&
+        table->capacity / 2 >= INITIAL_CAPACITY &&
+        hashtable_resize(table, table->capacity / 2) == -1)
         return -1;
 
     size_t hash = table->hash_func(key);
@@ -259,13 +253,9 @@ int hashtable_contains_key(const hashtable_t *table, const void *key) {
     return 0;
 }
 
-size_t hashtable_size(const hashtable_t *table) {
-    return table->size;
-}
+size_t hashtable_size(const hashtable_t *table) { return table->size; }
 
-size_t hashtable_capacity(const hashtable_t *table) {
-    return table->capacity;
-}
+size_t hashtable_capacity(const hashtable_t *table) { return table->capacity; }
 
 void **hashtable_keyset(const hashtable_t *table) {
     if (table->size == 0)
@@ -355,16 +345,12 @@ bool hashtable_iter_next(hashtable_iter_t *it) {
     return false;
 }
 
-void *hashtable_iter_key(const hashtable_iter_t *it) {
-    return it->current->key;
-}
+void *hashtable_iter_key(const hashtable_iter_t *it) { return it->current->key; }
 
-void *hashtable_iter_value(const hashtable_iter_t *it) {
-    return it->current->value;
-}
+void *hashtable_iter_value(const hashtable_iter_t *it) { return it->current->value; }
 
 float hashtable_load_factor(const hashtable_t *table) {
-    return (float) table->size / (float) table->capacity;
+    return (float)table->size / (float)table->capacity;
 }
 
 int hashtable_replace(const hashtable_t *table, const void *key, void *new_value) {
@@ -413,11 +399,8 @@ void **hashtable_values(const hashtable_t *table) {
     return values;
 }
 
-int hashtable_equals(
-    const hashtable_t *table1,
-    const hashtable_t *table2,
-    int (*compare)(const void *, const void *)
-) {
+int hashtable_equals(const hashtable_t *table1, const hashtable_t *table2,
+                     int (*compare)(const void *, const void *)) {
     if (table1->size != table2->size)
         return 0;
 

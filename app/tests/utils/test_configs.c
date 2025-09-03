@@ -1,19 +1,15 @@
 #include "unity/unity_fixture.h"
 #include "utils/configs.h"
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
+static const char good_ini[] = "[global]\n"
+                               "key1 = hello\n"
+                               "number = 123\n"
+                               "flag = 1\n";
 
-static const char good_ini[] =
-    "[global]\n"
-    "key1 = hello\n"
-    "number = 123\n"
-    "flag = 1\n";
-
-static const char bad_ini[] =
-    "[global]\n"
-    "key1 hello\n";  // missing '='
-
+static const char bad_ini[] = "[global]\n"
+                              "key1 hello\n"; // missing '='
 
 TEST_GROUP(CONFIGS);
 

@@ -2,17 +2,16 @@
 /** \ingroup perf */
 #define _PO_PERF_H
 
+#include "utils/errors.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "utils/errors.h"
-
 
 // -----------------------------------------------------------------------------
 // Public opaque types
 // -----------------------------------------------------------------------------
-typedef struct perf_counter   perf_counter_t;
-typedef struct perf_timer     perf_timer_t;
+typedef struct perf_counter perf_counter_t;
+typedef struct perf_timer perf_timer_t;
 typedef struct perf_histogram perf_histogram_t;
 
 // -----------------------------------------------------------------------------
@@ -27,11 +26,7 @@ typedef struct perf_histogram perf_histogram_t;
  * @param expected_histograms Expected number of histograms
  * @return 0 on success, -1 on failure (errno set)
  */
-int perf_init(
-    size_t expected_counters,
-    size_t expected_timers,
-    size_t expected_histograms
-);
+int perf_init(size_t expected_counters, size_t expected_timers, size_t expected_histograms);
 
 /**
  * Gracefully shut down perf, flush events, destroy tables and report stats.
@@ -105,11 +100,7 @@ int perf_timer_stop(const char *name) __nonnull((1));
  * @param nbins Number of bins
  * @return 0 on success, -1 on failure (errno set)
  */
-int perf_histogram_create(
-    const char *name,
-    const uint64_t *bins,
-    size_t nbins
-) __nonnull((1, 2));
+int perf_histogram_create(const char *name, const uint64_t *bins, size_t nbins) __nonnull((1, 2));
 
 /**
  * Record a value asynchronously into the histogram.
@@ -118,10 +109,7 @@ int perf_histogram_create(
  * @param value Value to record
  * @return 0 on success, -1 on failure (errno set)
  */
-int perf_histogram_record(
-    const char *name,
-    uint64_t value
-) __nonnull((1));
+int perf_histogram_record(const char *name, uint64_t value) __nonnull((1));
 
 // -----------------------------------------------------------------------------
 // Reporting

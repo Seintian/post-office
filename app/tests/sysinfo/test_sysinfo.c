@@ -2,12 +2,11 @@
 #define _GNU_SOURCE
 #endif
 
-#include "unity/unity_fixture.h"
 #include "sysinfo/sysinfo.h"
-#include <string.h>
+#include "unity/unity_fixture.h"
 #include <errno.h>
 #include <stdio.h>
-
+#include <string.h>
 
 TEST_GROUP(SYSINFO);
 
@@ -49,8 +48,7 @@ TEST(SYSINFO, TESTSYSINFOCOLLECTINVALIDPOINTER) {
  * Helper to call po_sysinfo_print() into a memory buffer and then
  * assert that it succeeded (no ferror) and actually produced output.
  * -------------------------------------------------------------------------- */
-static void assert_print_success(const po_sysinfo_t *info)
-{
+static void assert_print_success(const po_sysinfo_t *info) {
     char buf[1024];
     memset(buf, 0, sizeof(buf));
 
@@ -65,12 +63,10 @@ static void assert_print_success(const po_sysinfo_t *info)
     fflush(mem);
 
     // 1) no I/O error
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, ferror(mem),
-        "I/O error during po_sysinfo_print");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, ferror(mem), "I/O error during po_sysinfo_print");
 
     // 2) we actually wrote *something*
-    TEST_ASSERT_TRUE_MESSAGE(strlen(buf) > 0,
-        "po_sysinfo_print produced empty output");
+    TEST_ASSERT_TRUE_MESSAGE(strlen(buf) > 0, "po_sysinfo_print produced empty output");
 
     fclose(mem);
 }

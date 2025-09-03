@@ -4,13 +4,12 @@
 
 #include "lmdb/lmdb.h"
 
-
 /**
  * @brief Converts an error code to a human-readable string.
- * 
+ *
  * This function maps error codes from various subsystems (LMDB, inih, etc.)
  * to their corresponding error messages.
- * 
+ *
  * @param err The error code to convert.
  * @return A human-readable string describing the error.
  */
@@ -39,7 +38,7 @@ const char *po_strerror(int err);
 #define INIH_ERANGE (INIH_EBASE + 13)
 #define INIH_ETOP INIH_EUNKSECTION
 
-// - libfort 
+// - libfort
 
 // no errors
 
@@ -55,7 +54,8 @@ const char *po_strerror(int err);
  *
  * See also:
  *  - LMDB official error list: http://www.lmdb.tech/doc/group__errors.html
- *  - LMDB conditions (Common Lisp API doc): https://github.com/antimer/lmdb#x-28LMDB-3A-40LMDB-2FERROR-CODE-CONDITIONS-20MGL-PAX-3ASECTION-29
+ *  - LMDB conditions (Common Lisp API doc):
+ * https://github.com/antimer/lmdb#x-28LMDB-3A-40LMDB-2FERROR-CODE-CONDITIONS-20MGL-PAX-3ASECTION-29
  *
  * Each error corresponds to a documented LMDB return value and can be converted to a
  * human-readable string with `mdb_strerror(int)` if the raw LMDB error code is known.
@@ -169,78 +169,78 @@ const char *po_strerror(int err);
 
 #define PERF_EBASE (PO_EBASE + 300)
 #define PERF_EOK 0
-#define PERF_EALREADY (PERF_EBASE + 1) // Already initialized
-#define PERF_ENOCOUNTER (PERF_EBASE + 2) // Counter not found
-#define PERF_ENOTIMER (PERF_EBASE + 3) // Timer not found
+#define PERF_EALREADY (PERF_EBASE + 1)     // Already initialized
+#define PERF_ENOCOUNTER (PERF_EBASE + 2)   // Counter not found
+#define PERF_ENOTIMER (PERF_EBASE + 3)     // Timer not found
 #define PERF_ENOHISTOGRAM (PERF_EBASE + 4) // Histogram not found
-#define PERF_EINVAL (PERF_EBASE + 5) // Invalid parameters or state
-#define PERF_ENOTINIT (PERF_EBASE + 6) // Performance subsystem not initialized
-#define PERF_EBUSY (PERF_EBASE + 7) // Performance subsystem is busy
-#define PERF_EAGAIN (PERF_EBASE + 8) // Resource temporarily unavailable
-#define PERF_EOVERFLOW (PERF_EBASE + 9) // Overflow in histogram or counter
-#define PERF_ETOP PERF_EOVERFLOW // Top-most error value for range checks
+#define PERF_EINVAL (PERF_EBASE + 5)       // Invalid parameters or state
+#define PERF_ENOTINIT (PERF_EBASE + 6)     // Performance subsystem not initialized
+#define PERF_EBUSY (PERF_EBASE + 7)        // Performance subsystem is busy
+#define PERF_EAGAIN (PERF_EBASE + 8)       // Resource temporarily unavailable
+#define PERF_EOVERFLOW (PERF_EBASE + 9)    // Overflow in histogram or counter
+#define PERF_ETOP PERF_EOVERFLOW           // Top-most error value for range checks
 
 // - net
-#define NET_EBASE      (PO_EBASE + 400)
+#define NET_EBASE (PO_EBASE + 400)
 
 /// Generic success
-#define NET_EOK        0
+#define NET_EOK 0
 
 /// Invalid argument (NULL pointer, bad size, etc.)
-#define NET_EINVAL     (NET_EBASE + 1)
+#define NET_EINVAL (NET_EBASE + 1)
 
 /// No space in framing queue or zcpool
-#define NET_ENOSPC     (NET_EBASE + 2)
+#define NET_ENOSPC (NET_EBASE + 2)
 
 /// Message too large for encoder
-#define NET_EMSGSIZE   (NET_EBASE + 3)
+#define NET_EMSGSIZE (NET_EBASE + 3)
 
 /// Underlying socket error
-#define NET_ESOCK      (NET_EBASE + 4)
+#define NET_ESOCK (NET_EBASE + 4)
 
 /// Timeout waiting for socket/event
-#define NET_ETIMEOUT   (NET_EBASE + 5)
+#define NET_ETIMEOUT (NET_EBASE + 5)
 
 /// Protocol version mismatch
-#define NET_EVERSION   (NET_EBASE + 6)
+#define NET_EVERSION (NET_EBASE + 6)
 
 /// Resource temporarily unavailable
-#define NET_EAGAIN     (NET_EBASE + 7)
+#define NET_EAGAIN (NET_EBASE + 7)
 
 /// Socket not connected
-#define NET_ENOTCONN   (NET_EBASE + 8)
+#define NET_ENOTCONN (NET_EBASE + 8)
 
 /// Connection refused
 #define NET_ECONNREFUSED (NET_EBASE + 9)
 
 /// Protocol error (malformed message, etc.)
-#define NET_EPROTO     (NET_EBASE + 10)
+#define NET_EPROTO (NET_EBASE + 10)
 
 /// Protocol not supported
 #define NET_EPROTONOSUPPORT (NET_EBASE + 11)
 
 /// Network already initialized or in use
-#define NET_EALREADY   (NET_EBASE + 12)
+#define NET_EALREADY (NET_EBASE + 12)
 
 /// No such file or directory (e.g., socket path not found)
-#define NET_ENOENT     (NET_EBASE + 13)
+#define NET_ENOENT (NET_EBASE + 13)
 
 /// Generic I/O error (e.g., send/recv failure)
-#define NET_EIO        (NET_EBASE + 14)
+#define NET_EIO (NET_EBASE + 14)
 
 /// Top‐most net error value
-#define NET_ETOP       NET_EIO
+#define NET_ETOP NET_EIO
 
 // - zcpool
 
 /// Zero‐copy buffer pool errors
-#define ZCP_EBASE   (PO_EBASE + 500)
-#define ZCP_EOK     (ZCP_EBASE + 0)          ///< No error
-#define ZCP_EINVAL  (ZCP_EBASE + 1)          ///< Invalid pool or buffer pointer
-#define ZCP_ENOMEM  (ZCP_EBASE + 2)          ///< Out of memory (pool creation)
-#define ZCP_EAGAIN  (ZCP_EBASE + 3)          ///< No buffers free (acquire would block)
-#define ZCP_EMMAP   (ZCP_EBASE + 4)          ///< Memory mapping failed
-#define ZCP_ETOP    ZCP_EAGAIN               ///< Topmost error
+#define ZCP_EBASE (PO_EBASE + 500)
+#define ZCP_EOK (ZCP_EBASE + 0)    ///< No error
+#define ZCP_EINVAL (ZCP_EBASE + 1) ///< Invalid pool or buffer pointer
+#define ZCP_ENOMEM (ZCP_EBASE + 2) ///< Out of memory (pool creation)
+#define ZCP_EAGAIN (ZCP_EBASE + 3) ///< No buffers free (acquire would block)
+#define ZCP_EMMAP (ZCP_EBASE + 4)  ///< Memory mapping failed
+#define ZCP_ETOP ZCP_EAGAIN        ///< Topmost error
 
 // - hashtable
 

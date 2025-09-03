@@ -23,7 +23,7 @@
  * @param[in] path The path to check.
  * @return `true` if a file or directory exists at the path, `false` otherwise.
  */
-bool fs_exists(const char* path);
+bool fs_exists(const char *path);
 
 /**
  * @brief Checks if the given path points to a regular file.
@@ -31,7 +31,7 @@ bool fs_exists(const char* path);
  * @param[in] path The path to check.
  * @return `true` if the path exists and is a regular file, `false` otherwise.
  */
-bool fs_is_regular_file(const char* path);
+bool fs_is_regular_file(const char *path);
 
 /**
  * @brief Checks if the given path points to a directory.
@@ -39,7 +39,7 @@ bool fs_is_regular_file(const char* path);
  * @param[in] path The path to check.
  * @return `true` if the path exists and is a directory, `false` otherwise.
  */
-bool fs_is_directory(const char* path);
+bool fs_is_directory(const char *path);
 
 /**
  * @brief Checks if the given path points to a domain socket.
@@ -49,7 +49,7 @@ bool fs_is_directory(const char* path);
  * @param[in] path The path to check.
  * @return `true` if the path exists and is a socket, `false` otherwise.
  */
-bool fs_is_socket(const char* path);
+bool fs_is_socket(const char *path);
 
 /**
  * @brief Reads an entire file into a newly allocated buffer.
@@ -65,7 +65,7 @@ bool fs_is_socket(const char* path);
  * (e.g., file not found, cannot read, out of memory). If `NULL` is
  * returned, `out_size` is set to 0.
  */
-char* fs_read_file_to_buffer(const char* path, size_t* out_size);
+char *fs_read_file_to_buffer(const char *path, size_t *out_size);
 
 /**
  * @brief Writes the contents of a buffer to a file.
@@ -78,7 +78,7 @@ char* fs_read_file_to_buffer(const char* path, size_t* out_size);
  * @param[in] size The number of bytes to write from the buffer.
  * @return `true` on success, `false` on failure. `errno` is set accordingly.
  */
-bool fs_write_buffer_to_file(const char* path, const void* buffer, size_t size);
+bool fs_write_buffer_to_file(const char *path, const void *buffer, size_t size);
 
 /**
  * @brief Creates a directory, including any necessary parent directories.
@@ -90,7 +90,7 @@ bool fs_write_buffer_to_file(const char* path, const void* buffer, size_t size);
  * @return `true` on success or if the directory already exists. `false` on
  * any other error.
  */
-bool fs_create_directory_recursive(const char* path, mode_t mode);
+bool fs_create_directory_recursive(const char *path, mode_t mode);
 
 /**
  * @brief Joins two path components together with a single directory separator.
@@ -104,6 +104,6 @@ bool fs_create_directory_recursive(const char* path, mode_t mode);
  * @return A pointer to the newly allocated full path string, or `NULL` on
  * a memory allocation failure.
  */
-char* fs_path_join(const char* base, const char* leaf);
+char *fs_path_join(const char *base, const char *leaf);
 
 #endif // POSTOFFICE_UTILS_FILES_H

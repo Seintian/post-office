@@ -18,9 +18,7 @@
 
 static uint64_t s_state[4] = {0};
 
-static inline uint64_t rotl(const uint64_t x, int k) {
-    return (x << k) | (x >> (64 - k));
-}
+static inline uint64_t rotl(const uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
 
 static uint64_t xoshiro256ss(void) {
     const uint64_t result = rotl(s_state[1] * 5, 7) * 9;
@@ -51,8 +49,10 @@ static void seed_from_bytes(const uint8_t *buf, size_t n) {
 
     // Fill state
     for (int i = 0; i < 4; ++i) {
-        acc ^= acc >> 33; acc *= UINT64_C(0xff51afd7ed558ccd);
-        acc ^= acc >> 33; acc *= UINT64_C(0xc4ceb9fe1a85ec53);
+        acc ^= acc >> 33;
+        acc *= UINT64_C(0xff51afd7ed558ccd);
+        acc ^= acc >> 33;
+        acc *= UINT64_C(0xc4ceb9fe1a85ec53);
         acc ^= acc >> 33;
         s_state[i] = (uint64_t)(acc + ((uint64_t)i) * UINT64_C(0x9E3779B97F4A7C15));
     }
@@ -62,10 +62,12 @@ void po_rand_seed(uint64_t seed) {
     // reset state for deterministic seeding
     s_state[0] = s_state[1] = s_state[2] = s_state[3] = 0;
     uint8_t b[8];
-    for (int i = 0; i < 8; ++i) b[i] = (uint8_t)((seed >> (i*8)) & 0xFF);
+    for (int i = 0; i < 8; ++i)
+        b[i] = (uint8_t)((seed >> (i * 8)) & 0xFF);
     seed_from_bytes(b, sizeof(b));
     // Warm up
-    for (int i = 0; i < 8; ++i) (void)xoshiro256ss();
+    for (int i = 0; i < 8; ++i)
+        (void)xoshiro256ss();
 }
 
 void po_rand_seed_auto(void) {
@@ -78,7 +80,8 @@ void po_rand_seed_auto(void) {
         close(fd);
         if (n == (ssize_t)sizeof(buf)) {
             seed_from_bytes(buf, sizeof(buf));
-            for (int i = 0; i < 8; ++i) (void)xoshiro256ss();
+            for (int i = 0; i < 8; ++i)
+                (void)xoshiro256ss();
             return;
         }
     }
@@ -90,17 +93,18 @@ void po_rand_seed_auto(void) {
 }
 
 uint64_t po_rand_u64(void) {
-    if (!seeded()) po_rand_seed_auto();
+    if (!seeded())
+        po_rand_seed_auto();
     return xoshiro256ss();
 }
 
-uint32_t po_rand_u32(void) {
-    return (uint32_t)(po_rand_u64() >> 32);
-}
+uint32_t po_rand_u32(void) { return (uint32_t)(po_rand_u64() >> 32); }
 
 int64_t po_rand_range_i64(int64_t min, int64_t max) {
     if (min > max) {
-        int64_t t = min; min = max; max = t;
+        int64_t t = min;
+        min = max;
+        max = t;
     }
     uint64_t span = (uint64_t)((max - min) + 1);
     uint64_t x = po_rand_u64();
@@ -114,16 +118,18 @@ double po_rand_unit(void) {
 }
 
 void po_rand_shuffle(void *base, size_t n, size_t elem_size) {
-    if (!base || elem_size == 0 || n < 2) return;
-    unsigned char *a = (unsigned char*)base;
+    if (!base || elem_size == 0 || n < 2)
+        return;
+    unsigned char *a = (unsigned char *)base;
     for (size_t i = n - 1; i > 0; --i) {
         size_t j = (size_t)po_rand_range_i64(0, (int64_t)i);
-        if (j == i) continue;
+        if (j == i)
+            continue;
         // swap elements a[i] and a[j]
         for (size_t b = 0; b < elem_size; ++b) {
-            unsigned char tmp = a[i*elem_size + b];
-            a[i*elem_size + b] = a[j*elem_size + b];
-            a[j*elem_size + b] = tmp;
+            unsigned char tmp = a[i * elem_size + b];
+            a[i * elem_size + b] = a[j * elem_size + b];
+            a[j * elem_size + b] = tmp;
         }
     }
 }

@@ -30,8 +30,8 @@
 #ifndef _PROTOCOL_H
 #define _PROTOCOL_H
 
-#include <stdint.h>
 #include <arpa/inet.h>
+#include <stdint.h>
 #include <sys/cdefs.h>
 
 #ifdef __cplusplus
@@ -46,7 +46,7 @@ extern "C" {
  */
 #define PROTOCOL_VERSION 0x0001u
 
-#pragma pack(push,1)
+#pragma pack(push, 1)
 /**
  * @brief On-the-wire message header (packed, network byte order fields).
  *
@@ -55,10 +55,10 @@ extern "C" {
  * wire (not including the 4-byte framing length prefix used by framing.h).
  */
 typedef struct {
-    uint16_t version;      /**< Protocol version (network byte order) */
-    uint8_t  msg_type;     /**< Message type identifier */
-    uint8_t  flags;        /**< Message flags (bitmask) */
-    uint32_t payload_len;  /**< Length of the payload in bytes (network order) */
+    uint16_t version;     /**< Protocol version (network byte order) */
+    uint8_t msg_type;     /**< Message type identifier */
+    uint8_t flags;        /**< Message flags (bitmask) */
+    uint32_t payload_len; /**< Length of the payload in bytes (network order) */
 } po_header_t;
 #pragma pack(pop)
 
@@ -66,10 +66,10 @@ typedef struct {
  * @name Flag bits for po_header_t::flags
  * @{ */
 enum {
-    PO_FLAG_NONE       = 0x00u, /**< No special flags */
+    PO_FLAG_NONE = 0x00u,       /**< No special flags */
     PO_FLAG_COMPRESSED = 0x01u, /**< Payload is compressed */
-    PO_FLAG_ENCRYPTED  = 0x02u, /**< Payload is encrypted */
-    PO_FLAG_URGENT     = 0x04u, /**< High priority / expedited processing */
+    PO_FLAG_ENCRYPTED = 0x02u,  /**< Payload is encrypted */
+    PO_FLAG_URGENT = 0x04u,     /**< High priority / expedited processing */
 };
 /** @} */
 
@@ -87,12 +87,10 @@ enum {
  * @param flags Message flags bitmask.
  * @param payload_len Payload length in host byte order.
  */
-static inline void protocol_init_header(po_header_t *header, uint8_t msg_type,
-                                        uint8_t flags, uint32_t payload_len)
-                                        __attribute__((nonnull(1)));
-static inline void protocol_init_header(po_header_t *header, uint8_t msg_type,
-                                        uint8_t flags, uint32_t payload_len)
-{
+static inline void protocol_init_header(po_header_t *header, uint8_t msg_type, uint8_t flags,
+                                        uint32_t payload_len) __attribute__((nonnull(1)));
+static inline void protocol_init_header(po_header_t *header, uint8_t msg_type, uint8_t flags,
+                                        uint32_t payload_len) {
     header->version = htons((uint16_t)PROTOCOL_VERSION);
     header->msg_type = msg_type;
     header->flags = flags;

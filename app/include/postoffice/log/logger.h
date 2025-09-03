@@ -12,7 +12,7 @@
  * ring buffer and a background consumer thread to drain records to the
  * configured sinks (console, file, syslog).
  *
- * @{ 
+ * @{
  * - Lock-free ring buffer for pending records (work queue)
  * - Preallocated record pool with a lock-free freelist to avoid malloc/free in hot paths
  * Design goals:
@@ -56,10 +56,10 @@
  * @endcode
  */
 
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdarg.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,8 +73,8 @@ extern "C" {
 typedef enum logger_level {
     LOG_TRACE = 0,
     LOG_DEBUG = 1,
-    LOG_INFO  = 2,
-    LOG_WARN  = 3,
+    LOG_INFO = 2,
+    LOG_WARN = 3,
     LOG_ERROR = 4,
     LOG_FATAL = 5
 } logger_level_t;
@@ -85,14 +85,14 @@ typedef enum logger_level {
  */
 // Overflow policy when the ring is full.
 typedef enum logger_overflow_policy {
-    LOGGER_DROP_NEW = 0,         // drop the incoming message (cheap)
-    LOGGER_OVERWRITE_OLDEST = 1  // advance head (drop oldest), then write
+    LOGGER_DROP_NEW = 0,        // drop the incoming message (cheap)
+    LOGGER_OVERWRITE_OLDEST = 1 // advance head (drop oldest), then write
 } logger_overflow_policy;
 
 // Sinks mask
-#define LOGGER_SINK_CONSOLE  (1u << 0)
-#define LOGGER_SINK_FILE     (1u << 1)
-#define LOGGER_SINK_SYSLOG   (1u << 2)
+#define LOGGER_SINK_CONSOLE (1u << 0)
+#define LOGGER_SINK_FILE (1u << 1)
+#define LOGGER_SINK_SYSLOG (1u << 2)
 
 // Compile-time default level (can be overridden with -DLOGGER_COMPILE_LEVEL=N)
 #ifndef LOGGER_COMPILE_LEVEL
@@ -100,7 +100,7 @@ typedef enum logger_overflow_policy {
 #endif
 
 // Log record constants
-#define LOGGER_MSG_MAX   512u   // bytes for formatted message (truncated)
+#define LOGGER_MSG_MAX 512u // bytes for formatted message (truncated)
 
 /**
  * @struct logger_config
@@ -111,10 +111,10 @@ typedef enum logger_overflow_policy {
  */
 // Public config
 typedef struct logger_config {
-     logger_level_t level;        /**< Minimum runtime level (messages below are discarded fast-path). */
-     size_t         ring_capacity;/**< Capacity of the internal ring buffer (prefer power-of-two). */
-     unsigned       consumers;    /**< Number of consumer threads draining the queue. */
-     logger_overflow_policy policy; /**< Overflow behavior when queue is full. */
+    logger_level_t level; /**< Minimum runtime level (messages below are discarded fast-path). */
+    size_t ring_capacity; /**< Capacity of the internal ring buffer (prefer power-of-two). */
+    unsigned consumers;   /**< Number of consumer threads draining the queue. */
+    logger_overflow_policy policy; /**< Overflow behavior when queue is full. */
 } logger_config;
 
 // Initialization and control
@@ -128,7 +128,7 @@ typedef struct logger_config {
  * - Spawns @ref logger_config.consumers background worker threads.
  * - Allocates a pre-sized record pool; no allocations occur on the hot path.
  */
-int  logger_init(const logger_config *cfg);
+int logger_init(const logger_config *cfg);
 
 /**
  * @brief Shutdown the logger and release all resources.
@@ -145,7 +145,7 @@ void logger_shutdown(void);
  * @param level New minimum level.
  * @return 0 on success; -1 if the logger is not initialized.
  */
-int  logger_set_level(logger_level_t level);
+int logger_set_level(logger_level_t level);
 
 /**
  * @brief Get the current minimum runtime logging level.
@@ -194,7 +194,8 @@ int logger_add_sink_syslog(const char *ident);
  */
 static inline bool logger_would_log(logger_level_t level) {
     extern volatile int _logger_runtime_level; // defined in logger.c
-    return (level >= (logger_level_t)LOGGER_COMPILE_LEVEL) && (level >= (logger_level_t)_logger_runtime_level);
+    return (level >= (logger_level_t)LOGGER_COMPILE_LEVEL) &&
+           (level >= (logger_level_t)_logger_runtime_level);
 }
 
 // Core enqueue API (avoid using directly; prefer macros)
@@ -211,12 +212,8 @@ static inline bool logger_would_log(logger_level_t level) {
  * @param fmt   printf-style format string.
  * @param ap    Varargs list.
  */
-void logger_logv(logger_level_t level,
-                 const char *file,
-                 int line,
-                 const char *func,
-                 const char *fmt,
-                 va_list ap) __attribute__((format(printf,5,0)));
+void logger_logv(logger_level_t level, const char *file, int line, const char *func,
+                 const char *fmt, va_list ap) __attribute__((format(printf, 5, 0)));
 
 /**
  * @brief Core enqueue primitive.
@@ -227,12 +224,8 @@ void logger_logv(logger_level_t level,
  * @param func  Function name (typically __func__).
  * @param fmt   printf-style format followed by arguments.
  */
-void logger_log(logger_level_t level,
-                const char *file,
-                int line,
-                const char *func,
-                const char *fmt,
-                ...) __attribute__((format(printf,5,6)));
+void logger_log(logger_level_t level, const char *file, int line, const char *func, const char *fmt,
+                ...) __attribute__((format(printf, 5, 6)));
 
 // Convenience macros that avoid formatting when disabled
 /**
@@ -245,17 +238,17 @@ void logger_log(logger_level_t level,
  * @def LOG_AT
  * @brief Log at the given level with printf-style formatting.
  */
-#define LOG_AT(lvl, fmt, ...) \
-    do { \
-        if (LOG_ENABLED(lvl)) { \
-            logger_log((lvl), __FILE__, __LINE__, __func__, (fmt), ##__VA_ARGS__); \
-        } \
+#define LOG_AT(lvl, fmt, ...)                                                                      \
+    do {                                                                                           \
+        if (LOG_ENABLED(lvl)) {                                                                    \
+            logger_log((lvl), __FILE__, __LINE__, __func__, (fmt), ##__VA_ARGS__);                 \
+        }                                                                                          \
     } while (0)
 
 #define LOG_TRACE(fmt, ...) LOG_AT(LOG_TRACE, fmt, ##__VA_ARGS__)
 #define LOG_DEBUG(fmt, ...) LOG_AT(LOG_DEBUG, fmt, ##__VA_ARGS__)
-#define LOG_INFO(fmt, ...)  LOG_AT(LOG_INFO,  fmt, ##__VA_ARGS__)
-#define LOG_WARN(fmt, ...)  LOG_AT(LOG_WARN,  fmt, ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...) LOG_AT(LOG_INFO, fmt, ##__VA_ARGS__)
+#define LOG_WARN(fmt, ...) LOG_AT(LOG_WARN, fmt, ##__VA_ARGS__)
 #define LOG_ERROR(fmt, ...) LOG_AT(LOG_ERROR, fmt, ##__VA_ARGS__)
 #define LOG_FATAL(fmt, ...) LOG_AT(LOG_FATAL, fmt, ##__VA_ARGS__)
 

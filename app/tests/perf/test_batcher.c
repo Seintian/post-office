@@ -1,11 +1,10 @@
-#include "unity/unity_fixture.h"
 #include "perf/batcher.h"
 #include "perf/ringbuf.h"
+#include "unity/unity_fixture.h"
 #include <errno.h>
-#include <unistd.h>
 #include <pthread.h>
 #include <stdlib.h>
-
+#include <unistd.h>
 
 TEST_GROUP(BATCHER);
 static perf_batcher_t *batcher;
@@ -47,32 +46,33 @@ TEST(BATCHER, SINGLEBATCH) {
 
 TEST(BATCHER, PARTIALBATCH) {
     void *out[4];
-    int vals[3] = {10,20,30};
+    int vals[3] = {10, 20, 30};
     for (int i = 0; i < 3; i++) {
         TEST_ASSERT_EQUAL_INT(0, perf_batcher_enqueue(batcher, &vals[i]));
     }
     ssize_t n = perf_batcher_next(batcher, out);
     TEST_ASSERT_EQUAL_INT(3, n);
     for (int i = 0; i < 3; i++) {
-        TEST_ASSERT_EQUAL_INT(vals[i], *(int*)out[i]);
+        TEST_ASSERT_EQUAL_INT(vals[i], *(int *)out[i]);
     }
 }
 
 TEST(BATCHER, FULLBATCH) {
     void *out[4];
-    int vals[6] = {1,2,3,4,5,6};
+    int vals[6] = {1, 2, 3, 4, 5, 6};
     // enqueue 6, batcher size is 4
     for (int i = 0; i < 6; i++) {
         TEST_ASSERT_EQUAL_INT(0, perf_batcher_enqueue(batcher, &vals[i]));
     }
     ssize_t n1 = perf_batcher_next(batcher, out);
     TEST_ASSERT_EQUAL_INT(4, n1);
-    for (int i = 0; i < 4; i++) TEST_ASSERT_EQUAL_INT(vals[i], *(int*)out[i]);
+    for (int i = 0; i < 4; i++)
+        TEST_ASSERT_EQUAL_INT(vals[i], *(int *)out[i]);
     // next should get remaining 2
     ssize_t n2 = perf_batcher_next(batcher, out);
     TEST_ASSERT_EQUAL_INT(2, n2);
-    TEST_ASSERT_EQUAL_INT(vals[4], *(int*)out[0]);
-    TEST_ASSERT_EQUAL_INT(vals[5], *(int*)out[1]);
+    TEST_ASSERT_EQUAL_INT(vals[4], *(int *)out[0]);
+    TEST_ASSERT_EQUAL_INT(vals[5], *(int *)out[1]);
 }
 
 // Optional: test blocking via thread
