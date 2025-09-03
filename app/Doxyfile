@@ -14,6 +14,7 @@ PROJECT_NAME           = "SO Project - 24/25"
 PROJECT_NUMBER         = "1.0"
 OUTPUT_DIRECTORY       = docs
 OUTPUT_LANGUAGE        = English
+PROJECT_BRIEF          = "Post Office: modular C codebase with simulation processes and reusable libraries"
 
 #---------------------------------------------------------------------------
 # Configuration options related to the input files
