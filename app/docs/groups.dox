@@ -1,0 +1,7 @@
+/** @defgroup libraries Post Office Libraries */
+/** @defgroup executables Simulation Processes */
+/** @defgroup utils Utilities */
+/** @defgroup net Networking */
+/** @defgroup storage Storage */
+/** @defgroup perf Performance */
+/** @defgroup sysinfo System Information */
