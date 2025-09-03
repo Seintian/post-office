@@ -19,6 +19,8 @@ extern TEST_GROUP_RUNNER(NET);
 extern TEST_GROUP_RUNNER(POLLER);
 extern TEST_GROUP_RUNNER(APP);
 extern TEST_GROUP_RUNNER(LOGGER);
+extern TEST_GROUP_RUNNER(FILES);
+extern TEST_GROUP_RUNNER(RANDOM);
 
 
 static void RunAllTests(void) {
@@ -39,6 +41,8 @@ static void RunAllTests(void) {
     RUN_TEST_GROUP(POLLER);
     RUN_TEST_GROUP(APP);
     RUN_TEST_GROUP(LOGGER);
+    RUN_TEST_GROUP(FILES);
+    RUN_TEST_GROUP(RANDOM);
 }
 
 int main(int argc, const char *argv[]) {
