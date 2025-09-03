@@ -69,9 +69,10 @@ EXPLODE_INI_PATH       = $(CONFIG_DIR)/explode.ini
 
 INCLUDES_I = -I$(POSTOFFICE_INCLUDE_DIR) -I$(THIRDPARTY_INCLUDE_DIR)
 LIBS_I     = -I$(POSTOFFICE_LIBS_DIR) -I$(THIRDPARTY_LIBS_DIR)
-CORE_I     = -I$(SRC_DIR) -I$(SIMULATION_DIR)
+CORE_I     = -I$(MAIN_DIR) -I$(SIMULATION_DIR)
+SRC_I      = -I$(SRC_DIR)
 
-ALL_I      = $(INCLUDES_I) $(LIBS_I) $(CORE_I)
+ALL_I      = $(INCLUDES_I) $(LIBS_I) $(CORE_I) $(SRC_I)
 
 #! set to `true` to enable debug flags
 DEV = true
