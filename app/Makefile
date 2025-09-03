@@ -393,6 +393,7 @@ help:
 	@echo "    dev: Compile for development (clean, compile_commands, test)"
 	@echo "    test: Compile and run test executable"
 	@echo "    help: Display this help message"
+	@echo "    tools: Build tools under tools/ (helper utilities)"
 
 # *** Rules *** #
 
@@ -527,4 +528,40 @@ $(UNITY_OBJS): $(BUILD_DIR)/unity/%.o: $(UNITY_DIR)/%.c
 # Create directories if not exist
 $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
+
+# --- Tools ---
+
+# Helper development utilities (single-source C files in tools/, binaries in bin/)
+TOOLS_DIR     := tools
+TOOL_SRCS     := $(wildcard $(TOOLS_DIR)/*.c)
+TOOL_NAMES    := $(basename $(notdir $(TOOL_SRCS)))
+TOOL_BINS     := $(addprefix $(BIN_DIR)/, $(TOOL_NAMES))
+
+.PHONY: tools
+tools: $(TOOL_BINS)
+	@echo "> Makefile: Built tools into $(BIN_DIR): $(notdir $(TOOL_BINS))"
+
+# Link each tool against our default library objects so headers resolve and symbols link.
+# Example: random_hist depends on utils/random; sysinfo_dump on sysinfo; logger_smoke on log/perf.
+$(BIN_DIR)/%: $(TOOLS_DIR)/%.c $(DEFAULTS_OBJS) | $(BIN_DIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -I$(INCLUDE_DIR) $< $(DEFAULTS_OBJS) -o $@
+
+.PHONY: clean-tools
+clean-tools:
+	@echo "> Makefile: Scanning $(TOOLS_DIR) for non-.c files..."
+	@TMP=$$(mktemp); \
+	find $(TOOLS_DIR) -type f ! -name '*.c' -print | tee $$TMP; \
+	if [ ! -s $$TMP ]; then \
+		echo "> Makefile: Nothing to delete."; \
+		rm -f $$TMP; \
+		exit 0; \
+	fi; \
+	read -p "< Makefile: Delete the files listed above? (y/N) " yn; \
+	if [ "$$yn" = "y" ] || [ "$$yn" = "Y" ]; then \
+		xargs -r -d '\n' rm -f -- < $$TMP; \
+		echo "> Makefile: Deleted non-.c files under $(TOOLS_DIR)."; \
+	else \
+		echo "> Makefile: Aborted."; \
+	fi; \
+	rm -f $$TMP
 
