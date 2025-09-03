@@ -7,14 +7,16 @@ This document provides detailed instructions on how to use the simulation projec
 - [Overview](#overview)
 - [Building the Project](#building-the-project)
 - [Running Modes](#running-modes)
-    1. [Full Application](#1-full-application)
-    2. [Simulation Only](#2-simulation-only)
+    - [Full Application](#full-application)
+    - [Simulation Only](#simulation-only)
 - [Command-Line Options](#command-line-options)
 - [Configuration Files](#configuration-files)
 - [Interactive Features](#interactive-features)
 - [Crash Handling](#crash-handling)
 - [Logging System](#logging-system)
 - [Troubleshooting](#troubleshooting)
+
+\anchor overview
 
 ## Overview
 
@@ -46,6 +48,8 @@ make
 
 **NOTE**: some third-party software is required: `pdfTex`. This translates `.tex` files into `.pdf`. The output, here, will be a single `refman.pdf` of several pages.
 
+\anchor building-the-project
+
 ## Building the Project
 
 To build the project, navigate to the project root directory and use the `make` command:
@@ -59,9 +63,13 @@ This will compile all executables without starting the application.
 
 **NOTE**: Be sure to run the `make` commands from the [app/](../) folder.
 
+\anchor running-modes
+
 ## Running Modes
 
 The application can be run in two different modes:
+
+\anchor full-application
 
 ### 1. Full Application
 
@@ -102,6 +110,8 @@ The Main process provides all the application's functionality, including:
 - Configuration file viewing and management
 - The ability to launch simulations
 
+\anchor simulation-only
+
 ### 2. Simulation Only
 
 To run only the simulation component (the Director process) directly, bypassing the Main process:
@@ -122,6 +132,8 @@ Unlike the Main process, the Director process does not provide an interactive me
 
 If you don't provide a configuration file, `make` will ask you to enter one in a `bash` interactive session (just a `read`).
 
+\anchor command-line-options
+
 ## Command-Line Options
 
 Both the main executables accept the following command-line options:
@@ -136,6 +148,8 @@ Example:
 ./bin/SO_Proj-main --loglevel DEBUG --config config/timeout.ini
 ```
 
+\anchor configuration-files
+
 ## Configuration Files
 
 The application uses INI configuration files located in the `config/` directory:
@@ -144,6 +158,8 @@ The application uses INI configuration files located in the `config/` directory:
 - [explode.ini](../config/explode.ini): Configuration with explosion settings
 
 To create a custom configuration, copy one of the existing files and modify it as needed.
+
+\anchor interactive-features
 
 ## Interactive Features
 
@@ -157,6 +173,8 @@ When running the Main process, you can use the interactive menu to:
 
 The menu is navigated using keyboard inputs: press the up and down arrow keys to navigate it and the Spacebar or the Enter key to select its options.
 
+\anchor crash-handling
+
 ## Crash Handling
 
 On fatal signals (e.g., `SIGSEGV`, `SIGABRT`), the application:
@@ -168,6 +186,8 @@ On fatal signals (e.g., `SIGSEGV`, `SIGABRT`), the application:
 - Exits re-raising that fatal signal
 
 **NOTE**: if the current platform isn't actually supported by the application, a warning message will be written into the crash report. It _should_ compile anyway.
+
+\anchor logging-system
 
 ## Logging System
 
@@ -181,6 +201,8 @@ The application uses a centralized logging system with the following levels:
 - `FATAL`: Critical errors
 
 Logs are written to the `logs/` directory; some are also displayed in the terminal.
+
+\anchor troubleshooting
 
 ## Troubleshooting
 
