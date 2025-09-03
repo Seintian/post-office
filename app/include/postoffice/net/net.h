@@ -4,6 +4,7 @@
  * @details Combines the socket, framing, and protocol submodules to provide
  * a simple message-based networking interface. It uses efficient zero-copy
  * buffers and batched I/O for high-performance message exchange.
+ * @ingroup net
  */
 #ifndef _NET_H
 #define _NET_H

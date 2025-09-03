@@ -1,3 +1,4 @@
+/** \ingroup perf */
 #ifndef _PERF_BATCHER_H
 #define _PERF_BATCHER_H
 

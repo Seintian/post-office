@@ -1,5 +1,6 @@
 #ifndef PO_UTILS_ARGV_H
 #define PO_UTILS_ARGV_H
+/** \ingroup utils */
 
 #include <stdbool.h>
 

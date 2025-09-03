@@ -4,6 +4,7 @@
  * @details Provides an epoll-based poller to monitor multiple file descriptors
  * for I/O readiness. Uses edge-triggered notifications (with EPOLLONESHOT
  * for one-shot rearm as needed).
+ * @ingroup net
  */
 #ifndef _POLLER_H
 #define _POLLER_H

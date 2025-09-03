@@ -1,6 +1,7 @@
 /**
  * @file prime.h
  * @brief Functions for prime number operations.
+ * @ingroup libraries
  * 
  * This file contains the declarations for functions that check if a number is prime,
  * and find the next prime number after a given number.

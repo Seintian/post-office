@@ -1,3 +1,4 @@
+/** \ingroup perf */
 #ifndef _PERF_RINGBUF_H
 #define _PERF_RINGBUF_H
 

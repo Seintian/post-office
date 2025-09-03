@@ -6,6 +6,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+/** \ingroup utils */
+
 /**
  * @file files.h
  * @brief A collection of general-purpose filesystem utilities.

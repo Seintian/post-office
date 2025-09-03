@@ -22,9 +22,9 @@ extern "C" {
 
 // *** TYPEDEFS *** //
 
-typedef struct _hashtable_t hashtable_t;
+typedef struct hashtable hashtable_t;
 
-typedef struct _hashtable_iter_t hashtable_iter_t;
+typedef struct hashtable_iter hashtable_iter_t;
 
 // *** API *** //
 

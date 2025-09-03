@@ -1,4 +1,5 @@
 #ifndef _PO_PERF_H
+/** \ingroup perf */
 #define _PO_PERF_H
 
 #include <stddef.h>

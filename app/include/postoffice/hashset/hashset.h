@@ -5,6 +5,7 @@
 /**
  * @file hashset.h
  * @brief Declares the HashSet API for storing unique keys.
+ * @ingroup libraries
  *
  * A HashSet stores only keys and ensures uniqueness. It uses open addressing
  * with linear probing (in implementation) and resizes when load factor thresholds

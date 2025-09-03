@@ -1,5 +1,6 @@
 #ifndef _PO_ERRORS_H
 #define _PO_ERRORS_H
+/** \ingroup utils */
 
 #include "lmdb/lmdb.h"
 

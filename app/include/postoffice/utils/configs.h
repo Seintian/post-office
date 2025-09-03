@@ -1,5 +1,6 @@
 #ifndef PO_UTILS_CONFIGS_H
 #define PO_UTILS_CONFIGS_H
+/** \ingroup utils */
 
 #include <stddef.h>
 #include <stdbool.h>
@@ -15,7 +16,7 @@ extern "C" {
 #endif
 
 // Opaque config handle
-typedef struct _po_config_t po_config_t;
+typedef struct po_config po_config_t;
 
 // Load file. Returns 0 on success, or non‑zero error code on failure.
 int po_config_load(const char *filename, po_config_t **cfg_out) __nonnull((1,2));

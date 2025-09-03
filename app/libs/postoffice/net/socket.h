@@ -1,6 +1,7 @@
 /**
  * @file socket.h
  * @brief TCP and UNIX-domain socket utility functions.
+ * @ingroup net
  *
  * This header provides minimal socket helpers used by the PostOffice net
  * implementation. All sockets returned by these helpers are configured with

@@ -1,6 +1,7 @@
 /**
  * @file protocol.h
  * @brief Protocol header definition and utilities.
+ * @ingroup net
  *
  * The protocol header is intentionally compact and packed for wire
  * compatibility. Fields whose natural representation differs between host

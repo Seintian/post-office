@@ -1,6 +1,7 @@
 /**
  * @file framing.h
  * @brief Length-prefixed message framing with zero-copy support.
+ * @ingroup net
  *
  * The framing layer implements the on-wire message format used by the
  * PostOffice stack. Messages on the wire are encoded as:

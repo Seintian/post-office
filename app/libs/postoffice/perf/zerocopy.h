@@ -1,3 +1,4 @@
+/** \ingroup perf */
 #ifndef _PERF_ZEROCOPY_H
 #define _PERF_ZEROCOPY_H
 
