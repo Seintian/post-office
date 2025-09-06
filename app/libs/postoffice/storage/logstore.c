@@ -271,7 +271,7 @@ int po_logstore_append(po_logstore_t *ls, const void *key, size_t keylen,
 	memcpy(r->v, val, vallen);
 	r->klen = keylen;
 	r->vlen = vallen;
-	if (perf_ringbuf_enqueue(ls->q, r) < 0) { free(r->k); free(r->v); free(r); return -1; }
+	if (perf_batcher_enqueue(ls->b, r) < 0) { free(r->k); free(r->v); free(r); return -1; }
 	return 0;
 }
 
