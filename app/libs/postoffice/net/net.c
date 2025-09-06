@@ -5,10 +5,11 @@
 
 #include "net/net.h"
 
+#include <errno.h>
+
 #include "net/framing.h"
 #include "net/protocol.h"
 #include "perf/zerocopy.h"
-#include <errno.h>
 
 // Simple process-wide TX/RX zero-copy pools for high throughput paths.
 // Tunables can be exposed later; defaults chosen for general workloads.
@@ -51,13 +52,8 @@ void net_zcp_release_rx(void *buf) {
         perf_zcpool_release(g_rx_pool, buf);
 }
 
-int net_send_message(
-    int fd,
-    uint8_t msg_type,
-    uint8_t flags,
-    const uint8_t *payload,
-    uint32_t payload_len
-) {
+int net_send_message(int fd, uint8_t msg_type, uint8_t flags, const uint8_t *payload,
+                     uint32_t payload_len) {
     po_header_t hdr;
     protocol_init_header(&hdr, msg_type, flags, payload_len);
 
@@ -65,7 +61,8 @@ int net_send_message(
     return framing_write_msg(fd, &hdr, payload, payload_len);
 }
 
-int net_send_message_zcp(int fd, uint8_t msg_type, uint8_t flags, void *payload_buf, uint32_t payload_len) {
+int net_send_message_zcp(int fd, uint8_t msg_type, uint8_t flags, void *payload_buf,
+                         uint32_t payload_len) {
     po_header_t hdr;
     protocol_init_header(&hdr, msg_type, flags, payload_len);
     return framing_write_zcp(fd, &hdr, (const zcp_buffer_t *)payload_buf);
@@ -76,7 +73,8 @@ int net_recv_message(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
     return framing_read_msg(fd, header_out, payload_out);
 }
 
-int net_recv_message_zcp(int fd, po_header_t *header_out, void **payload_out, uint32_t *payload_len_out) {
+int net_recv_message_zcp(int fd, po_header_t *header_out, void **payload_out,
+                         uint32_t *payload_len_out) {
     // Try to use RX pool and read directly into it.
     void *buf = NULL;
     uint32_t buf_cap = 0;

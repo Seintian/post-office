@@ -17,7 +17,7 @@ typedef struct {
     long overcommit;
     long surplus;
     long reserved;
-} hugepage_info_t;
+} po_hugepage_info_t;
 
 typedef struct {
     int32_t physical_cores;
@@ -30,7 +30,7 @@ typedef struct {
     int64_t total_ram;
     int64_t free_ram;
     int64_t page_size;
-    hugepage_info_t hugepage_info;
+    po_hugepage_info_t hugepage_info;
     uint64_t max_open_files;
     uint64_t max_processes;
     uint64_t max_stack_size;

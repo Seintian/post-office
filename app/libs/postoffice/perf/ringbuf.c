@@ -32,13 +32,13 @@ void perf_ringbuf_set_cacheline(size_t cacheline_bytes) {
     }
 }
 
-perf_ringbuf_t *perf_ringbuf_create(size_t capacity) {
+po_perf_ringbuf_t *perf_ringbuf_create(size_t capacity) {
     if (capacity == 0 || (capacity & (capacity - 1)) != 0) {
         errno = EINVAL;
         return NULL;
     }
 
-    perf_ringbuf_t *rb = calloc(1, sizeof(*rb));
+    po_perf_ringbuf_t *rb = calloc(1, sizeof(*rb));
     if (!rb) {
         return NULL;
     }
@@ -64,12 +64,12 @@ perf_ringbuf_t *perf_ringbuf_create(size_t capacity) {
     return rb;
 }
 
-void perf_ringbuf_destroy(perf_ringbuf_t **prb) {
+void perf_ringbuf_destroy(po_perf_ringbuf_t **prb) {
     if (!*prb) {
         return;
     }
 
-    perf_ringbuf_t *rb = *prb;
+    po_perf_ringbuf_t *rb = *prb;
     free(rb->slots);
     free(rb->head);
     free(rb->tail);
@@ -77,7 +77,7 @@ void perf_ringbuf_destroy(perf_ringbuf_t **prb) {
     *prb = NULL;
 }
 
-int perf_ringbuf_enqueue(perf_ringbuf_t *rb, void *item) {
+int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item) {
     size_t head = atomic_load_explicit(rb->head, memory_order_acquire);
     size_t tail = atomic_load_explicit(rb->tail, memory_order_relaxed);
 
@@ -91,7 +91,7 @@ int perf_ringbuf_enqueue(perf_ringbuf_t *rb, void *item) {
     return 0;
 }
 
-int perf_ringbuf_dequeue(perf_ringbuf_t *rb, void **out) {
+int perf_ringbuf_dequeue(po_perf_ringbuf_t *rb, void **out) {
     size_t head = atomic_load_explicit(rb->head, memory_order_relaxed);
     size_t tail = atomic_load_explicit(rb->tail, memory_order_acquire);
 
@@ -108,14 +108,14 @@ int perf_ringbuf_dequeue(perf_ringbuf_t *rb, void **out) {
     return 0;
 }
 
-size_t perf_ringbuf_count(const perf_ringbuf_t *rb) {
+size_t perf_ringbuf_count(const po_perf_ringbuf_t *rb) {
     size_t head = atomic_load_explicit(rb->head, memory_order_acquire);
     size_t tail = atomic_load_explicit(rb->tail, memory_order_acquire);
     // how many writes ahead of reads?
     return (tail - head);
 }
 
-int perf_ringbuf_peek(const perf_ringbuf_t *rb, void **out) {
+int perf_ringbuf_peek(const po_perf_ringbuf_t *rb, void **out) {
     size_t head = atomic_load_explicit(rb->head, memory_order_acquire);
     size_t tail = atomic_load_explicit(rb->tail, memory_order_acquire);
 
@@ -130,7 +130,7 @@ int perf_ringbuf_peek(const perf_ringbuf_t *rb, void **out) {
     return 0;
 }
 
-int perf_ringbuf_peek_at(const perf_ringbuf_t *rb, size_t idx, void **out) {
+int perf_ringbuf_peek_at(const po_perf_ringbuf_t *rb, size_t idx, void **out) {
     size_t cnt = perf_ringbuf_count(rb);
     if (idx >= cnt) {
         return -1;
@@ -144,7 +144,7 @@ int perf_ringbuf_peek_at(const perf_ringbuf_t *rb, size_t idx, void **out) {
     return 0;
 }
 
-int perf_ringbuf_advance(perf_ringbuf_t *rb, size_t n) {
+int perf_ringbuf_advance(po_perf_ringbuf_t *rb, size_t n) {
     size_t cnt = perf_ringbuf_count(rb);
     if (n > cnt) {
         return -1;

@@ -28,23 +28,23 @@ int main(void) {
             level = LOG_FATAL;
     }
 
-    logger_config cfg = {
+    po_logger_config_t cfg = {
         .level = level,
         .ring_capacity = 1u << 12,
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
     };
-    if (logger_init(&cfg) != 0) {
+    if (po_logger_init(&cfg) != 0) {
         fprintf(stderr, "logger: init failed\n");
         return 1;
     }
 
-    logger_add_sink_console(true);
+    po_logger_add_sink_console(true);
 
     const char *use_syslog = getenv("SYSLOG");
     if (use_syslog && *use_syslog == '1') {
         const char *ident = getenv("SYSLOG_IDENT");
-        logger_add_sink_syslog(ident && *ident ? ident : NULL);
+    po_logger_add_sink_syslog(ident && *ident ? ident : NULL);
     }
 
     LOG_INFO("logger smoke test started pid=%d", getpid());
@@ -52,6 +52,6 @@ int main(void) {
     LOG_WARN("warn: %s", "sample");
     LOG_ERROR("error: code=%d", -1);
 
-    logger_shutdown();
+    po_logger_shutdown();
     return 0;
 }

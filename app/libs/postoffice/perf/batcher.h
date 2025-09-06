@@ -12,7 +12,7 @@ extern "C" {
 #endif
 
 /// Opaque batcher type
-typedef struct perf_batcher perf_batcher_t;
+typedef struct perf_batcher po_perf_batcher_t;
 
 /**
  * @brief Create a blocking batcher over a ring buffer.
@@ -29,14 +29,14 @@ typedef struct perf_batcher perf_batcher_t;
  *       the caller to detect invalid state (e.g. if the batcher was
  *       already destroyed).
  */
-perf_batcher_t *perf_batcher_create(perf_ringbuf_t *rb, size_t batch_size) __nonnull((1));
+po_perf_batcher_t *perf_batcher_create(po_perf_ringbuf_t *rb, size_t batch_size) __nonnull((1));
 
 /**
  * @brief Destroy a batcher, free resources.
  *
  * @note This doesn't free the underlying ring buffer.
  */
-void perf_batcher_destroy(perf_batcher_t **b) __nonnull((1));
+void perf_batcher_destroy(po_perf_batcher_t **b) __nonnull((1));
 
 /**
  * @brief Enqueue one item into the batcher.
@@ -45,7 +45,7 @@ void perf_batcher_destroy(perf_batcher_t **b) __nonnull((1));
  *
  * @return 0 on success, -1 on ring-full or other error (errno set)
  */
-int perf_batcher_enqueue(perf_batcher_t *b, void *item) __nonnull((1, 2));
+int perf_batcher_enqueue(po_perf_batcher_t *b, void *item) __nonnull((1, 2));
 
 /**
  * @brief Flush the batcher, ensuring all items are processed.
@@ -57,7 +57,7 @@ int perf_batcher_enqueue(perf_batcher_t *b, void *item) __nonnull((1, 2));
  * @param fd  File descriptor to signal completion (e.g. eventfd)
  * @return    0 on success, -1 on error (errno set)
  */
-int perf_batcher_flush(perf_batcher_t *b, int fd) __nonnull((1));
+int perf_batcher_flush(po_perf_batcher_t *b, int fd) __nonnull((1));
 
 /**
  * @brief Dequeue up to batch_size items, blocking until at least one is available.
@@ -66,7 +66,7 @@ int perf_batcher_flush(perf_batcher_t *b, int fd) __nonnull((1));
  * @param out Array of pointers, length >= batch_size
  * @return    Number of items dequeued (>=1), or -1 on error (errno set)
  */
-ssize_t perf_batcher_next(perf_batcher_t *b, void **out) __nonnull((1, 2));
+ssize_t perf_batcher_next(po_perf_batcher_t *b, void **out) __nonnull((1, 2));
 
 /**
  * @brief Check if the batcher is empty (no items queued).
@@ -74,7 +74,7 @@ ssize_t perf_batcher_next(perf_batcher_t *b, void **out) __nonnull((1, 2));
  * @param b Batcher handle
  * @return true if empty, false if there are items queued.
  */
-bool perf_batcher_is_empty(const perf_batcher_t *b) __nonnull((1));
+bool perf_batcher_is_empty(const po_perf_batcher_t *b) __nonnull((1));
 
 #ifdef __cplusplus
 }

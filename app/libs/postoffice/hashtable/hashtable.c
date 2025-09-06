@@ -24,7 +24,7 @@
 /** @brief Upper load factor threshold for resizing the table up. */
 #define LOAD_FACTOR_UP_THRESHOLD 0.7f
 
-/** @brief Upper load factor tolerance to continue hashtable_put() if hashtable_resize() fails */
+/** @brief Upper load factor tolerance to continue po_hashtable_put() if po_hashtable_resize() fails */
 #define LOAD_FACTOR_UP_TOLERANCE 1.0f
 
 /** @brief Lower load factor threshold for resizing the table down. */
@@ -51,7 +51,7 @@ typedef struct hashtable_node {
  * @struct hashtable
  * @brief Structure to represent the hashtable.
  */
-struct hashtable {
+struct po_hashtable {
     /** @brief Array of pointers to hash nodes (buckets). */
     hashtable_node_t **buckets;
 
@@ -68,8 +68,8 @@ struct hashtable {
     size_t (*hash_func)(const void *);
 } __attribute__((packed));
 
-struct hashtable_iter {
-    const hashtable_t *table;  ///< Pointer to the hashtable being iterated.
+struct po_hashtable_iter {
+    const po_hashtable_t *table;  ///< Pointer to the hashtable being iterated.
     size_t index;              ///< Current index in the hashtable's bucket array.
     hashtable_node_t *current; ///< Pointer to the current node in the iteration.
 };
@@ -104,7 +104,7 @@ static hashtable_node_t *hashtable_node_create(void *key, void *value) {
  * @param[in] new_capacity The new capacity to resize to.
  * @return -1 on failure, 0 on success
  */
-static int hashtable_resize(hashtable_t *table, size_t new_capacity) {
+static int po_hashtable_resize(po_hashtable_t *table, size_t new_capacity) {
     new_capacity = next_prime(new_capacity);
 
     hashtable_node_t **new_buckets = calloc(new_capacity, sizeof(hashtable_node_t *));
@@ -135,12 +135,10 @@ static int hashtable_resize(hashtable_t *table, size_t new_capacity) {
 
 // *** API *** //
 
-hashtable_t *hashtable_create_sized(
-    int (*compare)(const void *, const void *),
-    unsigned long (*hash_func)(const void *),
-    size_t base_capacity
-) {
-    hashtable_t *table = malloc(sizeof(hashtable_t));
+po_hashtable_t *po_hashtable_create_sized(int (*compare)(const void *, const void *),
+                                          unsigned long (*hash_func)(const void *),
+                                          size_t base_capacity) {
+    po_hashtable_t *table = malloc(sizeof(po_hashtable_t));
     if (!table)
         return NULL;
 
@@ -158,19 +156,17 @@ hashtable_t *hashtable_create_sized(
     return table;
 }
 
-hashtable_t *hashtable_create(
-    int (*compare)(const void *, const void *),
-    unsigned long (*hash_func)(const void *)
-) {
-    return hashtable_create_sized(compare, hash_func, INITIAL_CAPACITY);
+po_hashtable_t *po_hashtable_create(int (*compare)(const void *, const void *),
+                                    unsigned long (*hash_func)(const void *)) {
+    return po_hashtable_create_sized(compare, hash_func, INITIAL_CAPACITY);
 }
 
 // *** Basic hashtable operations *** //
 
-int hashtable_put(hashtable_t *table, void *key, void *value) {
-    float load_factor = hashtable_load_factor(table);
+int po_hashtable_put(po_hashtable_t *table, void *key, void *value) {
+    float load_factor = po_hashtable_load_factor(table);
     if (load_factor > LOAD_FACTOR_UP_THRESHOLD &&
-        hashtable_resize(table, table->capacity * 2) == -1 &&
+    po_hashtable_resize(table, table->capacity * 2) == -1 &&
         load_factor > LOAD_FACTOR_UP_TOLERANCE)
         return -1;
 
@@ -197,10 +193,10 @@ int hashtable_put(hashtable_t *table, void *key, void *value) {
     return 1;
 }
 
-int hashtable_remove(hashtable_t *table, const void *key) {
-    if (hashtable_load_factor(table) < LOAD_FACTOR_DOWN_THRESHOLD &&
+int po_hashtable_remove(po_hashtable_t *table, const void *key) {
+    if (po_hashtable_load_factor(table) < LOAD_FACTOR_DOWN_THRESHOLD &&
         table->capacity / 2 >= INITIAL_CAPACITY &&
-        hashtable_resize(table, table->capacity / 2) == -1)
+    po_hashtable_resize(table, table->capacity / 2) == -1)
         return -1;
 
     size_t hash = table->hash_func(key);
@@ -229,7 +225,7 @@ int hashtable_remove(hashtable_t *table, const void *key) {
     return 0;
 }
 
-void *hashtable_get(const hashtable_t *table, const void *key) {
+void *po_hashtable_get(const po_hashtable_t *table, const void *key) {
     size_t hash = table->hash_func(key);
     size_t index = hash % table->capacity;
     hashtable_node_t *node = table->buckets[index];
@@ -244,7 +240,7 @@ void *hashtable_get(const hashtable_t *table, const void *key) {
     return NULL;
 }
 
-int hashtable_contains_key(const hashtable_t *table, const void *key) {
+int po_hashtable_contains_key(const po_hashtable_t *table, const void *key) {
     size_t hash = table->hash_func(key);
     size_t index = hash % table->capacity;
     hashtable_node_t *node = table->buckets[index];
@@ -259,15 +255,15 @@ int hashtable_contains_key(const hashtable_t *table, const void *key) {
     return 0;
 }
 
-size_t hashtable_size(const hashtable_t *table) {
+size_t po_hashtable_size(const po_hashtable_t *table) {
     return table->size;
 }
 
-size_t hashtable_capacity(const hashtable_t *table) {
+size_t po_hashtable_capacity(const po_hashtable_t *table) {
     return table->capacity;
 }
 
-void **hashtable_keyset(const hashtable_t *table) {
+void **po_hashtable_keyset(const po_hashtable_t *table) {
     if (table->size == 0)
         return NULL;
 
@@ -288,8 +284,8 @@ void **hashtable_keyset(const hashtable_t *table) {
     return keys;
 }
 
-int hashtable_clear(hashtable_t *table) {
-    if (hashtable_size(table) == 0)
+int po_hashtable_clear(po_hashtable_t *table) {
+    if (po_hashtable_size(table) == 0)
         return 0;
 
     for (size_t i = 0; i < table->capacity; i++) {
@@ -309,13 +305,13 @@ int hashtable_clear(hashtable_t *table) {
     return 1;
 }
 
-void hashtable_destroy(hashtable_t **table) {
+void po_hashtable_destroy(po_hashtable_t **table) {
     if (!*table)
         return;
 
-    hashtable_t *_table = *table;
+    po_hashtable_t *_table = *table;
     if (_table) {
-        hashtable_clear(_table);
+        po_hashtable_clear(_table);
         free(_table->buckets);
     }
 
@@ -325,8 +321,8 @@ void hashtable_destroy(hashtable_t **table) {
 
 // Extended hashtable operations
 
-hashtable_iter_t *hashtable_iterator(const hashtable_t *ht) {
-    hashtable_iter_t *it = calloc(1, sizeof(hashtable_iter_t));
+po_hashtable_iter_t *po_hashtable_iterator(const po_hashtable_t *ht) {
+    po_hashtable_iter_t *it = calloc(1, sizeof(po_hashtable_iter_t));
     if (!it)
         return NULL;
 
@@ -335,7 +331,7 @@ hashtable_iter_t *hashtable_iterator(const hashtable_t *ht) {
     return it;
 }
 
-bool hashtable_iter_next(hashtable_iter_t *it) {
+bool po_hashtable_iter_next(po_hashtable_iter_t *it) {
     // If currently in a bucket chain, advance to next node
     if (it->current && it->current->next) {
         it->current = it->current->next;
@@ -356,19 +352,19 @@ bool hashtable_iter_next(hashtable_iter_t *it) {
     return false;
 }
 
-void *hashtable_iter_key(const hashtable_iter_t *it) {
+void *po_hashtable_iter_key(const po_hashtable_iter_t *it) {
     return it->current->key;
 }
 
-void *hashtable_iter_value(const hashtable_iter_t *it) {
+void *po_hashtable_iter_value(const po_hashtable_iter_t *it) {
     return it->current->value;
 }
 
-float hashtable_load_factor(const hashtable_t *table) {
+float po_hashtable_load_factor(const po_hashtable_t *table) {
     return (float)table->size / (float)table->capacity;
 }
 
-int hashtable_replace(const hashtable_t *table, const void *key, void *new_value) {
+int po_hashtable_replace(const po_hashtable_t *table, const void *key, void *new_value) {
     size_t hash = table->hash_func(key);
     size_t index = hash % table->capacity;
     hashtable_node_t *node = table->buckets[index];
@@ -385,7 +381,7 @@ int hashtable_replace(const hashtable_t *table, const void *key, void *new_value
     return 0;
 }
 
-void hashtable_map(const hashtable_t *table, void (*func)(void *key, void *value)) {
+void po_hashtable_map(const po_hashtable_t *table, void (*func)(void *key, void *value)) {
     for (size_t i = 0; i < table->capacity; i++) {
         hashtable_node_t *node = table->buckets[i];
 
@@ -396,7 +392,7 @@ void hashtable_map(const hashtable_t *table, void (*func)(void *key, void *value
     }
 }
 
-void **hashtable_values(const hashtable_t *table) {
+void **po_hashtable_values(const po_hashtable_t *table) {
     void **values = calloc(table->size, sizeof(void *));
     if (!values)
         return NULL;
@@ -414,11 +410,8 @@ void **hashtable_values(const hashtable_t *table) {
     return values;
 }
 
-int hashtable_equals(
-    const hashtable_t *table1,
-    const hashtable_t *table2,
-    int (*compare)(const void *, const void *)
-) {
+int po_hashtable_equals(const po_hashtable_t *table1, const po_hashtable_t *table2,
+                     int (*compare)(const void *, const void *)) {
     if (table1->size != table2->size)
         return 0;
 
@@ -441,23 +434,23 @@ int hashtable_equals(
     return 1;
 }
 
-void hashtable_merge(hashtable_t *dest, const hashtable_t *source) {
+void po_hashtable_merge(po_hashtable_t *dest, const po_hashtable_t *source) {
     for (size_t i = 0; i < source->capacity; i++) {
         hashtable_node_t *node = source->buckets[i];
 
         while (node) {
-            hashtable_put(dest, node->key, node->value);
+            po_hashtable_put(dest, node->key, node->value);
             node = node->next;
         }
     }
 }
 
-hashtable_t *hashtable_copy(const hashtable_t *table) {
-    hashtable_t *new_table = hashtable_create(table->compare, table->hash_func);
+po_hashtable_t *po_hashtable_copy(const po_hashtable_t *table) {
+    po_hashtable_t *new_table = po_hashtable_create(table->compare, table->hash_func);
     if (!new_table)
         return NULL;
 
-    hashtable_merge(new_table, table);
+    po_hashtable_merge(new_table, table);
 
     return new_table;
 }

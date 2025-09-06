@@ -64,12 +64,8 @@ static int write_full(int fd, const void *buf, size_t len) {
     return 0;
 }
 
-int framing_write_msg(
-    int fd,
-    const po_header_t *header_net,
-    const uint8_t *payload,
-    uint32_t payload_len
-) {
+int framing_write_msg(int fd, const po_header_t *header_net, const uint8_t *payload,
+                      uint32_t payload_len) {
     if (payload_len > g_max_payload) {
         errno = EMSGSIZE;
         return -1;
@@ -134,11 +130,7 @@ int framing_write_msg(
     return 0;
 }
 
-int framing_write_zcp(
-    int fd,
-    const po_header_t *header_net,
-    const zcp_buffer_t *payload_buf
-) {
+int framing_write_zcp(int fd, const po_header_t *header_net, const zcp_buffer_t *payload_buf) {
     // Use the header's payload_len as authoritative size for the payload.
     // Treat payload_buf as a pointer to contiguous bytes.
     uint32_t payload_len = ntohl(header_net->payload_len);
@@ -284,13 +276,8 @@ int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
     return 0;
 }
 
-int framing_read_msg_into(
-    int fd,
-    po_header_t *header_out,
-    void *payload_buf,
-    uint32_t payload_buf_size,
-    uint32_t *payload_len_out
-) {
+int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
+                          uint32_t payload_buf_size, uint32_t *payload_len_out) {
     uint32_t len_be = 0;
     int rc = read_full(fd, &len_be, sizeof(len_be));
     if (rc != 0)

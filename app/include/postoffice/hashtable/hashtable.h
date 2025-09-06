@@ -7,8 +7,8 @@
  * @see prime.h
  */
 
-#ifndef HASHTABLE_H
-#define HASHTABLE_H
+#ifndef PO_HASHTABLE_H
+#define PO_HASHTABLE_H
 
 // *** INCLUDES *** //
 
@@ -22,11 +22,10 @@ extern "C" {
 
 // *** TYPEDEFS *** //
 
-typedef struct hashtable hashtable_t;
+typedef struct po_hashtable po_hashtable_t;
+typedef struct po_hashtable_iter po_hashtable_iter_t;
 
-typedef struct hashtable_iter hashtable_iter_t;
-
-// *** API *** //
+// *** API *** // NOTE: canonical po_hashtable_* names
 
 /**
  * @brief creates a new HashTable
@@ -43,10 +42,9 @@ typedef struct hashtable_iter hashtable_iter_t;
  * @note The default initial capacity is 17.
  * @note The caller is responsible for freeing the hash table.
  */
-hashtable_t *hashtable_create(
-    int (*compare)(const void *, const void *),
-    unsigned long (*hash_func)(const void *)
-) __nonnull((1, 2)) __attribute_malloc__;
+po_hashtable_t *po_hashtable_create(int (*compare)(const void *, const void *),
+                                    unsigned long (*hash_func)(const void *))
+    __nonnull((1, 2)) __attribute_malloc__;
 
 /**
  * @brief creates a new HashTable with a specified base capacity
@@ -64,11 +62,9 @@ hashtable_t *hashtable_create(
  * @note The caller is responsible for freeing the hash table.
  * @note The base capacity should be a prime number.
  */
-hashtable_t *hashtable_create_sized(
-    int (*compare)(const void *, const void *),
-    unsigned long (*hash_func)(const void *),
-    size_t base_capacity
-) __nonnull((1, 2)) __attribute_malloc__;
+po_hashtable_t *po_hashtable_create_sized(int (*compare)(const void *, const void *),
+                                          unsigned long (*hash_func)(const void *), size_t base_capacity)
+    __nonnull((1, 2)) __attribute_malloc__;
 
 // *** Basic hash table operations *** //
 
@@ -88,7 +84,7 @@ hashtable_t *hashtable_create_sized(
  * @return 1 if a new key-value pair was inserted, 0 if the key already existed and the value was
  * updated, -1 on failure
  */
-int hashtable_put(hashtable_t *table, void *key, void *value) __nonnull((1, 2));
+int po_hashtable_put(po_hashtable_t *table, void *key, void *value) __nonnull((1, 2));
 
 /**
  * @brief gets the value for a given key
@@ -100,7 +96,7 @@ int hashtable_put(hashtable_t *table, void *key, void *value) __nonnull((1, 2));
  * @return void * corresponding to the value for the given key, NULL if the key does not exist or
  * the table is NULL
  */
-void *hashtable_get(const hashtable_t *table, const void *key) __nonnull((1, 2));
+void *po_hashtable_get(const po_hashtable_t *table, const void *key) __nonnull((1, 2));
 
 /**
  * @brief checks if a key exists in the hash table
@@ -112,7 +108,7 @@ void *hashtable_get(const hashtable_t *table, const void *key) __nonnull((1, 2))
  * @param[in] key The key to check for
  * @return integer 1 if the key exists, 0 if it does not
  */
-int hashtable_contains_key(const hashtable_t *table, const void *key) __nonnull((1, 2));
+int po_hashtable_contains_key(const po_hashtable_t *table, const void *key) __nonnull((1, 2));
 
 /**
  * @brief removes a key-value pair from the hash table
@@ -128,7 +124,7 @@ int hashtable_contains_key(const hashtable_t *table, const void *key) __nonnull(
  * @param[in] key The key to remove
  * @return 1 on success, 0 if the key does not exist
  */
-int hashtable_remove(hashtable_t *table, const void *key) __nonnull((1, 2));
+int po_hashtable_remove(po_hashtable_t *table, const void *key) __nonnull((1, 2));
 
 /**
  * @brief gets the current size of the hash table
@@ -138,7 +134,7 @@ int hashtable_remove(hashtable_t *table, const void *key) __nonnull((1, 2));
  * @param[in] table The hash table to get the size of
  * @return integer representing the size of the hash table, or -1 on failure
  */
-size_t hashtable_size(const hashtable_t *table) __nonnull((1));
+size_t po_hashtable_size(const po_hashtable_t *table) __nonnull((1));
 
 /**
  * @brief gets the current capacity of the hash table
@@ -148,7 +144,7 @@ size_t hashtable_size(const hashtable_t *table) __nonnull((1));
  * @param[in] table The hash table to get the capacity of
  * @return integer representing the capacity of the hash table, or -1 on failure
  */
-size_t hashtable_capacity(const hashtable_t *table) __nonnull((1));
+size_t po_hashtable_capacity(const po_hashtable_t *table) __nonnull((1));
 
 /**
  * @brief gets an array of all keys in the hash table
@@ -162,7 +158,7 @@ size_t hashtable_capacity(const hashtable_t *table) __nonnull((1));
  * @note The caller is responsible for freeing the array of keys.
  * @note The array is NOT NULL-terminated. Use size() to determine length.
  */
-void **hashtable_keyset(const hashtable_t *table) __nonnull((1)) __attribute_malloc__;
+void **po_hashtable_keyset(const po_hashtable_t *table) __nonnull((1)) __attribute_malloc__;
 
 /**
  * @brief frees the hash table
@@ -171,7 +167,7 @@ void **hashtable_keyset(const hashtable_t *table) __nonnull((1)) __attribute_mal
  *
  * @param[in] table The hash table to free
  */
-void hashtable_destroy(hashtable_t **table) __nonnull((1));
+void po_hashtable_destroy(po_hashtable_t **table) __nonnull((1));
 
 // *** Extended hash table operations *** //
 
@@ -183,7 +179,7 @@ void hashtable_destroy(hashtable_t **table) __nonnull((1));
  *
  * @note The user is responsible for freeing the iterator after use.
  */
-hashtable_iter_t *hashtable_iterator(const hashtable_t *ht);
+po_hashtable_iter_t *po_hashtable_iterator(const po_hashtable_t *ht);
 
 /**
  * @brief Advance the iterator to the next entry.
@@ -192,17 +188,17 @@ hashtable_iter_t *hashtable_iterator(const hashtable_t *ht);
  * @return true if an entry is available (node/key/value valid),
  *         false when iteration is done.
  */
-bool hashtable_iter_next(hashtable_iter_t *it);
+bool po_hashtable_iter_next(po_hashtable_iter_t *it);
 
 /**
  * @brief Return the key at the iterator's current position.
  */
-void *hashtable_iter_key(const hashtable_iter_t *it);
+void *po_hashtable_iter_key(const po_hashtable_iter_t *it);
 
 /**
  * @brief Return the value at the iterator's current position.
  */
-void *hashtable_iter_value(const hashtable_iter_t *it);
+void *po_hashtable_iter_value(const po_hashtable_iter_t *it);
 
 /**
  * @brief gets the current load factor of the hash table
@@ -212,7 +208,7 @@ void *hashtable_iter_value(const hashtable_iter_t *it);
  * @param[in] table The hash table to get the load factor of
  * @return float representing the load factor of the hash table, or -1 on failure
  */
-float hashtable_load_factor(const hashtable_t *table) __nonnull((1));
+float po_hashtable_load_factor(const po_hashtable_t *table) __nonnull((1));
 
 /**
  * @brief replaces the value for a given key
@@ -224,7 +220,7 @@ float hashtable_load_factor(const hashtable_t *table) __nonnull((1));
  * @param[in] new_value The new value to insert
  * @return 1 on success, 0 if the key does not exist
  */
-int hashtable_replace(const hashtable_t *table, const void *key, void *new_value) __nonnull((1, 2));
+int po_hashtable_replace(const po_hashtable_t *table, const void *key, void *new_value) __nonnull((1, 2));
 
 /**
  * @brief clears all elements from the hash table
@@ -236,7 +232,7 @@ int hashtable_replace(const hashtable_t *table, const void *key, void *new_value
  * @param[in] table The hash table to clear
  * @return 1 on success, 0 if the table is already empty
  */
-int hashtable_clear(hashtable_t *table) __nonnull((1));
+int po_hashtable_clear(po_hashtable_t *table) __nonnull((1));
 
 /**
  * @brief maps a function over all key-value pairs in the hash table
@@ -249,7 +245,7 @@ int hashtable_clear(hashtable_t *table) __nonnull((1));
  * @note The order of the key-value pairs is not guaranteed.
  * @note The function should not free the key or value pointers.
  */
-void hashtable_map(const hashtable_t *table, void (*func)(void *key, void *value))
+void po_hashtable_map(const po_hashtable_t *table, void (*func)(void *key, void *value))
     __nonnull((1, 2));
 
 /**
@@ -264,7 +260,7 @@ void hashtable_map(const hashtable_t *table, void (*func)(void *key, void *value
  * @note The caller is responsible for freeing the array of values.
  * @note The array is NOT NULL-terminated. Use size() to determine length.
  */
-void **hashtable_values(const hashtable_t *table) __nonnull((1)) __attribute_malloc__;
+void **po_hashtable_values(const po_hashtable_t *table) __nonnull((1)) __attribute_malloc__;
 
 /**
  * @brief checks if two hash tables are equal
@@ -278,10 +274,8 @@ void **hashtable_values(const hashtable_t *table) __nonnull((1)) __attribute_mal
  *                    should return 0 if values are equal, non-zero otherwise
  * @return 1 if the hash tables are equal, 0 if they are not, or -1 on failure
  */
-int hashtable_equals(
-    const hashtable_t *table1, const hashtable_t *table2,
-    int (*compare)(const void *, const void *)
-) __nonnull((1, 2, 3));
+int po_hashtable_equals(const po_hashtable_t *table1, const po_hashtable_t *table2,
+                        int (*compare)(const void *, const void *)) __nonnull((1, 2, 3));
 
 /**
  * @brief copies a hash table
@@ -294,7 +288,7 @@ int hashtable_equals(
  *
  * @note The caller is responsible for freeing the new hash table.
  */
-hashtable_t *hashtable_copy(const hashtable_t *table) __nonnull((1)) __attribute_malloc__;
+po_hashtable_t *po_hashtable_copy(const po_hashtable_t *table) __nonnull((1)) __attribute_malloc__;
 
 /**
  * @brief merges two hash tables
@@ -305,10 +299,10 @@ hashtable_t *hashtable_copy(const hashtable_t *table) __nonnull((1)) __attribute
  * @param[in] dest The destination hash table
  * @param[in] source The source hash table
  */
-void hashtable_merge(hashtable_t *dest, const hashtable_t *source) __nonnull((1, 2));
+void po_hashtable_merge(po_hashtable_t *dest, const po_hashtable_t *source) __nonnull((1, 2));
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // HASHTABLE_H
+#endif // PO_HASHTABLE_H

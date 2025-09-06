@@ -99,11 +99,8 @@ int socket_listen(const char *address, const char *port, int backlog) {
 
     int listen_fd = -1;
     for (struct addrinfo *ai = res; ai; ai = ai->ai_next) {
-        int fd = socket(
-            ai->ai_family,
-            ai->ai_socktype | SOCK_NONBLOCK | SOCK_CLOEXEC,
-            ai->ai_protocol
-        );
+        int fd =
+            socket(ai->ai_family, ai->ai_socktype | SOCK_NONBLOCK | SOCK_CLOEXEC, ai->ai_protocol);
         if (fd < 0)
             continue;
 
@@ -144,11 +141,8 @@ int socket_connect(const char *address, const char *port) {
 
     int fd_out = -1;
     for (struct addrinfo *ai = res; ai; ai = ai->ai_next) {
-        int fd = socket(
-            ai->ai_family,
-            ai->ai_socktype | SOCK_NONBLOCK | SOCK_CLOEXEC,
-            ai->ai_protocol
-        );
+        int fd =
+            socket(ai->ai_family, ai->ai_socktype | SOCK_NONBLOCK | SOCK_CLOEXEC, ai->ai_protocol);
         if (fd < 0)
             continue;
 
@@ -201,15 +195,8 @@ int socket_accept(int listen_fd, char *out_addr_buf, size_t addr_buf_len) {
     if (out_addr_buf && addr_buf_len) {
         char host[NI_MAXHOST];
         char serv[NI_MAXSERV];
-        if (getnameinfo(
-                (struct sockaddr *)&ss,
-                slen,
-                host,
-                sizeof(host),
-                serv,
-                sizeof(serv),
-                NI_NUMERICHOST | NI_NUMERICSERV
-            ) == 0)
+        if (getnameinfo((struct sockaddr *)&ss, slen, host, sizeof(host), serv, sizeof(serv),
+                        NI_NUMERICHOST | NI_NUMERICSERV) == 0)
             snprintf(out_addr_buf, addr_buf_len, "%s:%s", host, serv);
 
         else if (addr_buf_len)
@@ -232,8 +219,7 @@ int socket_listen_unix(const char *path, int backlog) {
     if (path[0] == '\0') {
         // abstract namespace (Linux): first byte remains 0
         memcpy(sun.sun_path, path, len);
-    }
-    else {
+    } else {
         // filesystem path: unlink if exists
         if (len >= sizeof(sun.sun_path)) {
             close(fd);
@@ -294,5 +280,6 @@ int socket_connect_unix(const char *path) {
 
 void socket_close(int fd) {
     if (fd >= 0)
-        while (close(fd) == -1 && errno == EINTR); // retry
+        while (close(fd) == -1 && errno == EINTR)
+            ; // retry
 }

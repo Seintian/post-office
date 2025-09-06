@@ -1,4 +1,4 @@
-#include "hashset/hashset.h"
+#include "postoffice/hashset/hashset.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -34,7 +34,7 @@ typedef struct hashset_node {
     struct hashset_node *next;
 } __attribute__((packed)) hashset_node_t;
 
-struct hashset {
+struct po_hashset {
     /** @brief Array of pointers to hash nodes (buckets). */
     hashset_node_t **buckets;
 
@@ -79,7 +79,7 @@ static hashset_node_t *hashset_node_create(void *key) {
  * @param[in] new_capacity New capacity for the hash set.
  * @return 0 on success, -1 on failure.
  */
-static int hashset_resize(hashset_t *set, size_t new_capacity) {
+static int hashset_resize(po_hashset_t *set, size_t new_capacity) {
     new_capacity = next_prime(new_capacity);
 
     hashset_node_t **new_buckets = calloc(new_capacity, sizeof(hashset_node_t *));
@@ -110,11 +110,9 @@ static int hashset_resize(hashset_t *set, size_t new_capacity) {
 
 // *** API *** //
 
-hashset_t *hashset_create_sized(
-    int (*compare)(const void *, const void *),
-    unsigned long (*hash_func)(const void *), size_t initial_capacity
-) {
-    hashset_t *set = malloc(sizeof(*set));
+po_hashset_t *po_hashset_create_sized(int (*compare)(const void *, const void *),
+                                      unsigned long (*hash_func)(const void *), size_t initial_capacity) {
+    po_hashset_t *set = malloc(sizeof(*set));
     if (!set)
         return NULL;
 
@@ -132,17 +130,15 @@ hashset_t *hashset_create_sized(
     return set;
 }
 
-hashset_t *hashset_create(
-    int (*compare)(const void *, const void *),
-    unsigned long (*hash_func)(const void *)
-) {
-    return hashset_create_sized(compare, hash_func, INITIAL_CAPACITY);
+po_hashset_t *po_hashset_create(int (*compare)(const void *, const void *),
+                                unsigned long (*hash_func)(const void *)) {
+    return po_hashset_create_sized(compare, hash_func, INITIAL_CAPACITY);
 }
 
 // *** Basic hashset operations *** //
 
-int hashset_add(hashset_t *set, void *key) {
-    float load_factor = hashset_load_factor(set);
+int po_hashset_add(po_hashset_t *set, void *key) {
+    float load_factor = po_hashset_load_factor(set);
     if (load_factor > LOAD_FACTOR_UP_THRESHOLD && hashset_resize(set, set->capacity * 2) == -1 &&
         load_factor > LOAD_FACTOR_UP_TOLERANCE) {
         return -1;
@@ -168,7 +164,7 @@ int hashset_add(hashset_t *set, void *key) {
     return 1;
 }
 
-int hashset_remove(hashset_t *set, const void *key) {
+int po_hashset_remove(po_hashset_t *set, const void *key) {
     if (set->size == 0)
         return 0;
 
@@ -187,7 +183,7 @@ int hashset_remove(hashset_t *set, const void *key) {
             free(node);
             set->size--;
 
-            if (hashset_load_factor(set) < LOAD_FACTOR_DOWN_THRESHOLD &&
+            if (po_hashset_load_factor(set) < LOAD_FACTOR_DOWN_THRESHOLD &&
                 set->capacity / 2 >= INITIAL_CAPACITY &&
                 hashset_resize(set, set->capacity / 2) == -1)
                 return -1;
@@ -202,7 +198,7 @@ int hashset_remove(hashset_t *set, const void *key) {
     return 0;
 }
 
-int hashset_contains(const hashset_t *set, const void *key) {
+int po_hashset_contains(const po_hashset_t *set, const void *key) {
     size_t hash = set->hash_func(key) % set->capacity;
     hashset_node_t *node = set->buckets[hash];
 
@@ -216,15 +212,15 @@ int hashset_contains(const hashset_t *set, const void *key) {
     return 0;
 }
 
-size_t hashset_size(const hashset_t *set) {
+size_t po_hashset_size(const po_hashset_t *set) {
     return set->size;
 }
 
-size_t hashset_capacity(const hashset_t *set) {
+size_t po_hashset_capacity(const po_hashset_t *set) {
     return set->capacity;
 }
 
-void **hashset_keys(const hashset_t *set) {
+void **po_hashset_keys(const po_hashset_t *set) {
     if (set->size == 0)
         return NULL;
 
@@ -245,7 +241,7 @@ void **hashset_keys(const hashset_t *set) {
     return keys;
 }
 
-void hashset_clear(hashset_t *set) {
+void po_hashset_clear(po_hashset_t *set) {
     if (set->size == 0)
         return;
 
@@ -263,13 +259,13 @@ void hashset_clear(hashset_t *set) {
     set->size = 0;
 }
 
-void hashset_destroy(hashset_t **set) {
+void po_hashset_destroy(po_hashset_t **set) {
     if (!*set)
         return;
 
-    hashset_t *_set = *set;
+    po_hashset_t *_set = *set;
     if (_set) {
-        hashset_clear(_set);
+        po_hashset_clear(_set);
         free(_set->buckets);
     }
 
@@ -279,7 +275,7 @@ void hashset_destroy(hashset_t **set) {
 
 // Extended hashset operations
 
-float hashset_load_factor(const hashset_t *set) {
+float po_hashset_load_factor(const po_hashset_t *set) {
     if (set->capacity == 0)
         return 0.0f;
 

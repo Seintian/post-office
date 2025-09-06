@@ -12,7 +12,7 @@ extern "C" {
 #endif
 
 /// Opaque ring‐buffer type
-typedef struct perf_ringbuf perf_ringbuf_t;
+typedef struct perf_ringbuf po_perf_ringbuf_t;
 
 /**
  * @brief Tell the ring‐buffer module what your hardware cache‐line size is.
@@ -28,47 +28,47 @@ void perf_ringbuf_set_cacheline(size_t cacheline_bytes);
  * @param capacity Number of slots (power‐of‐two)
  * @return pointer or NULL on failure
  */
-perf_ringbuf_t *perf_ringbuf_create(size_t capacity);
+po_perf_ringbuf_t *perf_ringbuf_create(size_t capacity);
 
 /**
  * @brief Destroy a ring buffer (frees all internal memory).
  */
-void perf_ringbuf_destroy(perf_ringbuf_t **rb) __nonnull((1));
+void perf_ringbuf_destroy(po_perf_ringbuf_t **rb) __nonnull((1));
 
 /**
  * @brief Enqueue one pointer into the ring.
  * @return 0 on success, -1 if the ring is full.
  */
-int perf_ringbuf_enqueue(perf_ringbuf_t *rb, void *item) __nonnull((1));
+int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item) __nonnull((1));
 
 /**
  * @brief Dequeue one pointer from the ring.
  * @return 0 on success (*out set), -1 if the ring is empty.
  */
-int perf_ringbuf_dequeue(perf_ringbuf_t *rb, void **out) __nonnull((1));
+int perf_ringbuf_dequeue(po_perf_ringbuf_t *rb, void **out) __nonnull((1));
 
 /**
  * @brief Return the approximate number of items currently in the ring.
  */
-size_t perf_ringbuf_count(const perf_ringbuf_t *rb) __nonnull((1));
+size_t perf_ringbuf_count(const po_perf_ringbuf_t *rb) __nonnull((1));
 
 /**
  * @brief Peek at the item at the head of the ring without dequeuing.
  * @return 0 on success (*out set), -1 if the ring is empty.
  */
-int perf_ringbuf_peek(const perf_ringbuf_t *rb, void **out) __nonnull((1));
+int perf_ringbuf_peek(const po_perf_ringbuf_t *rb, void **out) __nonnull((1));
 
 /**
  * @brief Peek at the item at offset `idx` from the head (0=head, 1=next, ...).
  * @return 0 on success (*out set), -1 if idx >= count.
  */
-int perf_ringbuf_peek_at(const perf_ringbuf_t *rb, size_t idx, void **out) __nonnull((1));
+int perf_ringbuf_peek_at(const po_perf_ringbuf_t *rb, size_t idx, void **out) __nonnull((1));
 
 /**
  * @brief Advance (i.e. dequeue) exactly `n` items from the head, dropping them.
  * @return 0 on success, -1 if n > count.
  */
-int perf_ringbuf_advance(perf_ringbuf_t *rb, size_t n) __nonnull((1));
+int perf_ringbuf_advance(po_perf_ringbuf_t *rb, size_t n) __nonnull((1));
 
 #ifdef __cplusplus
 }

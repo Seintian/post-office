@@ -126,8 +126,7 @@ int framing_write_zcp(int fd, const po_header_t *header, const zcp_buffer_t *pay
  * On success, header_out is filled (host order) and *payload_len_out is set.
  */
 int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
-                          uint32_t payload_buf_size, uint32_t *payload_len_out)
-    __nonnull((2));
+                          uint32_t payload_buf_size, uint32_t *payload_len_out) __nonnull((2));
 
 #ifdef __cplusplus
 }

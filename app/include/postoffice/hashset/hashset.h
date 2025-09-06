@@ -1,5 +1,5 @@
-#ifndef HASHSET_H
-#define HASHSET_H
+#ifndef PO_HASHSET_H
+#define PO_HASHSET_H
 
 /**
  * @file hashset.h
@@ -23,8 +23,8 @@
 extern "C" {
 #endif
 
-/// Opaque HashSet type
-typedef struct hashset hashset_t;
+// Opaque hashset handle (contents private to implementation)
+typedef struct po_hashset po_hashset_t;
 
 /**
  * @brief Create a new HashSet with default capacity.
@@ -33,10 +33,9 @@ typedef struct hashset hashset_t;
  * @param[in] hash_func Function to hash keys: returns unsigned long hash.
  * @return Pointer to the new set, or NULL on failure.
  */
-hashset_t *hashset_create(
-    int (*compare)(const void *, const void *),
-    unsigned long (*hash_func)(const void *)
-) __attribute_malloc__ __nonnull((1, 2));
+po_hashset_t *po_hashset_create(int (*compare)(const void *, const void *),
+                                unsigned long (*hash_func)(const void *)) __attribute_malloc__
+    __nonnull((1, 2));
 
 /**
  * @brief Create a new HashSet with specified initial capacity.
@@ -46,11 +45,9 @@ hashset_t *hashset_create(
  * @param[in] initial_capacity Prime number initial capacity.
  * @return Pointer to the new set, or NULL on failure.
  */
-hashset_t *hashset_create_sized(
-    int (*compare)(const void *, const void *),
-    unsigned long (*hash_func)(const void *),
-    size_t initial_capacity
-) __attribute_malloc__ __nonnull((1, 2));
+po_hashset_t *po_hashset_create_sized(int (*compare)(const void *, const void *),
+                                      unsigned long (*hash_func)(const void *),
+                                      size_t initial_capacity) __attribute_malloc__ __nonnull((1, 2));
 
 /**
  * @brief Insert a key into the set.
@@ -62,7 +59,7 @@ hashset_t *hashset_create_sized(
  * @param[in] key  The key to insert.
  * @return 1 if inserted, 0 if already present, -1 on error.
  */
-int hashset_add(hashset_t *set, void *key) __nonnull((1, 2));
+int po_hashset_add(po_hashset_t *set, void *key) __nonnull((1, 2));
 
 /**
  * @brief Remove a key from the set.
@@ -71,7 +68,7 @@ int hashset_add(hashset_t *set, void *key) __nonnull((1, 2));
  * @param[in] key  The key to remove.
  * @return 1 if removed, 0 if not found.
  */
-int hashset_remove(hashset_t *set, const void *key) __nonnull((1, 2));
+int po_hashset_remove(po_hashset_t *set, const void *key) __nonnull((1, 2));
 
 /**
  * @brief Check if a key exists in the set.
@@ -80,7 +77,7 @@ int hashset_remove(hashset_t *set, const void *key) __nonnull((1, 2));
  * @param[in] key  The key to find.
  * @return 1 if present, 0 otherwise.
  */
-int hashset_contains(const hashset_t *set, const void *key) __nonnull((1, 2));
+int po_hashset_contains(const po_hashset_t *set, const void *key) __nonnull((1, 2));
 
 /**
  * @brief Get the number of keys in the set.
@@ -88,7 +85,7 @@ int hashset_contains(const hashset_t *set, const void *key) __nonnull((1, 2));
  * @param[in] set The set to query.
  * @return Number of keys, or 0 if set is NULL.
  */
-size_t hashset_size(const hashset_t *set) __nonnull((1));
+size_t po_hashset_size(const po_hashset_t *set) __nonnull((1));
 
 /**
  * @brief Get the current capacity (bucket count) of the set.
@@ -96,7 +93,7 @@ size_t hashset_size(const hashset_t *set) __nonnull((1));
  * @param[in] set The set to query.
  * @return Current capacity, or 0 on error.
  */
-size_t hashset_capacity(const hashset_t *set) __nonnull((1));
+size_t po_hashset_capacity(const po_hashset_t *set) __nonnull((1));
 
 /**
  * @brief Get all keys in the set.
@@ -109,7 +106,7 @@ size_t hashset_capacity(const hashset_t *set) __nonnull((1));
  *
  * @note The array is NOT NULL-terminated. Use size() to determine length.
  */
-void **hashset_keys(const hashset_t *set) __attribute_malloc__ __nonnull((1));
+void **po_hashset_keys(const po_hashset_t *set) __attribute_malloc__ __nonnull((1));
 
 /**
  * @brief Clear all keys from the set.
@@ -119,7 +116,7 @@ void **hashset_keys(const hashset_t *set) __attribute_malloc__ __nonnull((1));
  *
  * @param[in] set The set to clear.
  */
-void hashset_clear(hashset_t *set) __nonnull((1));
+void po_hashset_clear(po_hashset_t *set) __nonnull((1));
 
 /**
  * @brief Free the HashSet.
@@ -128,7 +125,7 @@ void hashset_clear(hashset_t *set) __nonnull((1));
  *
  * @param[in] set The set to free.
  */
-void hashset_destroy(hashset_t **set) __nonnull((1));
+void po_hashset_destroy(po_hashset_t **set) __nonnull((1));
 
 /**
  * @brief Get the current load factor of the set.
@@ -138,10 +135,10 @@ void hashset_destroy(hashset_t **set) __nonnull((1));
  * @param[in] set The set to query.
  * @return Current load factor, or 0 on error.
  */
-float hashset_load_factor(const hashset_t *set) __nonnull((1));
+float po_hashset_load_factor(const po_hashset_t *set) __nonnull((1));
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // HASHSET_H
+#endif // PO_HASHSET_H

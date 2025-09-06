@@ -9,11 +9,11 @@
 #include "utils/errors.h"
 
 // -----------------------------------------------------------------------------
-// Public opaque types
+// Public opaque types (canonical po_ names)
 // -----------------------------------------------------------------------------
-typedef struct perf_counter perf_counter_t;
-typedef struct perf_timer perf_timer_t;
-typedef struct perf_histogram perf_histogram_t;
+typedef struct po_perf_counter po_perf_counter_t; // opaque
+typedef struct po_perf_timer po_perf_timer_t;     // opaque
+typedef struct po_perf_histogram po_perf_histogram_t; // opaque
 
 // -----------------------------------------------------------------------------
 // Initialization / Shutdown
@@ -27,12 +27,12 @@ typedef struct perf_histogram perf_histogram_t;
  * @param expected_histograms Expected number of histograms
  * @return 0 on success, -1 on failure (errno set)
  */
-int perf_init(size_t expected_counters, size_t expected_timers, size_t expected_histograms);
+int po_perf_init(size_t expected_counters, size_t expected_timers, size_t expected_histograms);
 
 /**
  * Gracefully shut down perf, flush events, destroy tables and report stats.
  */
-void perf_shutdown(FILE *out);
+void po_perf_shutdown(FILE *out);
 
 // -----------------------------------------------------------------------------
 // Counters API
@@ -44,14 +44,14 @@ void perf_shutdown(FILE *out);
  * @param name  Counter name (string key)
  * @return 0 on success, -1 on failure (errno set)
  */
-int perf_counter_create(const char *name) __nonnull((1));
+int po_perf_counter_create(const char *name) __nonnull((1));
 
 /**
  * Increment counter value by 1 asynchronously.
  *
  * @param name  Counter name (string key)
  */
-void perf_counter_inc(const char *name) __nonnull((1));
+void po_perf_counter_inc(const char *name) __nonnull((1));
 
 /**
  * Add delta to counter value asynchronously.
@@ -59,7 +59,7 @@ void perf_counter_inc(const char *name) __nonnull((1));
  * @param name   Counter name (string key)
  * @param delta  Amount to add
  */
-void perf_counter_add(const char *name, uint64_t delta) __nonnull((1));
+void po_perf_counter_add(const char *name, uint64_t delta) __nonnull((1));
 
 // -----------------------------------------------------------------------------
 // Timers API
@@ -71,7 +71,7 @@ void perf_counter_add(const char *name, uint64_t delta) __nonnull((1));
  * @param name Timer name (string key)
  * @return 0 on success, -1 on failure (errno set)
  */
-int perf_timer_create(const char *name) __nonnull((1));
+int po_perf_timer_create(const char *name) __nonnull((1));
 
 /**
  * Start a timer asynchronously.
@@ -79,7 +79,7 @@ int perf_timer_create(const char *name) __nonnull((1));
  * @param name  Timer name (string key)
  * @return 0 on success, -1 on failure
  */
-int perf_timer_start(const char *name) __nonnull((1));
+int po_perf_timer_start(const char *name) __nonnull((1));
 
 /**
  * Stop a timer asynchronously and accumulate elapsed time.
@@ -87,7 +87,7 @@ int perf_timer_start(const char *name) __nonnull((1));
  * @param name Timer name (string key)
  * @return 0 on success, -1 on failure
  */
-int perf_timer_stop(const char *name) __nonnull((1));
+int po_perf_timer_stop(const char *name) __nonnull((1));
 
 // -----------------------------------------------------------------------------
 // Histograms API
@@ -101,7 +101,7 @@ int perf_timer_stop(const char *name) __nonnull((1));
  * @param nbins Number of bins
  * @return 0 on success, -1 on failure (errno set)
  */
-int perf_histogram_create(const char *name, const uint64_t *bins, size_t nbins) __nonnull((1, 2));
+int po_perf_histogram_create(const char *name, const uint64_t *bins, size_t nbins) __nonnull((1, 2));
 
 /**
  * Record a value asynchronously into the histogram.
@@ -110,7 +110,7 @@ int perf_histogram_create(const char *name, const uint64_t *bins, size_t nbins) 
  * @param value Value to record
  * @return 0 on success, -1 on failure (errno set)
  */
-int perf_histogram_record(const char *name, uint64_t value) __nonnull((1));
+int po_perf_histogram_record(const char *name, uint64_t value) __nonnull((1));
 
 // -----------------------------------------------------------------------------
 // Reporting
@@ -123,6 +123,6 @@ int perf_histogram_record(const char *name, uint64_t value) __nonnull((1));
  * @param out  Output stream (e.g., stdout)
  * @return 0 on success, -1 on failure
  */
-int perf_report(FILE *out);
+int po_perf_report(FILE *out);
 
 #endif // _PO_PERF_H

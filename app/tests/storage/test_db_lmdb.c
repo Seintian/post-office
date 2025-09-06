@@ -80,7 +80,11 @@ static int iter_collect(const void *key, size_t keylen, const void *val, size_t 
 
 static int iter_stop_after_one(const void *key, size_t keylen, const void *val, size_t vallen,
                                void *udata) {
-    (void)key; (void)keylen; (void)val; (void)vallen; (void)udata;
+    (void)key;
+    (void)keylen;
+    (void)val;
+    (void)vallen;
+    (void)udata;
     /* return non-zero to stop immediately */
     return 42;
 }

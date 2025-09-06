@@ -134,7 +134,7 @@ static int load_memoryinfo(po_sysinfo_t *info) {
         return -1;
 
     info->total_ram = parse_meminfo_value_kb_to_bytes(total_kb);
-    info->free_ram  = parse_meminfo_value_kb_to_bytes(free_kb);
+    info->free_ram = parse_meminfo_value_kb_to_bytes(free_kb);
 
 #ifdef _SC_PAGESIZE
     info->page_size = sysconf(_SC_PAGESIZE);
@@ -143,12 +143,12 @@ static int load_memoryinfo(po_sysinfo_t *info) {
 #endif
 
     // Hugepages best-effort
-    info->hugepage_info = (hugepage_info_t){0};
+    info->hugepage_info = (po_hugepage_info_t){0};
     unsigned long sizes_kB[8] = {0};
     size_t count = 0;
     if (list_hugepage_sizes(sizes_kB, 8, &count) == 0) {
         for (size_t i = 0; i < count; i++) {
-            hugepage_info_t huge_info;
+            po_hugepage_info_t huge_info;
             if (get_hugepage_info(sizes_kB[i], &huge_info) == 0) {
                 if (huge_info.size_kB > info->hugepage_info.size_kB)
                     info->hugepage_info = huge_info;

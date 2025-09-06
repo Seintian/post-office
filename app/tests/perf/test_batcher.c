@@ -8,8 +8,8 @@
 #include "unity/unity_fixture.h"
 
 TEST_GROUP(BATCHER);
-static perf_batcher_t *batcher;
-static perf_ringbuf_t *ringbuf;
+static po_perf_batcher_t *batcher;
+static po_perf_ringbuf_t *ringbuf;
 
 TEST_SETUP(BATCHER) {
     // create a ring with capacity 8 and batcher size 4
@@ -26,9 +26,9 @@ TEST_TEAR_DOWN(BATCHER) {
 
 TEST(BATCHER, INVALID_CREATE) {
     // zero batch size
-    perf_ringbuf_t *rb = perf_ringbuf_create(8);
+    po_perf_ringbuf_t *rb = perf_ringbuf_create(8);
     TEST_ASSERT_NOT_NULL(rb);
-    const perf_batcher_t *b2 = perf_batcher_create(rb, 0);
+    const po_perf_batcher_t *b2 = perf_batcher_create(rb, 0);
     TEST_ASSERT_NULL(b2);
     TEST_ASSERT_EQUAL_INT(EINVAL, errno);
     perf_ringbuf_destroy(&rb);
@@ -79,7 +79,7 @@ TEST(BATCHER, FULL_BATCH) {
 
 // Optional: test blocking via thread
 static void *consumer_thread(void *arg) {
-    perf_batcher_t *b = arg;
+    po_perf_batcher_t *b = arg;
     void *out[1];
     ssize_t n = perf_batcher_next(b, out);
     // should get exactly 1

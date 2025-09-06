@@ -332,17 +332,10 @@ int db_delete(db_bucket_t *bucket, const void *key, size_t keylen) {
 // db_iterate
 //----------------------------------------------------------------------
 
-int db_iterate(
-    db_bucket_t *bucket,
-    int (*cb)(
-        const void *key,
-        size_t keylen,
-        const void *val,
-        size_t vallen,
-        void *udata
-    ),
-    void *udata
-) {
+int db_iterate(db_bucket_t *bucket,
+               int (*cb)(const void *key, size_t keylen, const void *val, size_t vallen,
+                         void *udata),
+               void *udata) {
     MDB_txn *txn;
     MDB_cursor *cursor;
     int rc = mdb_txn_begin(bucket->env, NULL, MDB_RDONLY, &txn);

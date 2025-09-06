@@ -9,8 +9,7 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         uint64_t seed = strtoull(argv[1], NULL, 10);
         po_rand_seed(seed);
-    }
-    else
+    } else
         po_rand_seed_auto();
 
     int counts[101] = {0}; // use indices 1..100

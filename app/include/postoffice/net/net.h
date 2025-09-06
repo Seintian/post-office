@@ -29,13 +29,8 @@
  * @param payload_len Length of the payload in bytes.
  * @return 0 on success, or a negative error code on failure.
  */
-int net_send_message(
-    int fd,
-    uint8_t msg_type,
-    uint8_t flags,
-    const uint8_t *payload,
-    uint32_t payload_len
-) __nonnull((4));
+int net_send_message(int fd, uint8_t msg_type, uint8_t flags, const uint8_t *payload,
+                     uint32_t payload_len) __nonnull((4));
 
 /**
  * @brief Initialize process-wide zero-copy pools for TX/RX.

@@ -19,7 +19,7 @@ struct perf_zcpool {
     void *base; // start of mapped region
     size_t buf_size;
     size_t buf_count;
-    perf_ringbuf_t *freeq; // ring buffer of free pointers
+    po_perf_ringbuf_t *freeq; // ring buffer of free pointers
 };
 
 size_t perf_zcpool_bufsize(const perf_zcpool_t *pool) {

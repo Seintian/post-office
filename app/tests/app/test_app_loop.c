@@ -40,7 +40,7 @@ static poller_t *poller;
 
 TEST_SETUP(APP) {
     // Initialize perf and framing for net module
-    TEST_ASSERT_EQUAL_INT(0, perf_init(1, 1, 1));
+    TEST_ASSERT_EQUAL_INT(0, po_perf_init(1, 1, 1));
     framing_init(0);
 
     // Temp LMDB environment
@@ -59,7 +59,7 @@ TEST_SETUP(APP) {
     TEST_ASSERT_NOT_NULL(poller);
 
     // Create a perf counter we'll bump upon processing
-    TEST_ASSERT_NOT_EQUAL(-1, perf_counter_create("processed"));
+    TEST_ASSERT_NOT_EQUAL(-1, po_perf_counter_create("processed"));
 }
 
 TEST_TEAR_DOWN(APP) {
@@ -85,7 +85,7 @@ TEST_TEAR_DOWN(APP) {
 
     // Drain and shutdown perf (also validates it doesn't crash)
     char buf[1024];
-    CAPTURE_REPORT(buf, sizeof(buf), perf_shutdown);
+    CAPTURE_REPORT(buf, sizeof(buf), po_perf_shutdown);
 }
 
 TEST(APP, MAIN_LOOP_END_TO_END) {
@@ -122,7 +122,7 @@ TEST(APP, MAIN_LOOP_END_TO_END) {
     TEST_ASSERT_EQUAL_INT(0, db_put(bucket, key, strlen(key) + 1, val, strlen(val) + 1));
 
     // Update perf counter and allow worker to flush
-    perf_counter_inc("processed");
+    po_perf_counter_inc("processed");
     struct timespec ts = {0, 5 * 1000 * 1000}; // 5ms
     nanosleep(&ts, NULL);
 
@@ -137,7 +137,7 @@ TEST(APP, MAIN_LOOP_END_TO_END) {
 
     // Perf report should contain our counter
     char rep[1024];
-    CAPTURE_REPORT(rep, sizeof(rep), perf_report);
+    CAPTURE_REPORT(rep, sizeof(rep), po_perf_report);
     TEST_ASSERT_NOT_NULL(strstr(rep, "processed: 1"));
 
     // Cleanup fds

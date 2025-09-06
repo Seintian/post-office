@@ -18,18 +18,18 @@
 #include "perf/ringbuf.h"
 
 struct perf_batcher {
-    perf_ringbuf_t *rb;
+    po_perf_ringbuf_t *rb;
     int efd;
     size_t batch_size;
 };
 
-perf_batcher_t *perf_batcher_create(perf_ringbuf_t *rb, size_t batch_size) {
+po_perf_batcher_t *perf_batcher_create(po_perf_ringbuf_t *rb, size_t batch_size) {
     if (batch_size == 0) {
         errno = EINVAL;
         return NULL;
     }
 
-    perf_batcher_t *b = malloc(sizeof(*b));
+    po_perf_batcher_t *b = malloc(sizeof(*b));
     if (!b)
         return NULL;
 
@@ -46,11 +46,11 @@ perf_batcher_t *perf_batcher_create(perf_ringbuf_t *rb, size_t batch_size) {
     return b;
 }
 
-void perf_batcher_destroy(perf_batcher_t **b) {
+void perf_batcher_destroy(po_perf_batcher_t **b) {
     if (!*b)
         return;
 
-    perf_batcher_t *batcher = *b;
+    po_perf_batcher_t *batcher = *b;
 
     if (batcher->efd >= 0) {
         close(batcher->efd);
@@ -63,7 +63,7 @@ void perf_batcher_destroy(perf_batcher_t **b) {
     *b = NULL;
 }
 
-int perf_batcher_enqueue(perf_batcher_t *b, void *item) {
+int perf_batcher_enqueue(po_perf_batcher_t *b, void *item) {
     if (b->rb == NULL || b->efd < 0) {
         errno = EINVAL;
         return -1;
@@ -86,7 +86,7 @@ int perf_batcher_enqueue(perf_batcher_t *b, void *item) {
     return 0;
 }
 
-int perf_batcher_flush(perf_batcher_t *b, int fd) {
+int perf_batcher_flush(po_perf_batcher_t *b, int fd) {
     if (fd < 0) {
         errno = EINVAL;
         return -1;
@@ -125,8 +125,7 @@ int perf_batcher_flush(perf_batcher_t *b, int fd) {
         if (consumed >= (ssize_t)len) {
             perf_ringbuf_dequeue(b->rb, NULL); // drop from queue
             consumed -= len;
-        }
-        else {
+        } else {
             // Partial write - adjust the frame pointer
             char *base = iov[j].iov_base;
             base += consumed;
@@ -138,7 +137,7 @@ int perf_batcher_flush(perf_batcher_t *b, int fd) {
     return 0;
 }
 
-ssize_t perf_batcher_next(perf_batcher_t *b, void **out) {
+ssize_t perf_batcher_next(po_perf_batcher_t *b, void **out) {
     if (b->rb == NULL || b->efd < 0) {
         errno = EINVAL;
         return -1;
@@ -162,7 +161,7 @@ ssize_t perf_batcher_next(perf_batcher_t *b, void **out) {
     return (ssize_t)n;
 }
 
-bool perf_batcher_is_empty(const perf_batcher_t *b) {
+bool perf_batcher_is_empty(const po_perf_batcher_t *b) {
     if (!b->rb)
         return true;
 

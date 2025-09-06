@@ -51,9 +51,11 @@ LMDB_DIR               = $(THIRDPARTY_LIBS_DIR)/lmdb
 LOG_C_DIR              = $(THIRDPARTY_LIBS_DIR)/log_c
 UNITY_DIR              = $(THIRDPARTY_LIBS_DIR)/unity
 
+## Core source tree root (refactored layout)
+CORE_SRC_DIR           = $(SRC_DIR)/core
 # Processes' sources directories
-MAIN_DIR               = $(SRC_DIR)/main
-SIMULATION_DIR         = $(SRC_DIR)/simulation
+MAIN_DIR               = $(CORE_SRC_DIR)/main
+SIMULATION_DIR         = $(CORE_SRC_DIR)/simulation
 DIRECTOR_DIR           = $(SIMULATION_DIR)/director
 TICKET_ISSUER_DIR      = $(SIMULATION_DIR)/ticket_issuer
 USERS_MANAGER_DIR      = $(SIMULATION_DIR)/users_manager
@@ -68,7 +70,7 @@ EXPLODE_INI_PATH       = $(CONFIG_DIR)/explode.ini
 
 INCLUDES_I = -I$(INCLUDE_DIR) -I$(POSTOFFICE_INCLUDE_DIR) -I$(THIRDPARTY_INCLUDE_DIR)
 LIBS_I     = -I$(POSTOFFICE_LIBS_DIR) -I$(THIRDPARTY_LIBS_DIR)
-CORE_I     = -I$(MAIN_DIR) -I$(SIMULATION_DIR)
+CORE_I     = -I$(CORE_SRC_DIR)/main -I$(CORE_SRC_DIR)/simulation
 SRC_I      = -I$(SRC_DIR)
 
 ALL_I      = $(INCLUDES_I) $(LIBS_I) $(CORE_I) $(SRC_I)
@@ -621,4 +623,6 @@ tidy-fix:
 	 echo "> Makefile: Files:"; echo "$$SRCS" | tr ' ' '\n'; \
 	 clang-tidy -fix -fix-errors --format-style=file --config-file=.clang-tidy $$SRCS -- -std=c11 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -Iinclude -Iinclude/postoffice -Ilibs/postoffice -Isrc -Ilibs/thirdparty -Iinclude/thirdparty || true; \
 	 echo "> Makefile: clang-tidy fixes applied. Consider running 'make -C app format' afterwards."
+
+# (logstore has been modularized: logstore.c + logstore_worker.c + logstore_rebuild.c + logstore_integrity.c)
 

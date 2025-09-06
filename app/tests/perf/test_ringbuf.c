@@ -4,7 +4,7 @@
 #include "perf/ringbuf.h"
 #include "unity/unity_fixture.h"
 
-static perf_ringbuf_t *rb;
+static po_perf_ringbuf_t *rb;
 
 TEST_GROUP(RINGBUF);
 
@@ -21,7 +21,7 @@ TEST_TEAR_DOWN(RINGBUF) {
 
 TEST(RINGBUF, INVALID_CAPACITY) {
     // non-power-of-two capacity
-    perf_ringbuf_t *_rb = perf_ringbuf_create(3);
+    po_perf_ringbuf_t *_rb = perf_ringbuf_create(3);
     TEST_ASSERT_NULL(_rb);
     TEST_ASSERT_EQUAL_INT(EINVAL, errno);
     perf_ringbuf_destroy(&_rb);
@@ -30,7 +30,7 @@ TEST(RINGBUF, INVALID_CAPACITY) {
 
 TEST(RINGBUF, VALID_CREATE_DESTROY) {
     perf_ringbuf_set_cacheline(128);
-    perf_ringbuf_t *_rb = perf_ringbuf_create(8);
+    po_perf_ringbuf_t *_rb = perf_ringbuf_create(8);
     TEST_ASSERT_NOT_NULL(_rb);
     perf_ringbuf_destroy(&_rb);
     TEST_ASSERT_NULL(_rb);
@@ -69,7 +69,7 @@ TEST(RINGBUF, WRAP_AROUND) {
     int vals[10];
     void *out;
 
-    perf_ringbuf_t *_rb = perf_ringbuf_create(8); // 8 slots, 7 usable
+    po_perf_ringbuf_t *_rb = perf_ringbuf_create(8); // 8 slots, 7 usable
     TEST_ASSERT_NOT_NULL(_rb);
 
     // enqueue 6 items
@@ -101,7 +101,7 @@ TEST(RINGBUF, WRAP_AROUND) {
 TEST(RINGBUF, COUNT_ACCURACY) {
     int x;
 
-    perf_ringbuf_t *_rb = perf_ringbuf_create(8);
+    po_perf_ringbuf_t *_rb = perf_ringbuf_create(8);
     TEST_ASSERT_NOT_NULL(_rb);
     // empty
     TEST_ASSERT_EQUAL_UINT(0, perf_ringbuf_count(_rb));
