@@ -114,10 +114,37 @@ TEST(LOGGER, OVERFLOW_EMITS_ERROR) {
     unlink(path);
 }
 
+TEST(LOGGER, SYSLOG_SINK_BASIC) {
+    // Test that syslog sink can be added without errors
+    TEST_ASSERT_EQUAL_INT(0, logger_add_sink_syslog("postoffice_test"));
+    
+    // Log a message to syslog
+    LOG_INFO("syslog test message");
+    
+    // Give worker time to process
+    usleep(10 * 1000);
+    
+    // We can't easily verify syslog output in tests, but we can ensure
+    // the function doesn't crash and returns success
+}
+
+TEST(LOGGER, SYSLOG_SINK_NULL_IDENT) {
+    // Test syslog with NULL ident (should use default)
+    TEST_ASSERT_EQUAL_INT(0, logger_add_sink_syslog(NULL));
+    
+    // Log a message 
+    LOG_INFO("syslog test with null ident");
+    
+    // Give worker time to process
+    usleep(10 * 1000);
+}
+
 // Group runner with all tests
 TEST_GROUP_RUNNER(LOGGER) {
     RUN_TEST_CASE(LOGGER, INIT_AND_LEVEL);
     RUN_TEST_CASE(LOGGER, CONSOLE_SINK_AND_WRITE);
     RUN_TEST_CASE(LOGGER, FILE_SINK_WRITES);
     RUN_TEST_CASE(LOGGER, OVERFLOW_EMITS_ERROR);
+    RUN_TEST_CASE(LOGGER, SYSLOG_SINK_BASIC);
+    RUN_TEST_CASE(LOGGER, SYSLOG_SINK_NULL_IDENT);
 }
