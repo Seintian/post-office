@@ -29,8 +29,49 @@
  * @param payload_len Length of the payload in bytes.
  * @return 0 on success, or a negative error code on failure.
  */
-int net_send_message(int fd, uint8_t msg_type, uint8_t flags, const uint8_t *payload,
-                     uint32_t payload_len) __nonnull((4));
+int net_send_message(
+    int fd,
+    uint8_t msg_type,
+    uint8_t flags,
+    const uint8_t *payload,
+    uint32_t payload_len
+) __nonnull((4));
+
+/**
+ * @brief Initialize process-wide zero-copy pools for TX/RX.
+ *
+ * Creates two independent pools sized for typical workloads. Callers may
+ * omit this and still use the classic APIs; zero-copy functions will return
+ * errors if pools are unavailable.
+ */
+int net_init_zerocopy(size_t tx_buffers, size_t rx_buffers, size_t buf_size);
+
+/** Acquire/release TX buffers from the process-wide pool. */
+void *net_zcp_acquire_tx(void);
+void net_zcp_release_tx(void *buf);
+
+/** Acquire/release RX buffers from the process-wide pool. */
+void *net_zcp_acquire_rx(void);
+void net_zcp_release_rx(void *buf);
+
+/**
+ * @brief Send a message using a zero-copy payload buffer.
+ *
+ * The header is constructed from inputs; payload_buf must point to a buffer
+ * of at least payload_len bytes acquired from the TX pool.
+ */
+int net_send_message_zcp(int fd, uint8_t msg_type, uint8_t flags, void *payload_buf,
+                         uint32_t payload_len);
+
+/**
+ * @brief Receive a message into a zero-copy buffer.
+ *
+ * On success, returns 0 and sets header_out (host order), *payload_out to the
+ * buffer pointer, and *payload_len_out to the number of bytes. Caller owns the
+ * buffer and must release it via net_zcp_release_rx().
+ */
+int net_recv_message_zcp(int fd, po_header_t *header_out, void **payload_out,
+                         uint32_t *payload_len_out) __nonnull((2, 3, 4));
 
 /**
  * @brief Receive the next protocol message from a socket.

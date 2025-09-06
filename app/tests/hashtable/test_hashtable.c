@@ -10,8 +10,9 @@ static unsigned long test_hash(const void *key) {
     const char *s = key;
     unsigned long h = 5381;
     int c;
-    while ((c = *s++))
+    while ((c = *s++)) {
         h = ((h << 5) + h) + (unsigned char)c;
+    }
     return h;
 }
 static int test_cmp(const void *a, const void *b) {
@@ -30,7 +31,7 @@ TEST_TEAR_DOWN(HASHTABLE) {
     hashtable_destroy(&ht);
 }
 
-TEST(HASHTABLE, CREATEDEFAULT) {
+TEST(HASHTABLE, CREATE_DEFAULT) {
     hashtable_t *h2 = hashtable_create(test_cmp, test_hash);
     TEST_ASSERT_NOT_NULL(h2);
     TEST_ASSERT_EQUAL_UINT(0, hashtable_size(h2));
@@ -38,7 +39,7 @@ TEST(HASHTABLE, CREATEDEFAULT) {
     hashtable_destroy(&h2);
 }
 
-TEST(HASHTABLE, PUTANDGET) {
+TEST(HASHTABLE, PUT_AND_GET) {
     int a = 1;
     int b = 2;
     int ret = hashtable_put(ht, "key1", &a);
@@ -49,7 +50,7 @@ TEST(HASHTABLE, PUTANDGET) {
     TEST_ASSERT_EQUAL_PTR(&b, v);
 }
 
-TEST(HASHTABLE, CONTAINSKEY) {
+TEST(HASHTABLE, CONTAINS_KEY) {
     hashtable_put(ht, "k", "v");
     TEST_ASSERT_TRUE(hashtable_contains_key(ht, "k"));
     TEST_ASSERT_FALSE(hashtable_contains_key(ht, "x"));
@@ -65,7 +66,7 @@ TEST(HASHTABLE, REMOVE) {
     TEST_ASSERT_EQUAL_INT(0, removed);
 }
 
-TEST(HASHTABLE, SIZEANDCAPACITY) {
+TEST(HASHTABLE, SIZE_AND_CAPACITY) {
     TEST_ASSERT_EQUAL_UINT(0, hashtable_size(ht));
     size_t cap = hashtable_capacity(ht);
     hashtable_put(ht, "a", "1");
@@ -74,22 +75,24 @@ TEST(HASHTABLE, SIZEANDCAPACITY) {
     TEST_ASSERT_EQUAL_UINT(cap, hashtable_capacity(ht));
 }
 
-TEST(HASHTABLE, KEYSETANDVALUES) {
+TEST(HASHTABLE, KEY_SET_AND_VALUES) {
     hashtable_put(ht, "k1", "v1");
     hashtable_put(ht, "k2", "v2");
     void **keys = hashtable_keyset(ht);
     TEST_ASSERT_NOT_NULL(keys);
     // two keys
     int count = 0;
-    for (size_t i = 0; i < hashtable_size(ht); i++)
+    for (size_t i = 0; i < hashtable_size(ht); i++) {
         count++;
+    }
     free(keys);
     // values
     void **vals = hashtable_values(ht);
     TEST_ASSERT_NOT_NULL(vals);
     count = 0;
-    for (size_t i = 0; i < hashtable_size(ht); i++)
+    for (size_t i = 0; i < hashtable_size(ht); i++) {
         count++;
+    }
     free(vals);
 }
 
@@ -117,7 +120,7 @@ TEST(HASHTABLE, MAP) {
     TEST_ASSERT_EQUAL_INT(3, map_sum);
 }
 
-TEST(HASHTABLE, LOADFACTOR) {
+TEST(HASHTABLE, LOAD_FACTOR) {
     float lf = hashtable_load_factor(ht);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, lf);
     hashtable_put(ht, "a", "v");
@@ -134,7 +137,7 @@ TEST(HASHTABLE, REPLACE) {
     TEST_ASSERT_EQUAL_INT(0, rc);
 }
 
-TEST(HASHTABLE, EQUALSANDCOPY) {
+TEST(HASHTABLE, EQUALS_AND_COPY) {
     hashtable_put(ht, "1", "one");
     hashtable_put(ht, "2", "two");
     hashtable_t *copy = hashtable_copy(ht);
@@ -173,17 +176,17 @@ TEST(HASHTABLE, ITERATOR) {
 }
 
 TEST_GROUP_RUNNER(HASHTABLE) {
-    RUN_TEST_CASE(HASHTABLE, CREATEDEFAULT);
-    RUN_TEST_CASE(HASHTABLE, PUTANDGET);
-    RUN_TEST_CASE(HASHTABLE, CONTAINSKEY);
+    RUN_TEST_CASE(HASHTABLE, CREATE_DEFAULT);
+    RUN_TEST_CASE(HASHTABLE, PUT_AND_GET);
+    RUN_TEST_CASE(HASHTABLE, CONTAINS_KEY);
     RUN_TEST_CASE(HASHTABLE, REMOVE);
-    RUN_TEST_CASE(HASHTABLE, SIZEANDCAPACITY);
-    RUN_TEST_CASE(HASHTABLE, KEYSETANDVALUES);
+    RUN_TEST_CASE(HASHTABLE, SIZE_AND_CAPACITY);
+    RUN_TEST_CASE(HASHTABLE, KEY_SET_AND_VALUES);
     RUN_TEST_CASE(HASHTABLE, CLEAR);
     RUN_TEST_CASE(HASHTABLE, MAP);
-    RUN_TEST_CASE(HASHTABLE, LOADFACTOR);
+    RUN_TEST_CASE(HASHTABLE, LOAD_FACTOR);
     RUN_TEST_CASE(HASHTABLE, REPLACE);
-    RUN_TEST_CASE(HASHTABLE, EQUALSANDCOPY);
+    RUN_TEST_CASE(HASHTABLE, EQUALS_AND_COPY);
     RUN_TEST_CASE(HASHTABLE, MERGE);
     RUN_TEST_CASE(HASHTABLE, ITERATOR);
 }

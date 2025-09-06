@@ -19,7 +19,7 @@ TEST_TEAR_DOWN(RINGBUF) {
     TEST_ASSERT_NULL(rb);
 }
 
-TEST(RINGBUF, INVALIDCAPACITY) {
+TEST(RINGBUF, INVALID_CAPACITY) {
     // non-power-of-two capacity
     perf_ringbuf_t *_rb = perf_ringbuf_create(3);
     TEST_ASSERT_NULL(_rb);
@@ -28,7 +28,7 @@ TEST(RINGBUF, INVALIDCAPACITY) {
     TEST_ASSERT_NULL(_rb);
 }
 
-TEST(RINGBUF, VALIDCREATEDESTROY) {
+TEST(RINGBUF, VALID_CREATE_DESTROY) {
     perf_ringbuf_set_cacheline(128);
     perf_ringbuf_t *_rb = perf_ringbuf_create(8);
     TEST_ASSERT_NOT_NULL(_rb);
@@ -36,13 +36,13 @@ TEST(RINGBUF, VALIDCREATEDESTROY) {
     TEST_ASSERT_NULL(_rb);
 }
 
-TEST(RINGBUF, EMPTYDEQUEUE) {
+TEST(RINGBUF, EMPTY_DEQUEUE) {
     void *item;
     int rc = perf_ringbuf_dequeue(rb, &item);
     TEST_ASSERT_EQUAL_INT(-1, rc);
 }
 
-TEST(RINGBUF, SINGLEENQUEUEDEQUEUE) {
+TEST(RINGBUF, SINGLE_ENQUEUE_DEQUEUE) {
     int value = 42;
     void *out;
     TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_enqueue(rb, &value));
@@ -52,7 +52,7 @@ TEST(RINGBUF, SINGLEENQUEUEDEQUEUE) {
     TEST_ASSERT_EQUAL_UINT(0, perf_ringbuf_count(rb));
 }
 
-TEST(RINGBUF, FULLBUFFER) {
+TEST(RINGBUF, FULL_BUFFER) {
     size_t cap = 4;
 
     int vals[4] = {1, 2, 3, 4};
@@ -65,7 +65,7 @@ TEST(RINGBUF, FULLBUFFER) {
     TEST_ASSERT_EQUAL_UINT(cap - 1, perf_ringbuf_count(rb));
 }
 
-TEST(RINGBUF, WRAPAROUND) {
+TEST(RINGBUF, WRAP_AROUND) {
     int vals[10];
     void *out;
 
@@ -98,7 +98,7 @@ TEST(RINGBUF, WRAPAROUND) {
     TEST_ASSERT_NULL(_rb);
 }
 
-TEST(RINGBUF, COUNTACCURACY) {
+TEST(RINGBUF, COUNT_ACCURACY) {
     int x;
 
     perf_ringbuf_t *_rb = perf_ringbuf_create(8);
@@ -106,8 +106,9 @@ TEST(RINGBUF, COUNTACCURACY) {
     // empty
     TEST_ASSERT_EQUAL_UINT(0, perf_ringbuf_count(_rb));
     // enqueue 5
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 5; i++) {
         perf_ringbuf_enqueue(_rb, &x);
+    }
     TEST_ASSERT_EQUAL_UINT(5, perf_ringbuf_count(_rb));
     // dequeue 2
     for (int i = 0; i < 2; i++) {
@@ -116,8 +117,9 @@ TEST(RINGBUF, COUNTACCURACY) {
     }
     TEST_ASSERT_EQUAL_UINT(3, perf_ringbuf_count(_rb));
     // enqueue 2 more
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < 2; i++) {
         perf_ringbuf_enqueue(_rb, &x);
+    }
     TEST_ASSERT_EQUAL_UINT(5, perf_ringbuf_count(_rb));
 
     perf_ringbuf_destroy(&_rb);
@@ -125,7 +127,7 @@ TEST(RINGBUF, COUNTACCURACY) {
 }
 
 // Basic enqueue/dequeue behavior
-TEST(RINGBUF, ENQUEUEDEQUEUE) {
+TEST(RINGBUF, ENQUEUE_DEQUEUE) {
     int a = 1;
     int b = 2;
     int c = 3;
@@ -176,7 +178,7 @@ TEST(RINGBUF, PEEK) {
 }
 
 // Peek at arbitrary offset
-TEST(RINGBUF, PEEKAT) {
+TEST(RINGBUF, PEEK_AT) {
     int v[3] = {10, 20, 30};
     int *out;
 
@@ -232,13 +234,14 @@ TEST(RINGBUF, ADVANCE) {
 }
 
 // Combined peek/advance/enqueue/dequeue
-TEST(RINGBUF, MIXEDOPERATIONS) {
+TEST(RINGBUF, MIXED_OPERATIONS) {
     int data[5] = {1, 2, 3, 4, 5};
     int *out;
 
     // fill to 3 items
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 3; i++) {
         TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_enqueue(rb, &data[i]));
+    }
 
     // drop first via dequeue and advance
     TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void **)&out));
@@ -262,16 +265,16 @@ TEST(RINGBUF, MIXEDOPERATIONS) {
 }
 
 TEST_GROUP_RUNNER(RINGBUF) {
-    RUN_TEST_CASE(RINGBUF, INVALIDCAPACITY);
-    RUN_TEST_CASE(RINGBUF, VALIDCREATEDESTROY);
-    RUN_TEST_CASE(RINGBUF, EMPTYDEQUEUE);
-    RUN_TEST_CASE(RINGBUF, SINGLEENQUEUEDEQUEUE);
-    RUN_TEST_CASE(RINGBUF, FULLBUFFER);
-    RUN_TEST_CASE(RINGBUF, WRAPAROUND);
-    RUN_TEST_CASE(RINGBUF, COUNTACCURACY);
-    RUN_TEST_CASE(RINGBUF, ENQUEUEDEQUEUE);
+    RUN_TEST_CASE(RINGBUF, INVALID_CAPACITY);
+    RUN_TEST_CASE(RINGBUF, VALID_CREATE_DESTROY);
+    RUN_TEST_CASE(RINGBUF, EMPTY_DEQUEUE);
+    RUN_TEST_CASE(RINGBUF, SINGLE_ENQUEUE_DEQUEUE);
+    RUN_TEST_CASE(RINGBUF, FULL_BUFFER);
+    RUN_TEST_CASE(RINGBUF, WRAP_AROUND);
+    RUN_TEST_CASE(RINGBUF, COUNT_ACCURACY);
+    RUN_TEST_CASE(RINGBUF, ENQUEUE_DEQUEUE);
     RUN_TEST_CASE(RINGBUF, PEEK);
-    RUN_TEST_CASE(RINGBUF, PEEKAT);
+    RUN_TEST_CASE(RINGBUF, PEEK_AT);
     RUN_TEST_CASE(RINGBUF, ADVANCE);
-    RUN_TEST_CASE(RINGBUF, MIXEDOPERATIONS);
+    RUN_TEST_CASE(RINGBUF, MIXED_OPERATIONS);
 }

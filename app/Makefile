@@ -37,12 +37,12 @@ SRC_DIR                = src
 HASHTABLE_DIR          = $(POSTOFFICE_LIBS_DIR)/hashtable
 HASHSET_DIR            = $(POSTOFFICE_LIBS_DIR)/hashset
 NET_DIR                = $(POSTOFFICE_LIBS_DIR)/net
-PERF_DIR			   = $(POSTOFFICE_LIBS_DIR)/perf
+PERF_DIR		   = $(POSTOFFICE_LIBS_DIR)/perf
 PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
-STORAGE_DIR			   = $(POSTOFFICE_LIBS_DIR)/storage
-UTILS_DIR			   = $(POSTOFFICE_LIBS_DIR)/utils
+STORAGE_DIR		   = $(POSTOFFICE_LIBS_DIR)/storage
+UTILS_DIR		   = $(POSTOFFICE_LIBS_DIR)/utils
 LOG_DIR                = $(POSTOFFICE_LIBS_DIR)/log
-SYSINFO_DIR		       = $(POSTOFFICE_LIBS_DIR)/sysinfo
+SYSINFO_DIR	       = $(POSTOFFICE_LIBS_DIR)/sysinfo
 
 ## Third-party Libraries
 INIH_DIR               = $(THIRDPARTY_LIBS_DIR)/inih
@@ -255,7 +255,7 @@ ALL_TARGETS = $(addprefix $(BIN_DIR)/, $(PROCESSES))
 SIMULATION_TARGETS = $(filter-out $(MAIN_EXEC), $(ALL_TARGETS))
 
 # Rules
-.PHONY: start simulation all _simulation-only dev test _compile_commands doc clean-doc _clean-build _clean-logs _clean-crash-reports clean help
+.PHONY: start simulation all _simulation-only dev test _compile_commands doc clean-doc _clean-build _clean-logs _clean-crash-reports clean help clean-coverage
 
 # Default target: start the application automatically
 start:
@@ -375,6 +375,14 @@ _clean-crash-reports:
 clean: _clean-build _clean-logs _clean-crash-reports clean-doc
 	@echo "> Makefile: Cleaned all non-repo files."
 
+# Remove stale coverage artifacts to avoid gcov overwrite warnings
+.PHONY: clean-coverage
+clean-coverage:
+	@echo "> Makefile: Cleaning coverage artifacts (*.gcda/*.gcno, coverage.info)..."
+	@find $(BUILD_DIR) -type f \( -name '*.gcda' -o -name '*.gcno' \) -print -delete || true
+	@rm -f $(BUILD_DIR)/coverage.info || true
+	@echo "> Makefile: Coverage artifacts cleaned."
+
 # Display help message
 help:
 	@echo "Usage: make [start|simulation|add-users|timeout|explode|all|reset-env|doc|clean-doc|clean|dev|test|help]"
@@ -390,9 +398,12 @@ help:
 	@echo "    clean: Remove non-repo files"
 	@echo "    dev: Compile for development (clean, compile_commands, test)"
 	@echo "    test: Compile and run test executable"
+	@echo "    clean-coverage: Remove stale gcov (*.gcda/*.gcno) and coverage.info files"
 	@echo "    help: Display this help message"
 	@echo "    tools: Build tools under tools/ (helper utilities)"
 	@echo "    format: Run clang-format on all .c/.h files under this directory (recursively)"
+	@echo "    tidy:   Run clang-tidy on first-party sources (read-only analysis)"
+	@echo "    tidy-fix: Apply clang-tidy auto-fixes to first-party sources (braces, else-after-return, simplify-bool)"
 
 # *** Rules *** #
 
@@ -513,7 +524,7 @@ $(LOG_C_OBJS): $(BUILD_DIR)/log_c/%.o: $(LOG_C_DIR)/%.c
 
 $(UNITY_OBJS): $(BUILD_DIR)/unity/%.o: $(UNITY_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@ -DUNITY_FIXTURE_NO_EXTRAS
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 # --- End of Static Pattern Rules ---
 
@@ -577,4 +588,37 @@ format:
 		clang-format -i $$FILES; \
 		echo "> Makefile: clang-format completed for all files."; \
 	fi
+
+# --- Clang-Tidy (readability refactors) ---
+.PHONY: tidy
+tidy:
+	@echo "> Makefile: Running clang-tidy (read-only analysis) on first-party sources..."
+	@if ! command -v clang-tidy >/dev/null 2>&1; then \
+		echo "> Makefile: ERROR: clang-tidy not found. Please install it and retry."; \
+		exit 1; \
+	fi
+	@SRCS=$$(find . \
+	 -path './libs/thirdparty' -prune -o \
+	 -path './include/thirdparty' -prune -o \
+	 -name '*.c' -print); \
+	 [ -n "$$SRCS" ] || { echo "> Makefile: No C sources found."; exit 0; }; \
+	 echo "> Makefile: Files:"; echo "$$SRCS" | tr ' ' '\n'; \
+	 clang-tidy --format-style=file --config-file=.clang-tidy $$SRCS -- -std=c11 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -Iinclude -Iinclude/postoffice -Ilibs/postoffice -Isrc -Ilibs/thirdparty -Iinclude/thirdparty || true; \
+	 echo "> Makefile: clang-tidy completed."
+
+.PHONY: tidy-fix
+tidy-fix:
+	@echo "> Makefile: Applying clang-tidy auto-fixes on first-party sources..."
+	@if ! command -v clang-tidy >/dev/null 2>&1; then \
+		echo "> Makefile: ERROR: clang-tidy not found. Please install it and retry."; \
+		exit 1; \
+	fi
+	@SRCS=$$(find . \
+	 -path './libs/thirdparty' -prune -o \
+	 -path './include/thirdparty' -prune -o \
+	 -name '*.c' -print); \
+	 [ -n "$$SRCS" ] || { echo "> Makefile: No C sources found."; exit 0; }; \
+	 echo "> Makefile: Files:"; echo "$$SRCS" | tr ' ' '\n'; \
+	 clang-tidy -fix -fix-errors --format-style=file --config-file=.clang-tidy $$SRCS -- -std=c11 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -Iinclude -Iinclude/postoffice -Ilibs/postoffice -Isrc -Ilibs/thirdparty -Iinclude/thirdparty || true; \
+	 echo "> Makefile: clang-tidy fixes applied. Consider running 'make -C app format' afterwards."
 

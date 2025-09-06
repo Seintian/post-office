@@ -8,32 +8,46 @@ static const char *inih_strerror(int err) {
     switch (err) {
     case INIH_EOK:
         return "No error";
+
     case INIH_ENOSECTION:
         return "No section found";
+
     case INIH_ENOKEY:
         return "No key found";
+
     case INIH_ENOVALUE:
         return "No value found";
+
     case INIH_EINVAL:
         return "Invalid value";
+
     case INIH_EGENERIC:
         return "Generic error";
+
     case INIH_ESYNTAX:
         return "Syntax error";
+
     case INIH_EDUPSECTION:
         return "Duplicate section";
+
     case INIH_EDUPKEY:
         return "Duplicate key";
+
     case INIH_EUNKKEY:
         return "Unknown key";
+
     case INIH_EUNKSECTION:
         return "Unknown section";
+
     case INIH_NOTFOUND:
         return "Key or section not found";
+
     case INIH_ENOUSER:
         return "No user provided for handler";
+
     case INIH_ERANGE:
         return "Value out of range";
+
     default:
         return "Unknown inih error code";
     }
@@ -170,20 +184,25 @@ static const char *zcp_strerror(int err) {
 }
 
 const char *po_strerror(int err) {
-    if (BETWEEN(err, DB_EBASE, DB_ETOP))
+    if (BETWEEN(err, DB_EBASE, DB_ETOP)) {
         return lmdb_strerror(err);
+    }
 
-    if (BETWEEN(err, INIH_EBASE, INIH_ETOP))
+    if (BETWEEN(err, INIH_EBASE, INIH_ETOP)) {
         return inih_strerror(err);
+    }
 
-    if (BETWEEN(err, PERF_EBASE, PERF_ETOP))
+    if (BETWEEN(err, PERF_EBASE, PERF_ETOP)) {
         return perf_strerror(err);
+    }
 
-    if (BETWEEN(err, NET_EBASE, NET_ETOP))
+    if (BETWEEN(err, NET_EBASE, NET_ETOP)) {
         return net_strerror(err);
+    }
 
-    if (BETWEEN(err, ZCP_EBASE, ZCP_ETOP))
+    if (BETWEEN(err, ZCP_EBASE, ZCP_ETOP)) {
         return zcp_strerror(err);
+    }
 
     return strerror(err);
 }

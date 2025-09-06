@@ -13,9 +13,9 @@
 #include <string.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
-#include <syslog.h>
 
 #include "perf/ringbuf.h"
 #include "utils/errors.h"
@@ -48,9 +48,10 @@ static bool g_console_stderr = true;
 static _Atomic int g_running = 0;
 static _Atomic unsigned long g_dropped_new = 0;
 static _Atomic unsigned long g_overwritten_old = 0;
-// syslog state
-static int   g_syslog_open = 0;
+static int g_syslog_open = 0;
 static char *g_syslog_ident = NULL;
+typedef struct custom_sink { void (*fn)(const char*, void*); void *ud; struct custom_sink *next; } custom_sink_t;
+static custom_sink_t *g_custom_sinks = NULL;
 
 // Preallocated pool
 static log_record_t *g_pool = NULL;
@@ -74,8 +75,40 @@ static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
     // microseconds
     long usec = r->ts.tv_nsec / 1000L;
 
-    snprintf(out, outsz, "%s.%06ld %llu %-5s %s:%d %s() - %s\n", tsbuf, usec,
-             (unsigned long long)r->tid, lvlstr[r->level], r->file, r->line, r->func, r->msg);
+    snprintf(
+        out,
+        outsz,
+        "%s.%06ld %llu %-5s %s:%d %s() - %s\n",
+        tsbuf,
+        usec,
+        (unsigned long long)r->tid,
+        lvlstr[r->level],
+        r->file,
+        r->line,
+        r->func,
+        r->msg
+    );
+}
+
+static inline int syslog_priority_for_level(uint8_t lvl) {
+    switch (lvl) {
+        case LOG_FATAL:
+            return LOG_CRIT;
+
+        case LOG_ERROR:
+            return LOG_ERR;
+
+        case LOG_WARN:
+            return LOG_WARNING;
+
+        case LOG_INFO:
+            return LOG_INFO;
+
+        case LOG_DEBUG: // fallthrough
+        case LOG_TRACE:
+        default:
+            return LOG_DEBUG;
+    }
 }
 
 static void write_record(const log_record_t *r) {
@@ -86,46 +119,57 @@ static void write_record(const log_record_t *r) {
         FILE *out = g_console_stderr ? stderr : stdout;
         fputs(line, out);
     }
+
     if ((g_sinks_mask & LOGGER_SINK_FILE) && g_fp) {
         fputs(line, g_fp);
     }
+
     if ((g_sinks_mask & LOGGER_SINK_SYSLOG) && g_syslog_open) {
-        int pri;
-        switch (r->level) {
-            case LOG_FATAL: pri = LOG_CRIT; break;
-            case LOG_ERROR: pri = LOG_ERR; break;
-            case LOG_WARN:  pri = LOG_WARNING; break;
-            case LOG_INFO:  pri = LOG_INFO; break;
-            case LOG_DEBUG: // fallthrough
-            case LOG_TRACE: default: pri = LOG_DEBUG; break;
-        }
-        // Let syslog add timestamp/ident; send concise context
-        syslog(pri, "%s:%d %s() - %s", r->file, r->line, r->func, r->msg);
+        syslog(
+            syslog_priority_for_level(r->level),
+            "%s:%d %s() - %s",
+            r->file,
+            r->line,
+            r->func,
+            r->msg
+        );
+    }
+
+    for (custom_sink_t *c = g_custom_sinks; c; c = c->next) {
+        c->fn(line, c->ud);
     }
 }
 
 static void *worker_main(void *arg) {
     (void)arg;
+
     while (atomic_load_explicit(&g_running, memory_order_relaxed)) {
         void *p = NULL;
         if (perf_ringbuf_dequeue(g_ring, &p) == 0) {
             log_record_t *r = (log_record_t *)p;
             write_record(r);
             // recycle back to freelist
-            (void)perf_ringbuf_enqueue(g_free, r);
-        } else {
+            if (perf_ringbuf_enqueue(g_free, r) != 0) {
+                // drop
+            }
+        }
+        else {
             // no work: sleep a bit to reduce busy-wait
             struct timespec ts = {.tv_sec = 0, .tv_nsec = 2000000}; // 2ms
             nanosleep(&ts, NULL);
         }
     }
+
     // drain remaining
     void *p;
     while (perf_ringbuf_dequeue(g_ring, &p) == 0) {
         log_record_t *r = (log_record_t *)p;
         write_record(r);
-        (void)perf_ringbuf_enqueue(g_free, r);
+        if (perf_ringbuf_enqueue(g_free, r) != 0) {
+            // drop
+        }
     }
+
     return NULL;
 }
 
@@ -135,15 +179,16 @@ int logger_init(const logger_config *cfg) {
         errno = EINVAL;
         return -1;
     }
+
     _logger_runtime_level = cfg->level;
     g_policy = cfg->policy;
     g_nworkers = cfg->consumers ? cfg->consumers : 1;
 
     // reset sinks and counters for a clean start
     g_sinks_mask = 0u;
-    if (g_fp) {
+    if (g_fp)
         fclose(g_fp);
-    }
+
     g_fp = NULL;
     atomic_store_explicit(&g_dropped_new, 0ul, memory_order_relaxed);
     atomic_store_explicit(&g_overwritten_old, 0ul, memory_order_relaxed);
@@ -160,6 +205,7 @@ int logger_init(const logger_config *cfg) {
         perf_ringbuf_destroy(&g_ring);
         return -1;
     }
+
     g_free = perf_ringbuf_create(cfg->ring_capacity);
     if (!g_free) {
         free(g_pool);
@@ -168,8 +214,11 @@ int logger_init(const logger_config *cfg) {
         perf_ringbuf_destroy(&g_ring);
         return -1;
     }
+
     for (size_t i = 0; i < g_pool_n; i++) {
-        (void)perf_ringbuf_enqueue(g_free, &g_pool[i]);
+        if (perf_ringbuf_enqueue(g_free, &g_pool[i]) != 0) {
+            // shouldn't happen on fresh init
+        }
     }
 
     g_workers = calloc(g_nworkers, sizeof(*g_workers));
@@ -188,6 +237,7 @@ int logger_init(const logger_config *cfg) {
 void logger_shutdown(void) {
     if (!g_ring)
         return;
+
     atomic_store_explicit(&g_running, 0, memory_order_relaxed);
     for (unsigned i = 0; i < g_nworkers; i++)
         pthread_join(g_workers[i], NULL);
@@ -206,11 +256,20 @@ void logger_shutdown(void) {
         fclose(g_fp);
         g_fp = NULL;
     }
+
     if (g_syslog_open) {
         closelog();
         g_syslog_open = 0;
     }
-    if (g_syslog_ident) { free(g_syslog_ident); g_syslog_ident = NULL; }
+
+    if (g_syslog_ident) {
+        free(g_syslog_ident);
+        g_syslog_ident = NULL;
+    }
+    // free custom sinks
+    custom_sink_t *c = g_custom_sinks;
+    while (c) { custom_sink_t *n = c->next; free(c); c = n; }
+    g_custom_sinks = NULL;
 }
 
 int logger_set_level(logger_level_t level) {
@@ -218,6 +277,7 @@ int logger_set_level(logger_level_t level) {
         errno = EINVAL;
         return -1;
     }
+
     _logger_runtime_level = level;
     return 0;
 }
@@ -233,14 +293,11 @@ int logger_add_sink_console(bool use_stderr) {
 }
 
 int logger_add_sink_file(const char *path, bool append) {
-    if (!path) {
-        errno = EINVAL;
-        return -1;
-    }
     const char *mode = append ? "a" : "w";
     FILE *fp = fopen(path, mode);
     if (!fp)
         return -1;
+
     g_fp = fp;
     g_sinks_mask |= LOGGER_SINK_FILE;
     return 0;
@@ -249,14 +306,27 @@ int logger_add_sink_file(const char *path, bool append) {
 int logger_add_sink_syslog(const char *ident) {
     // Open syslog once; store ident copy for lifecycle
     if (!g_syslog_open) {
-        if (g_syslog_ident) { free(g_syslog_ident); g_syslog_ident = NULL; }
-        if (ident && *ident) {
-            g_syslog_ident = strdup(ident);
+        if (g_syslog_ident) {
+            free(g_syslog_ident);
+            g_syslog_ident = NULL;
         }
+
+        if (ident && *ident)
+            g_syslog_ident = strdup(ident);
+
         openlog(g_syslog_ident ? g_syslog_ident : "postoffice", LOG_PID | LOG_NDELAY, LOG_USER);
         g_syslog_open = 1;
     }
+
     g_sinks_mask |= LOGGER_SINK_SYSLOG;
+    return 0;
+}
+
+int logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *udata) {
+    if (!fn) return -1;
+    custom_sink_t *c = (custom_sink_t *)malloc(sizeof(*c));
+    if (!c) return -1;
+    c->fn = fn; c->ud = udata; c->next = g_custom_sinks; g_custom_sinks = c;
     return 0;
 }
 
@@ -267,18 +337,24 @@ static void enqueue_record(log_record_t *rec) {
 
     if (g_policy == LOGGER_DROP_NEW) {
         // drop the newly created rec
-        (void)atomic_fetch_add_explicit(&g_dropped_new, 1, memory_order_relaxed);
+        atomic_fetch_add_explicit(&g_dropped_new, 1, memory_order_relaxed);
         // return back to freelist
-        (void)perf_ringbuf_enqueue(g_free, rec);
+        if (perf_ringbuf_enqueue(g_free, rec) != 0) {
+            // drop if freelist full
+        }
         return;
     }
+
     // Overwrite oldest: drop one from head, then enqueue
     void *old;
     if (perf_ringbuf_dequeue(g_ring, &old) == 0) {
-        (void)atomic_fetch_add_explicit(&g_overwritten_old, 1, memory_order_relaxed);
-        (void)perf_ringbuf_enqueue(g_free, (log_record_t *)old);
+        atomic_fetch_add_explicit(&g_overwritten_old, 1, memory_order_relaxed);
+        if (perf_ringbuf_enqueue(g_free, (log_record_t *)old) != 0) {
+            // drop
+        }
     }
-    (void)perf_ringbuf_enqueue(g_ring, rec); // best-effort
+
+    perf_ringbuf_enqueue(g_ring, rec); // best-effort
 }
 
 // Emit an internal warning if many logs were lost. We try to rate-limit by
@@ -286,6 +362,27 @@ static void enqueue_record(log_record_t *rec) {
 // during sustained overload.
 static inline int should_emit_overflow_notice(unsigned long v) {
     return (v != 0ul) && ((v & (v - 1ul)) == 0ul); // power of two
+}
+
+static inline void fill_overflow_notice(
+    log_record_t *rec,
+    unsigned long dropped,
+    unsigned long overwritten
+) {
+    clock_gettime(CLOCK_REALTIME, &rec->ts);
+    rec->tid = get_tid();
+    rec->level = (uint8_t)LOG_ERROR;
+    rec->line = 0;
+    rec->file[0] = '\0';
+    strncpy(rec->func, "logger", sizeof(rec->func) - 1);
+    rec->func[sizeof(rec->func) - 1] = '\0';
+    snprintf(
+        rec->msg, 
+        sizeof(rec->msg),
+        "logger overflow: dropped_new=%lu overwritten_old=%lu (policy=%s)",
+        dropped,
+        overwritten, g_policy == LOGGER_DROP_NEW ? "DROP_NEW" : "OVERWRITE_OLDEST"
+    );
 }
 
 void logger_logv(logger_level_t level, const char *file, int line, const char *func,
@@ -297,27 +394,25 @@ void logger_logv(logger_level_t level, const char *file, int line, const char *f
     void *ptr = NULL;
     if (perf_ringbuf_dequeue(g_free, &ptr) != 0) {
         // no free slots: effectively dropping the new message
-        unsigned long dropped =
-            atomic_fetch_add_explicit(&g_dropped_new, 1, memory_order_relaxed) + 1ul;
+        unsigned long dropped = atomic_fetch_add_explicit(
+            &g_dropped_new,
+            1,
+            memory_order_relaxed
+        ) + 1ul;
+
         // Best-effort: emit a synchronous overflow notice when hitting
         // a power-of-two threshold to ensure visibility even under
         // sustained freelist exhaustion.
         if (should_emit_overflow_notice(dropped)) {
             log_record_t w2;
-            clock_gettime(CLOCK_REALTIME, &w2.ts);
-            w2.tid = get_tid();
-            w2.level = (uint8_t)LOG_ERROR;
-            w2.line = 0;
-            w2.file[0] = '\0';
-            strncpy(w2.func, "logger", sizeof(w2.func) - 1);
-            w2.func[sizeof(w2.func) - 1] = '\0';
-            unsigned long overwritten =
-                atomic_load_explicit(&g_overwritten_old, memory_order_relaxed);
-            snprintf(w2.msg, sizeof(w2.msg),
-                     "logger overflow: dropped_new=%lu overwritten_old=%lu (policy=%s)", dropped,
-                     overwritten, g_policy == LOGGER_DROP_NEW ? "DROP_NEW" : "OVERWRITE_OLDEST");
+            unsigned long overwritten = atomic_load_explicit(
+                &g_overwritten_old,
+                memory_order_relaxed
+            );
+            fill_overflow_notice(&w2, dropped, overwritten);
             write_record(&w2);
         }
+
         return;
     }
     log_record_t *r = (log_record_t *)ptr;
@@ -330,21 +425,28 @@ void logger_logv(logger_level_t level, const char *file, int line, const char *f
     // Copy file/func with truncation
     if (file) {
         size_t n = strnlen(file, sizeof(r->file) - 1);
-        memcpy(r->file, file + (n >= sizeof(r->file) ? n - (sizeof(r->file) - 1) : 0),
-               n >= sizeof(r->file) ? sizeof(r->file) - 1 : n);
+        memcpy(
+            r->file,
+            file + (n >= sizeof(r->file) ? n - (sizeof(r->file) - 1) : 0),
+            n >= sizeof(r->file) ? sizeof(r->file) - 1 : n
+        );
         r->file[sizeof(r->file) - 1] = '\0';
-    } else {
-        r->file[0] = '\0';
     }
+    else
+        r->file[0] = '\0';
+
     if (func) {
         strncpy(r->func, func, sizeof(r->func) - 1);
         r->func[sizeof(r->func) - 1] = '\0';
-    } else {
-        r->func[0] = '\0';
     }
+    else
+        r->func[0] = '\0';
 
-    // Format message into fixed buffer
-    vsnprintf(r->msg, sizeof(r->msg), fmt ? fmt : "", ap);
+    // Format message into fixed buffer; avoid empty format string diagnostic by using "%s"
+    if (fmt && *fmt)
+        vsnprintf(r->msg, sizeof(r->msg), fmt, ap);
+    else
+        r->msg[0] = '\0';
 
     enqueue_record(r);
 
@@ -356,44 +458,37 @@ void logger_logv(logger_level_t level, const char *file, int line, const char *f
         void *p2 = NULL;
         if (perf_ringbuf_dequeue(g_free, &p2) == 0) {
             log_record_t *w = (log_record_t *)p2;
-            clock_gettime(CLOCK_REALTIME, &w->ts);
-            w->tid = get_tid();
-            w->level = (uint8_t)LOG_ERROR;
-            w->line = 0;
-            w->file[0] = '\0';
-            strncpy(w->func, "logger", sizeof(w->func) - 1);
-            w->func[sizeof(w->func) - 1] = '\0';
-            snprintf(w->msg, sizeof(w->msg),
-                     "logger overflow: dropped_new=%lu overwritten_old=%lu (policy=%s)", dropped,
-                     overwritten, g_policy == LOGGER_DROP_NEW ? "DROP_NEW" : "OVERWRITE_OLDEST");
+            fill_overflow_notice(w, dropped, overwritten);
             if (perf_ringbuf_enqueue(g_ring, w) != 0) {
                 // Ring still full: write synchronously and recycle
                 write_record(w);
-                (void)perf_ringbuf_enqueue(g_free, w);
+                if (perf_ringbuf_enqueue(g_free, w) != 0) {
+                    // drop
+                }
             }
-        } else {
+        }
+        else {
             // No freelist entry available: emit synchronously to sinks to ensure visibility
             log_record_t w2;
-            clock_gettime(CLOCK_REALTIME, &w2.ts);
-            w2.tid = get_tid();
-            w2.level = (uint8_t)LOG_ERROR;
-            w2.line = 0;
-            w2.file[0] = '\0';
-            strncpy(w2.func, "logger", sizeof(w2.func) - 1);
-            w2.func[sizeof(w2.func) - 1] = '\0';
-            snprintf(w2.msg, sizeof(w2.msg),
-                     "logger overflow: dropped_new=%lu overwritten_old=%lu (policy=%s)", dropped,
-                     overwritten, g_policy == LOGGER_DROP_NEW ? "DROP_NEW" : "OVERWRITE_OLDEST");
+            fill_overflow_notice(&w2, dropped, overwritten);
             write_record(&w2);
         }
     }
 }
 
-void logger_log(logger_level_t level, const char *file, int line, const char *func, const char *fmt,
-                ...) {
+void logger_log(
+    logger_level_t level,
+    const char *file,
+    int line,
+    const char *func,
+    const char *fmt,
+    ...
+) {
     if ((level < (logger_level_t)LOGGER_COMPILE_LEVEL) ||
-        (level < (logger_level_t)_logger_runtime_level))
+        (level < (logger_level_t)_logger_runtime_level)) {
         return;
+    }
+
     va_list ap;
     va_start(ap, fmt);
     logger_logv(level, file, line, func, fmt, ap);

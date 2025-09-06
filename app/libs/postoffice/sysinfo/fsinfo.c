@@ -12,6 +12,7 @@ unsigned long free_disk_space(const char *path) {
     struct statvfs stat;
     if (statvfs(path, &stat) != 0)
         return 0UL;
+
     return stat.f_frsize * stat.f_bavail;
 }
 
@@ -34,6 +35,7 @@ int get_fs_type(const char *path, char *fs_type, size_t size) {
         }
     }
     fclose(fp);
+
     if (rc != 0)
         errno = ENOENT;
     return rc;

@@ -13,8 +13,9 @@
 static unsigned long str_hash(const void *s) {
     const unsigned char *p = s;
     unsigned long hash = 5381;
-    while (*p)
+    while (*p) {
         hash = ((hash << 5) + hash) + *p++;
+    }
 
     return hash;
 }
@@ -62,10 +63,13 @@ static int ini_handler_cb(void *user, const char *section, const char *name, con
 
         if (is_empty(section))
             errno = INIH_ENOSECTION;
+
         if (errno == 0 && is_empty(name))
             errno = INIH_ENOKEY;
+
         if (errno == 0 && is_empty(value))
             errno = INIH_ENOVALUE;
+
         if (errno != 0)
             return STOP_PARSING;
 
@@ -88,7 +92,8 @@ static int ini_handler_cb(void *user, const char *section, const char *name, con
             errno = INIH_EDUPKEY;
             return STOP_PARSING;
         }
-    } else if (hashtable_put(ctx->entries, full_key, value_copy) != 1) {
+    }
+    else if (hashtable_put(ctx->entries, full_key, value_copy) != 1) {
         free(value_copy);
         free(full_key);
         return STOP_PARSING;
@@ -105,7 +110,8 @@ static int ini_handler_cb(void *user, const char *section, const char *name, con
             errno = INIH_EDUPSECTION;
             return STOP_PARSING;
         }
-    } else if (hashset_add(ctx->sections, section_key) != 1) {
+    }
+    else if (hashset_add(ctx->sections, section_key) != 1) {
         free(section_key);
         return STOP_PARSING;
     }
@@ -130,8 +136,10 @@ static int _po_config_load(const char *filename, po_config_t **cfg_out, bool str
     if (!ctx->entries || !ctx->sections) {
         if (ctx->entries)
             hashtable_destroy(&ctx->entries);
+
         if (ctx->sections)
             hashset_destroy(&ctx->sections);
+
         free(ctx);
         return -1;
     }
@@ -185,7 +193,6 @@ void po_config_free(po_config_t **cfg) {
 
         for (size_t i = 0; i < size; i++)
             free(keys[i]);
-
         free(keys);
         free(values);
     }
@@ -199,8 +206,12 @@ void po_config_free(po_config_t **cfg) {
     *cfg = NULL;
 }
 
-int po_config_get_str(const po_config_t *cfg, const char *section, const char *key,
-                      const char **out_value) {
+int po_config_get_str(
+    const po_config_t *cfg,
+    const char *section,
+    const char *key,
+    const char **out_value
+) {
     char *full_key = get_full_key(section, key);
     if (!full_key)
         return -1;
@@ -216,8 +227,12 @@ int po_config_get_str(const po_config_t *cfg, const char *section, const char *k
     return 0;
 }
 
-int po_config_get_int(const po_config_t *cfg, const char *section, const char *key,
-                      int *out_value) {
+int po_config_get_int(
+    const po_config_t *cfg,
+    const char *section,
+    const char *key,
+    int *out_value
+) {
     const char *v;
     if (po_config_get_str(cfg, section, key, &v) != 0)
         return -1;
@@ -237,8 +252,12 @@ int po_config_get_int(const po_config_t *cfg, const char *section, const char *k
     return 0;
 }
 
-int po_config_get_long(const po_config_t *cfg, const char *section, const char *key,
-                       long *out_value) {
+int po_config_get_long(
+    const po_config_t *cfg,
+    const char *section,
+    const char *key,
+    long *out_value
+) {
     const char *v;
     if (po_config_get_str(cfg, section, key, &v) != 0)
         return -1;
@@ -254,8 +273,12 @@ int po_config_get_long(const po_config_t *cfg, const char *section, const char *
     return 0;
 }
 
-int po_config_get_bool(const po_config_t *cfg, const char *section, const char *key,
-                       bool *out_value) {
+int po_config_get_bool(
+    const po_config_t *cfg,
+    const char *section,
+    const char *key,
+    bool *out_value
+) {
     const char *v;
     if (po_config_get_str(cfg, section, key, &v) != 0)
         return -1;
@@ -263,7 +286,8 @@ int po_config_get_bool(const po_config_t *cfg, const char *section, const char *
     if (strcmp(v, "0") == 0 || strcmp(v, "false") == 0) {
         *out_value = false;
         return 0;
-    } else if (strcmp(v, "1") == 0 || strcmp(v, "true") == 0) {
+    }
+    if (strcmp(v, "1") == 0 || strcmp(v, "true") == 0) {
         *out_value = true;
         return 0;
     }

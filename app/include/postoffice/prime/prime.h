@@ -25,7 +25,7 @@
  * @param[in] n The number to check
  * @return `true` if the number is prime, `false` otherwise
  */
-bool is_prime(size_t n) __wur;
+bool is_prime(size_t n);
 
 /**
  * @brief gets the next prime number after a given number
@@ -36,6 +36,6 @@ bool is_prime(size_t n) __wur;
  * @param[in] n The number to start from
  * @return the next prime number after n
  */
-size_t next_prime(size_t n) __wur;
+size_t next_prime(size_t n);
 
 #endif // _PRIME_H_

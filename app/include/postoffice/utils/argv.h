@@ -17,7 +17,7 @@ typedef struct {
     // Logging/syslog options
     bool syslog;        // enable syslog sink
     char *syslog_ident; // optional ident for syslog (NULL -> default)
-    int fd; // file descriptor for output
+    int fd;             // file descriptor for output
     // add more fields as needed
 } po_args_t;
 

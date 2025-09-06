@@ -114,7 +114,6 @@ int perf_batcher_flush(perf_batcher_t *b, int fd) {
     }
 
     ssize_t written = writev(fd, iov, (int)i);
-    printf("DEBUG: writev returned %zd\n", written);
     if (written < 0)
         return -1;
 
@@ -126,7 +125,8 @@ int perf_batcher_flush(perf_batcher_t *b, int fd) {
         if (consumed >= (ssize_t)len) {
             perf_ringbuf_dequeue(b->rb, NULL); // drop from queue
             consumed -= len;
-        } else {
+        }
+        else {
             // Partial write - adjust the frame pointer
             char *base = iov[j].iov_base;
             base += consumed;

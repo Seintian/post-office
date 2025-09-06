@@ -110,8 +110,10 @@ static int hashset_resize(hashset_t *set, size_t new_capacity) {
 
 // *** API *** //
 
-hashset_t *hashset_create_sized(int (*compare)(const void *, const void *),
-                                unsigned long (*hash_func)(const void *), size_t initial_capacity) {
+hashset_t *hashset_create_sized(
+    int (*compare)(const void *, const void *),
+    unsigned long (*hash_func)(const void *), size_t initial_capacity
+) {
     hashset_t *set = malloc(sizeof(*set));
     if (!set)
         return NULL;
@@ -130,8 +132,10 @@ hashset_t *hashset_create_sized(int (*compare)(const void *, const void *),
     return set;
 }
 
-hashset_t *hashset_create(int (*compare)(const void *, const void *),
-                          unsigned long (*hash_func)(const void *)) {
+hashset_t *hashset_create(
+    int (*compare)(const void *, const void *),
+    unsigned long (*hash_func)(const void *)
+) {
     return hashset_create_sized(compare, hash_func, INITIAL_CAPACITY);
 }
 
@@ -140,11 +144,11 @@ hashset_t *hashset_create(int (*compare)(const void *, const void *),
 int hashset_add(hashset_t *set, void *key) {
     float load_factor = hashset_load_factor(set);
     if (load_factor > LOAD_FACTOR_UP_THRESHOLD && hashset_resize(set, set->capacity * 2) == -1 &&
-        load_factor > LOAD_FACTOR_UP_TOLERANCE)
+        load_factor > LOAD_FACTOR_UP_TOLERANCE) {
         return -1;
+    }
 
     size_t hash = set->hash_func(key) % set->capacity;
-
     hashset_node_t *node = set->buckets[hash];
     while (node) {
         if (set->compare(node->key, key) == 0)
@@ -176,6 +180,7 @@ int hashset_remove(hashset_t *set, const void *key) {
         if (set->compare(node->key, key) == 0) {
             if (prev)
                 prev->next = node->next;
+
             else
                 set->buckets[hash] = node->next;
 
@@ -251,6 +256,7 @@ void hashset_clear(hashset_t *set) {
             free(node);
             node = next;
         }
+
         set->buckets[i] = NULL;
     }
 
@@ -266,6 +272,7 @@ void hashset_destroy(hashset_t **set) {
         hashset_clear(_set);
         free(_set->buckets);
     }
+
     free(_set);
     *set = NULL;
 }

@@ -36,8 +36,9 @@ static int load_cpuinfo(po_sysinfo_t *info) {
     // Logical processors
 #ifdef _SC_NPROCESSORS_ONLN
     long lp = sysconf(_SC_NPROCESSORS_ONLN);
-    if (lp < 1)
+    if (lp < 1) {
         lp = 1;
+    }
     info->logical_processors = lp;
 #else
     info->logical_processors = 1;
@@ -60,6 +61,7 @@ static int load_cpuinfo(po_sysinfo_t *info) {
                 }
             }
         }
+
         fclose(f);
     }
     if (phys <= 0)
@@ -97,8 +99,9 @@ static int load_cpuinfo(po_sysinfo_t *info) {
 }
 
 static long parse_meminfo_value_kb_to_bytes(long kb) {
-    if (kb < 0)
+    if (kb < 0) {
         return -1;
+    }
     return kb * 1024L;
 }
 
@@ -119,17 +122,19 @@ static int load_memoryinfo(po_sysinfo_t *info) {
             if (sscanf(line, "%63[^:]: %ld %15s", key, &val, unit) >= 2) {
                 if (strcmp(key, "MemTotal") == 0)
                     total_kb = val;
+
                 else if (strcmp(key, "MemFree") == 0)
                     free_kb = val;
             }
         }
+
         fclose(f);
     }
     if (total_kb < 0 || free_kb < 0)
         return -1;
 
     info->total_ram = parse_meminfo_value_kb_to_bytes(total_kb);
-    info->free_ram = parse_meminfo_value_kb_to_bytes(free_kb);
+    info->free_ram  = parse_meminfo_value_kb_to_bytes(free_kb);
 
 #ifdef _SC_PAGESIZE
     info->page_size = sysconf(_SC_PAGESIZE);
@@ -157,21 +162,24 @@ static int load_memoryinfo(po_sysinfo_t *info) {
 static int load_resource_limits(po_sysinfo_t *info) {
     if (!info) {
         errno = EINVAL;
-        return -1; // Invalid argument
+        return -1;
     }
 
     struct rlimit rl;
 
     if (getrlimit(RLIMIT_NOFILE, &rl) != 0)
         return -1;
+
     info->max_open_files = rl.rlim_cur;
 
     if (getrlimit(RLIMIT_NPROC, &rl) != 0)
         return -1;
+
     info->max_processes = rl.rlim_cur;
 
     if (getrlimit(RLIMIT_STACK, &rl) != 0)
         return -1;
+
     info->max_stack_size = rl.rlim_cur;
 
     return 0;
@@ -209,17 +217,21 @@ static int load_networkinfo(po_sysinfo_t *info) {
             line_no++;
             if (line_no <= 2)
                 continue; // skip headers
+
             char *colon = strchr(line, ':');
             if (!colon)
                 continue;
+
             // interface name is before ':' possibly with spaces
             char name[IFNAMSIZ] = {0};
             size_t len = 0;
             char *p = line;
             while (*p == ' ')
                 p++;
+
             while (p[len] && p[len] != ':' && len < IFNAMSIZ - 1)
                 len++;
+
             strncpy(name, p, len);
             name[len] = '\0';
             if (strcmp(name, "lo") != 0) {
@@ -227,6 +239,7 @@ static int load_networkinfo(po_sysinfo_t *info) {
                 break;
             }
         }
+
         fclose(f);
     }
 
@@ -240,14 +253,18 @@ static int load_networkinfo(po_sysinfo_t *info) {
     memset(&ifr, 0, sizeof(ifr));
     if (chosen[0] == '\0')
         strncpy(ifr.ifr_name, "lo", IFNAMSIZ - 1);
+
     else
         strncpy(ifr.ifr_name, chosen, IFNAMSIZ - 1);
+
     ifr.ifr_name[IFNAMSIZ - 1] = '\0';
 
     if (ioctl(fd, SIOCGIFMTU, &ifr) == 0)
         info->mtu = ifr.ifr_mtu;
+
     else
         info->mtu = 0;
+
     close(fd);
     return 0; // best-effort
 }
@@ -285,13 +302,16 @@ int po_sysinfo_collect(po_sysinfo_t *info) {
 
     if (load_cpuinfo(info) != 0)
         return -1;
+
     if (load_memoryinfo(info) != 0)
         return -1;
+
     if (load_resource_limits(info) != 0)
         return -1;
-    (void)load_filesysteminfo(info); // best-effort
-    (void)load_networkinfo(info);    // best-effort
-    (void)load_kernelinfo(info);     // best-effort
+
+    load_filesysteminfo(info); // best-effort
+    load_networkinfo(info);    // best-effort
+    load_kernelinfo(info);     // best-effort
 
     info->is_little_endian = __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__;
 

@@ -19,21 +19,28 @@
 static int set_cloexec_nonblock(int fd) {
     if (fd < 0)
         return -1;
+
 #ifdef O_NONBLOCK
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags < 0)
         return -1;
+
     if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
         return -1;
+
 #else
     (void)fd;
+
 #endif
+
 #ifdef FD_CLOEXEC
     int fdflags = fcntl(fd, F_GETFD, 0);
     if (fdflags < 0)
         return -1;
+
     if (fcntl(fd, F_SETFD, fdflags | FD_CLOEXEC) < 0)
         return -1;
+
 #endif
     return 0;
 }
@@ -43,6 +50,7 @@ int socket_set_nonblocking(int fd) {
         errno = EINVAL;
         return -1;
     }
+
     return set_cloexec_nonblock(fd);
 }
 
@@ -91,22 +99,27 @@ int socket_listen(const char *address, const char *port, int backlog) {
 
     int listen_fd = -1;
     for (struct addrinfo *ai = res; ai; ai = ai->ai_next) {
-        int fd =
-            socket(ai->ai_family, ai->ai_socktype | SOCK_NONBLOCK | SOCK_CLOEXEC, ai->ai_protocol);
+        int fd = socket(
+            ai->ai_family,
+            ai->ai_socktype | SOCK_NONBLOCK | SOCK_CLOEXEC,
+            ai->ai_protocol
+        );
         if (fd < 0)
             continue;
 
         int one = 1;
-        (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+        // Best-effort: try to enable SO_REUSEADDR, but don't fail if it errors.
+        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) < 0) {
+            // ignore
+        }
 
         if (bind(fd, ai->ai_addr, ai->ai_addrlen) == 0 && listen(fd, backlog) == 0) {
             listen_fd = fd;
             // do not break; exit loop by setting ai = NULL below to avoid nested breaks
             ai = NULL; // ensure we exit
                        // close remaining? We'll exit after loop
-        } else {
+        } else
             close(fd);
-        }
 
         if (listen_fd != -1)
             break;
@@ -117,7 +130,6 @@ int socket_listen(const char *address, const char *port, int backlog) {
 }
 
 int socket_connect(const char *address, const char *port) {
-
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
@@ -132,8 +144,11 @@ int socket_connect(const char *address, const char *port) {
 
     int fd_out = -1;
     for (struct addrinfo *ai = res; ai; ai = ai->ai_next) {
-        int fd =
-            socket(ai->ai_family, ai->ai_socktype | SOCK_NONBLOCK | SOCK_CLOEXEC, ai->ai_protocol);
+        int fd = socket(
+            ai->ai_family,
+            ai->ai_socktype | SOCK_NONBLOCK | SOCK_CLOEXEC,
+            ai->ai_protocol
+        );
         if (fd < 0)
             continue;
 
@@ -144,6 +159,7 @@ int socket_connect(const char *address, const char *port) {
 
         close(fd);
     }
+
     freeaddrinfo(res);
     return fd_out;
 }
@@ -156,42 +172,54 @@ int socket_accept(int listen_fd, char *out_addr_buf, size_t addr_buf_len) {
 
     struct sockaddr_storage ss;
     socklen_t slen = sizeof(ss);
+
 #ifdef SOCK_NONBLOCK
     int fd = accept4(listen_fd, (struct sockaddr *)&ss, &slen, SOCK_NONBLOCK | SOCK_CLOEXEC);
     if (fd < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK)
             return -2;
+
         return -1;
     }
+
 #else
     int fd = accept(listen_fd, (struct sockaddr *)&ss, &slen);
     if (fd < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK)
             return -2;
+
         return -1;
     }
+
     if (set_cloexec_nonblock(fd) < 0) {
         close(fd);
         return -1;
     }
+
 #endif
 
     if (out_addr_buf && addr_buf_len) {
         char host[NI_MAXHOST];
         char serv[NI_MAXSERV];
-        if (getnameinfo((struct sockaddr *)&ss, slen, host, sizeof(host), serv, sizeof(serv),
-                        NI_NUMERICHOST | NI_NUMERICSERV) == 0) {
+        if (getnameinfo(
+                (struct sockaddr *)&ss,
+                slen,
+                host,
+                sizeof(host),
+                serv,
+                sizeof(serv),
+                NI_NUMERICHOST | NI_NUMERICSERV
+            ) == 0)
             snprintf(out_addr_buf, addr_buf_len, "%s:%s", host, serv);
-        } else if (addr_buf_len) {
+
+        else if (addr_buf_len)
             out_addr_buf[0] = '\0';
-        }
     }
 
     return fd;
 }
 
 int socket_listen_unix(const char *path, int backlog) {
-
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (fd < 0)
         return -1;
@@ -204,13 +232,15 @@ int socket_listen_unix(const char *path, int backlog) {
     if (path[0] == '\0') {
         // abstract namespace (Linux): first byte remains 0
         memcpy(sun.sun_path, path, len);
-    } else {
+    }
+    else {
         // filesystem path: unlink if exists
         if (len >= sizeof(sun.sun_path)) {
             close(fd);
             errno = ENAMETOOLONG;
             return -1;
         }
+
         strncpy(sun.sun_path, path, sizeof(sun.sun_path) - 1);
         unlink(path);
     }
@@ -220,10 +250,12 @@ int socket_listen_unix(const char *path, int backlog) {
         close(fd);
         return -1;
     }
+
     if (listen(fd, backlog) < 0) {
         close(fd);
         return -1;
     }
+
     return fd;
 }
 
@@ -236,30 +268,31 @@ int socket_connect_unix(const char *path) {
     memset(&sun, 0, sizeof(sun));
     sun.sun_family = AF_UNIX;
     size_t len = strnlen(path, sizeof(sun.sun_path));
-    if (path[0] == '\0') {
+    if (path[0] == '\0')
         memcpy(sun.sun_path, path, len);
-    } else {
+
+    else {
         if (len >= sizeof(sun.sun_path)) {
             close(fd);
             errno = ENAMETOOLONG;
             return -1;
         }
+
         strncpy(sun.sun_path, path, sizeof(sun.sun_path) - 1);
     }
 
     socklen_t slen = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + len);
     if (connect(fd, (struct sockaddr *)&sun, slen) == 0)
         return fd;
+
     if (errno == EINPROGRESS)
         return fd;
+
     close(fd);
     return -1;
 }
 
 void socket_close(int fd) {
-    if (fd >= 0) {
-        while (close(fd) == -1 && errno == EINTR) {
-            // retry
-        }
-    }
+    if (fd >= 0)
+        while (close(fd) == -1 && errno == EINTR); // retry
 }
