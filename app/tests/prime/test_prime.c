@@ -16,39 +16,45 @@ TEST_TEAR_DOWN(PRIME) {
 
 // Reference implementation for validation (simple and independent)
 static int ref_is_prime(size_t n) {
-    if (n <= 1)
+    if (n <= 1) {
         return 0;
-    if (n <= 3)
+    }
+    if (n <= 3) {
         return 1;
-    if ((n % 2) == 0 || (n % 3) == 0)
+    }
+    if ((n % 2) == 0 || (n % 3) == 0) {
         return n == 2 || n == 3; // handle 2,3 as prime
+    }
     // Trial division up to sqrt(n)
     for (size_t i = 5; i * i > 0 && i * i <= n; i += 6) { // guard overflow
-        if ((n % i) == 0 || (n % (i + 2)) == 0)
+        if ((n % i) == 0 || (n % (i + 2)) == 0) {
             return 0;
+        }
     }
     return 1;
 }
 
 static size_t ref_next_prime(size_t n) {
-    if (n <= 1)
+    if (n <= 1) {
         return 2;
+    }
     size_t k = n;
     for (;;) {
         k++;
-        if (ref_is_prime(k))
+        if (ref_is_prime(k)) {
             return k;
+        }
     }
 }
 
-TEST(PRIME, IsPrime_KnownSmall) {
+TEST(PRIME, IS_PRIME_KNOWN_SMALL) {
     const size_t primes[] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 97, 101, 103};
     for (size_t i = 0; i < sizeof(primes) / sizeof(primes[0]); i++) {
         TEST_ASSERT_TRUE(is_prime(primes[i]));
     }
 }
 
-TEST(PRIME, IsPrime_KnownComposites) {
+TEST(PRIME, IS_PRIME_KNOWN_COMPOSITES) {
     const size_t comps[] = {0,  1,  4,  6,  8,  9,  10, 12,  14,  15,
                             16, 18, 20, 21, 25, 27, 49, 100, 121, 143};
     for (size_t i = 0; i < sizeof(comps) / sizeof(comps[0]); i++) {
@@ -56,7 +62,7 @@ TEST(PRIME, IsPrime_KnownComposites) {
     }
 }
 
-TEST(PRIME, IsPrime_StructuralCases) {
+TEST(PRIME, IS_PRIME_STRUCTURAL_CASES) {
     // Even numbers > 2 are not prime
     for (size_t e = 4; e <= 200; e += 2) {
         TEST_ASSERT_FALSE(is_prime(e));
@@ -69,7 +75,7 @@ TEST(PRIME, IsPrime_StructuralCases) {
     }
 }
 
-TEST(PRIME, NextPrime_KnownPairs) {
+TEST(PRIME, NEXT_PRIME_KNOWN_PAIRS) {
     struct {
         size_t n, next;
     } cases[] = {{0, 2},       {1, 2},       {2, 3},       {3, 5},      {4, 5},
@@ -82,7 +88,7 @@ TEST(PRIME, NextPrime_KnownPairs) {
     }
 }
 
-TEST(PRIME, NextPrime_BasicProperties) {
+TEST(PRIME, NEXT_PRIME_BASIC_PROPERTIES) {
     for (size_t n = 0; n <= 2000; n++) {
         size_t p = next_prime(n);
         TEST_ASSERT_TRUE_MESSAGE(p > n, "next_prime(n) must be > n");
@@ -90,7 +96,7 @@ TEST(PRIME, NextPrime_BasicProperties) {
     }
 }
 
-TEST(PRIME, IsPrime_RandomAgainstReference) {
+TEST(PRIME, IS_PRIME_RANDOM_AGAINST_REFERENCE) {
     // Keep within a practical bound for runtime
     srand(0xC0FFEE);
     const size_t samples = 2000;
@@ -105,7 +111,7 @@ TEST(PRIME, IsPrime_RandomAgainstReference) {
     }
 }
 
-TEST(PRIME, NextPrime_RandomAgainstReference) {
+TEST(PRIME, NEXT_PRIME_RANDOM_AGAINST_REFERENCE) {
     srand(0xBADA55);
     const size_t samples = 300;
     for (size_t i = 0; i < samples; i++) {
@@ -119,7 +125,7 @@ TEST(PRIME, NextPrime_RandomAgainstReference) {
     }
 }
 
-TEST(PRIME, NextPrime_GapHasNoPrimes) {
+TEST(PRIME, NEXT_PRIME_GAP_HAS_NO_PRIMES) {
     srand(1234);
     const size_t samples = 200;
     for (size_t i = 0; i < samples; i++) {
@@ -134,12 +140,12 @@ TEST(PRIME, NextPrime_GapHasNoPrimes) {
 }
 
 TEST_GROUP_RUNNER(PRIME) {
-    RUN_TEST_CASE(PRIME, IsPrime_KnownSmall);
-    RUN_TEST_CASE(PRIME, IsPrime_KnownComposites);
-    RUN_TEST_CASE(PRIME, IsPrime_StructuralCases);
-    RUN_TEST_CASE(PRIME, NextPrime_KnownPairs);
-    RUN_TEST_CASE(PRIME, NextPrime_BasicProperties);
-    RUN_TEST_CASE(PRIME, IsPrime_RandomAgainstReference);
-    RUN_TEST_CASE(PRIME, NextPrime_RandomAgainstReference);
-    RUN_TEST_CASE(PRIME, NextPrime_GapHasNoPrimes);
+    RUN_TEST_CASE(PRIME, IS_PRIME_KNOWN_SMALL);
+    RUN_TEST_CASE(PRIME, IS_PRIME_KNOWN_COMPOSITES);
+    RUN_TEST_CASE(PRIME, IS_PRIME_STRUCTURAL_CASES);
+    RUN_TEST_CASE(PRIME, NEXT_PRIME_KNOWN_PAIRS);
+    RUN_TEST_CASE(PRIME, NEXT_PRIME_BASIC_PROPERTIES);
+    RUN_TEST_CASE(PRIME, IS_PRIME_RANDOM_AGAINST_REFERENCE);
+    RUN_TEST_CASE(PRIME, NEXT_PRIME_RANDOM_AGAINST_REFERENCE);
+    RUN_TEST_CASE(PRIME, NEXT_PRIME_GAP_HAS_NO_PRIMES);
 }

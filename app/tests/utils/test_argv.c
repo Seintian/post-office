@@ -27,7 +27,7 @@ TEST_TEAR_DOWN(ARGV) {
     TEST_ASSERT_EQUAL_INT32(0, close(nullfd));
 }
 
-TEST(ARGV, DEFAULTVALUES) {
+TEST(ARGV, DEFAULT_VALUES) {
     po_args_t args;
     char *argv[] = {"prog"};
     int rc = do_parse(1, argv, &args);
@@ -38,7 +38,7 @@ TEST(ARGV, DEFAULTVALUES) {
     TEST_ASSERT_EQUAL_INT(0, args.loglevel);
 }
 
-TEST(ARGV, HELPSHORT) {
+TEST(ARGV, HELP_SHORT) {
     po_args_t args;
     char *argv[] = {"prog", "-h"};
     int rc = do_parse(2, argv, &args);
@@ -46,7 +46,7 @@ TEST(ARGV, HELPSHORT) {
     TEST_ASSERT_TRUE(args.help);
 }
 
-TEST(ARGV, HELPLONG) {
+TEST(ARGV, HELP_LONG) {
     po_args_t args;
     char *argv[] = {"prog", "--help"};
     int rc = do_parse(2, argv, &args);
@@ -54,7 +54,7 @@ TEST(ARGV, HELPLONG) {
     TEST_ASSERT_TRUE(args.help);
 }
 
-TEST(ARGV, VERSIONSHORT) {
+TEST(ARGV, VERSION_SHORT) {
     po_args_t args;
     char *argv[] = {"prog", "-v"};
     int rc = do_parse(2, argv, &args);
@@ -62,7 +62,7 @@ TEST(ARGV, VERSIONSHORT) {
     TEST_ASSERT_TRUE(args.version);
 }
 
-TEST(ARGV, VERSIONLONG) {
+TEST(ARGV, VERSION_LONG) {
     po_args_t args;
     char *argv[] = {"prog", "--version"};
     int rc = do_parse(2, argv, &args);
@@ -70,7 +70,7 @@ TEST(ARGV, VERSIONLONG) {
     TEST_ASSERT_TRUE(args.version);
 }
 
-TEST(ARGV, CONFIGOPTION) {
+TEST(ARGV, CONFIG_OPTION) {
     po_args_t args;
     char *argv[] = {"prog", "-c", "conf.ini"};
     int rc = do_parse(3, argv, &args);
@@ -79,7 +79,7 @@ TEST(ARGV, CONFIGOPTION) {
     free(args.config_file);
 }
 
-TEST(ARGV, CONFIGLONG) {
+TEST(ARGV, CONFIG_LONG) {
     po_args_t args;
     char *argv[] = {"prog", "--config", "app.ini"};
     int rc = do_parse(3, argv, &args);
@@ -88,7 +88,7 @@ TEST(ARGV, CONFIGLONG) {
     free(args.config_file);
 }
 
-TEST(ARGV, LOGLEVEL) {
+TEST(ARGV, LOG_LEVEL) {
     po_args_t args;
     char *argv[] = {"prog", "-l", "2"};
     int rc = do_parse(3, argv, &args);
@@ -97,12 +97,12 @@ TEST(ARGV, LOGLEVEL) {
 }
 
 TEST_GROUP_RUNNER(ARGV) {
-    RUN_TEST_CASE(ARGV, DEFAULTVALUES);
-    RUN_TEST_CASE(ARGV, HELPSHORT);
-    RUN_TEST_CASE(ARGV, HELPLONG);
-    RUN_TEST_CASE(ARGV, VERSIONSHORT);
-    RUN_TEST_CASE(ARGV, VERSIONLONG);
-    RUN_TEST_CASE(ARGV, CONFIGOPTION);
-    RUN_TEST_CASE(ARGV, CONFIGLONG);
-    RUN_TEST_CASE(ARGV, LOGLEVEL);
+    RUN_TEST_CASE(ARGV, DEFAULT_VALUES);
+    RUN_TEST_CASE(ARGV, HELP_SHORT);
+    RUN_TEST_CASE(ARGV, HELP_LONG);
+    RUN_TEST_CASE(ARGV, VERSION_SHORT);
+    RUN_TEST_CASE(ARGV, VERSION_LONG);
+    RUN_TEST_CASE(ARGV, CONFIG_OPTION);
+    RUN_TEST_CASE(ARGV, CONFIG_LONG);
+    RUN_TEST_CASE(ARGV, LOG_LEVEL);
 }

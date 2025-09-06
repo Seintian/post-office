@@ -7,7 +7,9 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: %s <n>\n", argv[0]);
         return 2;
     }
+
     unsigned long n = strtoul(argv[1], NULL, 10);
-    printf("%zu\n", next_prime((size_t)n));
+    printf("%zu\n", next_prime(n));
+
     return 0;
 }

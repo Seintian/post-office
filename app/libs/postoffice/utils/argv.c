@@ -16,12 +16,13 @@ void po_args_init(po_args_t *args) {
 
 void po_args_print_usage(int fd, const char *prog_name) {
     dprintf(fd, "Usage: %s [options]\n", prog_name);
-    dprintf(fd, "  -h, --help            Show this help message and exit\n"
-                "  -v, --version         Show version information and exit\n"
-                "  -c, --config FILE     Path to configuration file\n"
-                "  -l, --loglevel LEVEL  Set log level (TRACE|DEBUG|INFO|WARN|ERROR|FATAL or 0..5)\n"
-                "      --syslog          Enable syslog logging sink\n"
-                "      --syslog-ident S  Set syslog ident (default: 'postoffice')\n");
+    dprintf(fd,
+            "  -h, --help            Show this help message and exit\n"
+            "  -v, --version         Show version information and exit\n"
+            "  -c, --config FILE     Path to configuration file\n"
+            "  -l, --loglevel LEVEL  Set log level (TRACE|DEBUG|INFO|WARN|ERROR|FATAL or 0..5)\n"
+            "      --syslog          Enable syslog logging sink\n"
+            "      --syslog-ident S  Set syslog ident (default: 'postoffice')\n");
 }
 
 int po_args_parse(po_args_t *args, int argc, char **argv, int fd) {
@@ -56,16 +57,22 @@ int po_args_parse(po_args_t *args, int argc, char **argv, int fd) {
             if (optarg) {
                 if (strcasecmp(optarg, "TRACE") == 0)
                     args->loglevel = 0;
+
                 else if (strcasecmp(optarg, "DEBUG") == 0)
                     args->loglevel = 1;
+
                 else if (strcasecmp(optarg, "INFO") == 0)
                     args->loglevel = 2;
+
                 else if (strcasecmp(optarg, "WARN") == 0 || strcasecmp(optarg, "WARNING") == 0)
                     args->loglevel = 3;
+
                 else if (strcasecmp(optarg, "ERROR") == 0)
                     args->loglevel = 4;
+
                 else if (strcasecmp(optarg, "FATAL") == 0)
                     args->loglevel = 5;
+
                 else
                     args->loglevel = atoi(optarg);
             }

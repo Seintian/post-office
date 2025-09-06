@@ -67,17 +67,19 @@ TEST_TEAR_DOWN(APP) {
         poller_destroy(poller);
         poller = NULL;
     }
-    if (bucket) {
+
+    if (bucket)
         db_bucket_close(&bucket);
-    }
-    if (env) {
+
+    if (env)
         db_env_close(&env);
-    }
+
     if (env_path) {
         rmdir(env_path);
         free(env_path);
         env_path = NULL;
     }
+
     // dir_template aliases env_path (mkdtemp returns the same buffer), do not free twice
     dir_template = NULL;
 
@@ -86,7 +88,7 @@ TEST_TEAR_DOWN(APP) {
     CAPTURE_REPORT(buf, sizeof(buf), perf_shutdown);
 }
 
-TEST(APP, MAINLOOPENDTOEND) {
+TEST(APP, MAIN_LOOP_END_TO_END) {
     // Arrange networking
     int sv[2];
     TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
@@ -144,5 +146,5 @@ TEST(APP, MAINLOOPENDTOEND) {
 }
 
 TEST_GROUP_RUNNER(APP) {
-    RUN_TEST_CASE(APP, MAINLOOPENDTOEND);
+    RUN_TEST_CASE(APP, MAIN_LOOP_END_TO_END);
 }

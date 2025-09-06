@@ -18,11 +18,13 @@ poller_t *poller_create(void) {
     int epfd = epoll_create1(EPOLL_CLOEXEC);
     if (epfd < 0)
         return NULL;
+
     poller_t *p = (poller_t *)calloc(1, sizeof(*p));
     if (!p) {
         close(epfd);
         return NULL;
     }
+
     p->epfd = epfd;
     return p;
 }
@@ -37,6 +39,7 @@ int poller_add(const poller_t *p, int fd, uint32_t events) {
     memset(&ev, 0, sizeof(ev));
     ev.events = events;
     ev.data.fd = fd;
+
     return epoll_ctl(p->epfd, EPOLL_CTL_ADD, fd, &ev);
 }
 
@@ -45,6 +48,7 @@ int poller_mod(const poller_t *p, int fd, uint32_t events) {
     memset(&ev, 0, sizeof(ev));
     ev.events = events;
     ev.data.fd = fd;
+
     return epoll_ctl(p->epfd, EPOLL_CTL_MOD, fd, &ev);
 }
 
@@ -57,5 +61,6 @@ int poller_wait(const poller_t *p, struct epoll_event *events, int max_events, i
         errno = EINVAL;
         return -1;
     }
+
     return epoll_wait(p->epfd, events, max_events, timeout);
 }

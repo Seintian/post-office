@@ -1,6 +1,5 @@
-// include/utils/hashset.h
-#ifndef _HASHSET_H
-#define _HASHSET_H
+#ifndef HASHSET_H
+#define HASHSET_H
 
 /**
  * @file hashset.h
@@ -34,9 +33,10 @@ typedef struct hashset hashset_t;
  * @param[in] hash_func Function to hash keys: returns unsigned long hash.
  * @return Pointer to the new set, or NULL on failure.
  */
-hashset_t *hashset_create(int (*compare)(const void *, const void *),
-                          unsigned long (*hash_func)(const void *)) __attribute_malloc__
-    __nonnull((1, 2));
+hashset_t *hashset_create(
+    int (*compare)(const void *, const void *),
+    unsigned long (*hash_func)(const void *)
+) __attribute_malloc__ __nonnull((1, 2));
 
 /**
  * @brief Create a new HashSet with specified initial capacity.
@@ -46,9 +46,11 @@ hashset_t *hashset_create(int (*compare)(const void *, const void *),
  * @param[in] initial_capacity Prime number initial capacity.
  * @return Pointer to the new set, or NULL on failure.
  */
-hashset_t *hashset_create_sized(int (*compare)(const void *, const void *),
-                                unsigned long (*hash_func)(const void *),
-                                size_t initial_capacity) __attribute_malloc__ __nonnull((1, 2));
+hashset_t *hashset_create_sized(
+    int (*compare)(const void *, const void *),
+    unsigned long (*hash_func)(const void *),
+    size_t initial_capacity
+) __attribute_malloc__ __nonnull((1, 2));
 
 /**
  * @brief Insert a key into the set.
@@ -142,4 +144,4 @@ float hashset_load_factor(const hashset_t *set) __nonnull((1));
 }
 #endif
 
-#endif // _HASHSET_H
+#endif // HASHSET_H

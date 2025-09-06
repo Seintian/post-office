@@ -7,6 +7,7 @@ int main(void) {
         fprintf(stderr, "sysinfo: collect failed\n");
         return 1;
     }
+
     po_sysinfo_print(&info, stdout);
     return 0;
 }

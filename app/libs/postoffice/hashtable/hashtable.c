@@ -135,9 +135,11 @@ static int hashtable_resize(hashtable_t *table, size_t new_capacity) {
 
 // *** API *** //
 
-hashtable_t *hashtable_create_sized(int (*compare)(const void *, const void *),
-                                    unsigned long (*hash_func)(const void *),
-                                    size_t base_capacity) {
+hashtable_t *hashtable_create_sized(
+    int (*compare)(const void *, const void *),
+    unsigned long (*hash_func)(const void *),
+    size_t base_capacity
+) {
     hashtable_t *table = malloc(sizeof(hashtable_t));
     if (!table)
         return NULL;
@@ -156,8 +158,10 @@ hashtable_t *hashtable_create_sized(int (*compare)(const void *, const void *),
     return table;
 }
 
-hashtable_t *hashtable_create(int (*compare)(const void *, const void *),
-                              unsigned long (*hash_func)(const void *)) {
+hashtable_t *hashtable_create(
+    int (*compare)(const void *, const void *),
+    unsigned long (*hash_func)(const void *)
+) {
     return hashtable_create_sized(compare, hash_func, INITIAL_CAPACITY);
 }
 
@@ -314,6 +318,7 @@ void hashtable_destroy(hashtable_t **table) {
         hashtable_clear(_table);
         free(_table->buckets);
     }
+
     free(_table);
     *table = NULL;
 }
@@ -409,8 +414,11 @@ void **hashtable_values(const hashtable_t *table) {
     return values;
 }
 
-int hashtable_equals(const hashtable_t *table1, const hashtable_t *table2,
-                     int (*compare)(const void *, const void *)) {
+int hashtable_equals(
+    const hashtable_t *table1,
+    const hashtable_t *table2,
+    int (*compare)(const void *, const void *)
+) {
     if (table1->size != table2->size)
         return 0;
 

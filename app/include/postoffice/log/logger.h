@@ -56,6 +56,7 @@
  * @endcode
  */
 
+#include <sys/cdefs.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -91,8 +92,8 @@ typedef enum logger_overflow_policy {
 
 // Sinks mask
 #define LOGGER_SINK_CONSOLE (1u << 0)
-#define LOGGER_SINK_FILE (1u << 1)
-#define LOGGER_SINK_SYSLOG (1u << 2)
+#define LOGGER_SINK_FILE    (1u << 1)
+#define LOGGER_SINK_SYSLOG  (1u << 2)
 
 // Compile-time default level (can be overridden with -DLOGGER_COMPILE_LEVEL=N)
 #ifndef LOGGER_COMPILE_LEVEL
@@ -172,7 +173,7 @@ int logger_add_sink_console(bool use_stderr);
  * @param append When true, append to existing file; otherwise truncate.
  * @return 0 on success; -1 on error (errno may be set).
  */
-int logger_add_sink_file(const char *path, bool append);
+int logger_add_sink_file(const char *path, bool append) __nonnull((1));
 
 /**
  * @brief Enable syslog sink output.
@@ -181,6 +182,19 @@ int logger_add_sink_file(const char *path, bool append);
  * @return 0 on success; -1 if unavailable or on error.
  */
 int logger_add_sink_syslog(const char *ident);
+
+/**
+ * @brief Add a custom sink that receives formatted log lines.
+ *
+ * The callback is invoked from logger worker threads with a NUL-terminated
+ * formatted line (no trailing newline trimming guaranteed). The callback
+ * must be non-blocking and fast.
+ *
+ * @param fn   Callback function pointer
+ * @param udata User pointer passed to callback
+ * @return 0 on success, -1 on error
+ */
+int logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *udata);
 
 // Fast-path check
 /**
@@ -212,8 +226,14 @@ static inline bool logger_would_log(logger_level_t level) {
  * @param fmt   printf-style format string.
  * @param ap    Varargs list.
  */
-void logger_logv(logger_level_t level, const char *file, int line, const char *func,
-                 const char *fmt, va_list ap) __attribute__((format(printf, 5, 0)));
+void logger_logv(
+    logger_level_t level,
+    const char *file,
+    int line,
+    const char *func,
+    const char *fmt,
+    va_list ap
+) __attribute__((format(printf, 5, 0)));
 
 /**
  * @brief Core enqueue primitive.
@@ -224,8 +244,14 @@ void logger_logv(logger_level_t level, const char *file, int line, const char *f
  * @param func  Function name (typically __func__).
  * @param fmt   printf-style format followed by arguments.
  */
-void logger_log(logger_level_t level, const char *file, int line, const char *func, const char *fmt,
-                ...) __attribute__((format(printf, 5, 6)));
+void logger_log(
+    logger_level_t level,
+    const char *file,
+    int line,
+    const char *func,
+    const char *fmt,
+    ...
+) __attribute__((format(printf, 5, 6)));
 
 // Convenience macros that avoid formatting when disabled
 /**
@@ -247,8 +273,8 @@ void logger_log(logger_level_t level, const char *file, int line, const char *fu
 
 #define LOG_TRACE(fmt, ...) LOG_AT(LOG_TRACE, fmt, ##__VA_ARGS__)
 #define LOG_DEBUG(fmt, ...) LOG_AT(LOG_DEBUG, fmt, ##__VA_ARGS__)
-#define LOG_INFO(fmt, ...) LOG_AT(LOG_INFO, fmt, ##__VA_ARGS__)
-#define LOG_WARN(fmt, ...) LOG_AT(LOG_WARN, fmt, ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...)  LOG_AT(LOG_INFO, fmt, ##__VA_ARGS__)
+#define LOG_WARN(fmt, ...)  LOG_AT(LOG_WARN, fmt, ##__VA_ARGS__)
 #define LOG_ERROR(fmt, ...) LOG_AT(LOG_ERROR, fmt, ##__VA_ARGS__)
 #define LOG_FATAL(fmt, ...) LOG_AT(LOG_FATAL, fmt, ##__VA_ARGS__)
 

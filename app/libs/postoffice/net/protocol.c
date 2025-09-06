@@ -7,6 +7,7 @@
 
 void protocol_header_to_network(po_header_t *header) {
     header->version = htons((uint16_t)PROTOCOL_VERSION);
+
     // msg_type and flags are single bytes, unchanged
     header->payload_len = htonl(header->payload_len);
 }

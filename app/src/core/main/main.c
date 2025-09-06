@@ -14,8 +14,10 @@ int main(int argc, char **argv) {
 
     // Initialize logger according to CLI
     logger_config cfg = {
-        .level = (args.loglevel >= 0 && args.loglevel <= 5) ? (logger_level_t)args.loglevel : LOG_INFO,
-        .ring_capacity = 1u << 14,
+        .level = (args.loglevel >= 0 && args.loglevel <= 5)
+            ? (logger_level_t)args.loglevel
+            : LOG_INFO,
+        .ring_capacity = 1u << 14, // 16384 entries
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
     };
@@ -23,13 +25,14 @@ int main(int argc, char **argv) {
         fprintf(stderr, "logger: init failed\n");
         return 1;
     }
+
     // Always log to console by default
     logger_add_sink_console(true);
-    if (args.syslog) {
+    if (args.syslog)
         logger_add_sink_syslog(args.syslog_ident);
-    }
 
-    LOG_INFO("post-office main started (level=%d)%s", (int)logger_get_level(), args.syslog ? " with syslog" : "");
+    LOG_INFO("post-office main started (level=%d)%s", (int)logger_get_level(),
+             args.syslog ? " with syslog" : "");
 
     // TODO: wire configuration file and launch application subsystems
 

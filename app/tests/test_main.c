@@ -21,6 +21,7 @@ extern TEST_GROUP_RUNNER(LOGGER);
 extern TEST_GROUP_RUNNER(FILES);
 extern TEST_GROUP_RUNNER(RANDOM);
 extern TEST_GROUP_RUNNER(PRIME);
+extern TEST_GROUP_RUNNER(LOGSTORE);
 
 static void RunAllTests(void) {
     RUN_TEST_GROUP(ARGV);
@@ -43,6 +44,7 @@ static void RunAllTests(void) {
     RUN_TEST_GROUP(FILES);
     RUN_TEST_GROUP(RANDOM);
     RUN_TEST_GROUP(PRIME);
+    RUN_TEST_GROUP(LOGSTORE);
 }
 
 int main(int argc, const char *argv[]) {

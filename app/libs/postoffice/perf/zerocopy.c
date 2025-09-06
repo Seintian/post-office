@@ -75,14 +75,16 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
 }
 
 void perf_zcpool_destroy(perf_zcpool_t **p) {
-    if (!*p)
+    if (!*p) {
         return;
+    }
 
     perf_zcpool_t *pool = *p;
 
     // free ring and unmap region
-    if (pool->freeq)
+    if (pool->freeq) {
         perf_ringbuf_destroy(&pool->freeq);
+    }
 
     if (pool->base) {
         size_t region_size = pool->buf_count * pool->buf_size;
@@ -120,8 +122,9 @@ void perf_zcpool_release(perf_zcpool_t *p, void *buffer) {
     uintptr_t end = start + p->buf_count * p->buf_size;
     uintptr_t ptr = (uintptr_t)buffer;
     // only release if pointer is exactly one of our buffers
-    if (ptr < start || ptr >= end || ((ptr - start) % p->buf_size) != 0)
+    if (ptr < start || ptr >= end || ((ptr - start) % p->buf_size) != 0) {
         return;
+    }
 
     // Optionally check buffer in range [base, base+count*size)
     perf_ringbuf_enqueue(p->freeq, buffer);

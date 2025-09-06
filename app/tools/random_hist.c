@@ -9,9 +9,9 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         uint64_t seed = strtoull(argv[1], NULL, 10);
         po_rand_seed(seed);
-    } else {
-        po_rand_seed_auto();
     }
+    else
+        po_rand_seed_auto();
 
     int counts[101] = {0}; // use indices 1..100
 
@@ -21,9 +21,8 @@ int main(int argc, char **argv) {
     }
 
     // Print CSV: value,count
-    for (int v = 1; v <= 100; ++v) {
+    for (int v = 1; v <= 100; ++v)
         printf("%d,%d\n", v, counts[v]);
-    }
 
     return 0;
 }

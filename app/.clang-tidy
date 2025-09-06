@@ -1,0 +1,9 @@
+Checks: >
+  -clang-analyzer-*,-*,
+  clang-diagnostic-*,
+  readability-misleading-indentation,
+  bugprone-branch-clone
+WarningsAsErrors: ''
+FormatStyle: file
+HeaderFilterRegex: '^(include|libs/postoffice|src|tests|tools)/.*'
+User: postoffice

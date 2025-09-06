@@ -14,44 +14,64 @@ static int _map_lmdb_error(int rc) {
     switch (rc) {
     case MDB_SUCCESS:
         return DB_EOK;
+
     case MDB_KEYEXIST:
         return DB_EKEYEXIST;
+
     case MDB_NOTFOUND:
         return DB_ENOTFOUND;
+
     case MDB_PAGE_NOTFOUND:
         return DB_EPAGENOTFOUND;
+
     case MDB_CORRUPTED:
         return DB_ECORRUPTED;
+
     case MDB_PANIC:
         return DB_EPANIC;
+
     case MDB_VERSION_MISMATCH:
         return DB_EVERSION;
+
     case MDB_INVALID:
         return DB_EINVALID;
+
     case MDB_MAP_FULL:
         return DB_EMAPFULL;
+
     case MDB_DBS_FULL:
         return DB_EDBSFULL;
+
     case MDB_READERS_FULL:
         return DB_EREADERSFULL;
+
     case MDB_TXN_FULL:
         return DB_ETXNFULL;
+
     case MDB_CURSOR_FULL:
         return DB_ECURSORFULL;
+
     case MDB_PAGE_FULL:
         return DB_EPAGEFULL;
+
     case MDB_MAP_RESIZED:
         return DB_EMAPRESIZED;
+
     case MDB_INCOMPATIBLE:
         return DB_EINCOMP;
+
     case MDB_BAD_RSLOT:
         return DB_EBADRSLOT;
+
     case MDB_BAD_TXN:
         return DB_EBADTXN;
+
     case MDB_BAD_VALSIZE:
         return DB_EBADVALSIZE;
+
     case MDB_BAD_DBI:
         return DB_EBADDBI;
+
     default:
         return DB_EINVALID;
     }
@@ -128,9 +148,9 @@ void db_env_close(db_env_t **dbenv) {
         return;
 
     db_env_t *env = *dbenv;
-    if (env->env) {
+    if (env->env)
         mdb_env_close(env->env);
-    }
+
     free(env);
     *dbenv = NULL;
 }
@@ -304,6 +324,7 @@ int db_delete(db_bucket_t *bucket, const void *key, size_t keylen) {
         errno = _map_lmdb_error(rc);
         return -1;
     }
+
     return 0;
 }
 
@@ -311,10 +332,17 @@ int db_delete(db_bucket_t *bucket, const void *key, size_t keylen) {
 // db_iterate
 //----------------------------------------------------------------------
 
-int db_iterate(db_bucket_t *bucket,
-               int (*cb)(const void *key, size_t keylen, const void *val, size_t vallen,
-                         void *udata),
-               void *udata) {
+int db_iterate(
+    db_bucket_t *bucket,
+    int (*cb)(
+        const void *key,
+        size_t keylen,
+        const void *val,
+        size_t vallen,
+        void *udata
+    ),
+    void *udata
+) {
     MDB_txn *txn;
     MDB_cursor *cursor;
     int rc = mdb_txn_begin(bucket->env, NULL, MDB_RDONLY, &txn);
@@ -348,5 +376,6 @@ int db_iterate(db_bucket_t *bucket,
         errno = _map_lmdb_error(rc);
         return -1;
     }
+
     return 0;
 }

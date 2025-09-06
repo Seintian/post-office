@@ -23,20 +23,20 @@ TEST_TEAR_DOWN(LOGGER) {
     logger_shutdown();
 }
 
-TEST(LOGGER, INITANDLEVEL) {
+TEST(LOGGER, INIT_AND_LEVEL) {
     TEST_ASSERT_EQUAL_INT(LOG_TRACE, logger_get_level());
     TEST_ASSERT_EQUAL_INT(0, logger_set_level(LOG_INFO));
     TEST_ASSERT_EQUAL_INT(LOG_INFO, logger_get_level());
 }
 
-TEST(LOGGER, CONSOLESINKANDWRITE) {
+TEST(LOGGER, CONSOLE_SINK_AND_WRITE) {
     TEST_ASSERT_EQUAL_INT(0, logger_add_sink_console(true));
     LOG_INFO("hello %s", "world");
     // give consumer time to drain
     usleep(10 * 1000);
 }
 
-TEST(LOGGER, FILESINKWRITES) {
+TEST(LOGGER, FILE_SINK_WRITES) {
     char path[] = "/tmp/po_logger_testXXXXXX";
     int fd = mkstemp(path);
     TEST_ASSERT_NOT_EQUAL(-1, fd);
@@ -57,7 +57,7 @@ TEST(LOGGER, FILESINKWRITES) {
 // group runner declared later (after all tests)
 
 // New test: force queue overflow and assert an overflow error notice is emitted
-TEST(LOGGER, OVERFLOWEMITSERROR) {
+TEST(LOGGER, OVERFLOW_EMITS_ERROR) {
     // Re-init logger with a very small ring to force overflow quickly
     logger_shutdown();
     logger_config cfg = {
@@ -116,8 +116,8 @@ TEST(LOGGER, OVERFLOWEMITSERROR) {
 
 // Group runner with all tests
 TEST_GROUP_RUNNER(LOGGER) {
-    RUN_TEST_CASE(LOGGER, INITANDLEVEL);
-    RUN_TEST_CASE(LOGGER, CONSOLESINKANDWRITE);
-    RUN_TEST_CASE(LOGGER, FILESINKWRITES);
-    RUN_TEST_CASE(LOGGER, OVERFLOWEMITSERROR);
+    RUN_TEST_CASE(LOGGER, INIT_AND_LEVEL);
+    RUN_TEST_CASE(LOGGER, CONSOLE_SINK_AND_WRITE);
+    RUN_TEST_CASE(LOGGER, FILE_SINK_WRITES);
+    RUN_TEST_CASE(LOGGER, OVERFLOW_EMITS_ERROR);
 }

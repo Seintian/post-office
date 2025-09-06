@@ -13,7 +13,7 @@ TEST_SETUP(SOCKET) { /* no setup required */
 TEST_TEAR_DOWN(SOCKET) { /* no teardown required */
 }
 
-TEST(SOCKET, NONBLOCKINGHELPER) {
+TEST(SOCKET, NON_BLOCKING_HELPER) {
     int sv[2];
     TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
     TEST_ASSERT_EQUAL_INT(0, socket_set_nonblocking(sv[0]));
@@ -23,7 +23,7 @@ TEST(SOCKET, NONBLOCKINGHELPER) {
     socket_close(sv[1]);
 }
 
-TEST(SOCKET, COMMONOPTIONSNOERROR) {
+TEST(SOCKET, COMMON_OPTIONS_NO_ERROR) {
     int sv[2];
     TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
     // On UNIX sockets, TCP options are no-ops; however the function should not fail.
@@ -34,7 +34,7 @@ TEST(SOCKET, COMMONOPTIONSNOERROR) {
 }
 
 // Extended tests for helper behavior on error handling and close
-TEST(SOCKET, CLOSEIGNORESEINTR) {
+TEST(SOCKET, CLOSE_IGNORES_EINTR) {
     // We can't force EINTR easily; just ensure calling twice is safe.
     int sv[2];
     TEST_ASSERT_EQUAL_INT(0, socketpair(AF_UNIX, SOCK_STREAM, 0, sv));
@@ -45,7 +45,7 @@ TEST(SOCKET, CLOSEIGNORESEINTR) {
 }
 
 TEST_GROUP_RUNNER(SOCKET) {
-    RUN_TEST_CASE(SOCKET, NONBLOCKINGHELPER);
-    RUN_TEST_CASE(SOCKET, COMMONOPTIONSNOERROR);
-    RUN_TEST_CASE(SOCKET, CLOSEIGNORESEINTR);
+    RUN_TEST_CASE(SOCKET, NON_BLOCKING_HELPER);
+    RUN_TEST_CASE(SOCKET, COMMON_OPTIONS_NO_ERROR);
+    RUN_TEST_CASE(SOCKET, CLOSE_IGNORES_EINTR);
 }
