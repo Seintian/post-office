@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <poll.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -144,7 +145,20 @@ ssize_t perf_batcher_next(perf_batcher_t *b, void **out) {
         return -1;
     }
 
-    // Block until at least one event arrives
+    // Use poll with timeout instead of blocking read to allow periodic checks
+    struct pollfd pfd = { .fd = b->efd, .events = POLLIN };
+    int poll_result = poll(&pfd, 1, 500); // 500ms timeout
+    
+    if (poll_result == 0) {
+        // Timeout - return error so caller can check exit conditions
+        errno = EAGAIN;
+        return -1;
+    } else if (poll_result < 0) {
+        // Poll error
+        return -1;
+    }
+
+    // Data available, read it
     uint64_t cnt;
     if (read(b->efd, &cnt, sizeof(cnt)) != sizeof(cnt))
         return -1; // efd closed or error
