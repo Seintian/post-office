@@ -48,7 +48,7 @@ void *_ls_worker_main(void *arg) {
         if (n == 1) {
             append_req_t *only = (append_req_t *)batch[0];
             if (only && only->k == NULL && only->v == NULL) {
-                free(only);
+                free(only); // sentinel
                 ls->sentinel = NULL;
                 if (!atomic_load(&ls->running) && perf_ringbuf_count(ls->q) == 0)
                     break;
@@ -114,9 +114,7 @@ void *_ls_worker_main(void *arg) {
                 pthread_rwlock_wrlock(&ls->idx_lock);
                 (void)po_index_put(ls->mem_idx, req->k, req->klen, (uint64_t)off, vl);
                 pthread_rwlock_unlock(&ls->idx_lock);
-                free(req->k);
-                free(req->v);
-                free(req);
+                free(req); // single allocation
                 atomic_fetch_sub(&ls->outstanding_reqs, 1);
             }
             if (ls->fsync_policy == PO_LS_FSYNC_EACH_BATCH)
@@ -184,11 +182,11 @@ void *_ls_worker_main(void *arg) {
             append_req_t *req = (append_req_t *)batch[i];
             if (req == ls->sentinel)
                 continue;
-            free(req->k);
-            free(req->v);
             free(req);
             atomic_fetch_sub(&ls->outstanding_reqs, 1);
         }
+        atomic_fetch_add(&ls->metric_records_flushed, (uint64_t)live);
+        atomic_fetch_add(&ls->metric_batches_flushed, 1);
         if (sentinel_seen && ls->sentinel) {
             free(ls->sentinel);
             ls->sentinel = NULL;
@@ -203,14 +201,13 @@ void *_ls_worker_main(void *arg) {
             void *left = NULL;
             while (perf_ringbuf_dequeue(ls->q, &left) == 0) {
                 append_req_t *req = (append_req_t *)left;
-                if (!req) continue;
+                if (!req)
+                    continue;
                 if (req == ls->sentinel) {
                     free(req);
                     ls->sentinel = NULL;
                     continue;
                 }
-                free(req->k);
-                free(req->v);
                 free(req);
                 atomic_fetch_sub(&ls->outstanding_reqs, 1);
             }

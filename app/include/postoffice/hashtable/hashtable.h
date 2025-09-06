@@ -63,7 +63,8 @@ po_hashtable_t *po_hashtable_create(int (*compare)(const void *, const void *),
  * @note The base capacity should be a prime number.
  */
 po_hashtable_t *po_hashtable_create_sized(int (*compare)(const void *, const void *),
-                                          unsigned long (*hash_func)(const void *), size_t base_capacity)
+                                          unsigned long (*hash_func)(const void *),
+                                          size_t base_capacity)
     __nonnull((1, 2)) __attribute_malloc__;
 
 // *** Basic hash table operations *** //
@@ -220,7 +221,8 @@ float po_hashtable_load_factor(const po_hashtable_t *table) __nonnull((1));
  * @param[in] new_value The new value to insert
  * @return 1 on success, 0 if the key does not exist
  */
-int po_hashtable_replace(const po_hashtable_t *table, const void *key, void *new_value) __nonnull((1, 2));
+int po_hashtable_replace(const po_hashtable_t *table, const void *key, void *new_value)
+    __nonnull((1, 2));
 
 /**
  * @brief clears all elements from the hash table

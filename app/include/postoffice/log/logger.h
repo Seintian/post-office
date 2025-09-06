@@ -227,7 +227,7 @@ static inline bool logger_would_log(po_log_level_t level) {
  * @param ap    Varargs list.
  */
 void po_logger_logv(po_log_level_t level, const char *file, int line, const char *func,
-                 const char *fmt, va_list ap) __attribute__((format(printf, 5, 0)));
+                    const char *fmt, va_list ap) __attribute__((format(printf, 5, 0)));
 
 /**
  * @brief Core enqueue primitive.
@@ -238,8 +238,8 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
  * @param func  Function name (typically __func__).
  * @param fmt   printf-style format followed by arguments.
  */
-void po_logger_log(po_log_level_t level, const char *file, int line, const char *func, const char *fmt,
-                ...) __attribute__((format(printf, 5, 6)));
+void po_logger_log(po_log_level_t level, const char *file, int line, const char *func,
+                   const char *fmt, ...) __attribute__((format(printf, 5, 6)));
 
 // Convenience macros that avoid formatting when disabled
 /**

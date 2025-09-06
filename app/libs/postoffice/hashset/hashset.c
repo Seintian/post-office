@@ -111,7 +111,8 @@ static int hashset_resize(po_hashset_t *set, size_t new_capacity) {
 // *** API *** //
 
 po_hashset_t *po_hashset_create_sized(int (*compare)(const void *, const void *),
-                                      unsigned long (*hash_func)(const void *), size_t initial_capacity) {
+                                      unsigned long (*hash_func)(const void *),
+                                      size_t initial_capacity) {
     po_hashset_t *set = malloc(sizeof(*set));
     if (!set)
         return NULL;

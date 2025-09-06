@@ -187,7 +187,7 @@ void po_config_free(po_config_t **cfg) {
         for (size_t i = 0; i < size; i++)
             free(values[i]);
 
-    po_hashtable_destroy(&config->entries);
+        po_hashtable_destroy(&config->entries);
 
         for (size_t i = 0; i < size; i++)
             free(keys[i]);

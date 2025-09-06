@@ -142,9 +142,18 @@ po_logstore_t *po_logstore_open_cfg(const po_logstore_cfg *cfg) {
 
     // Optional rebuild on open moved to separate module
     (void)_ls_rebuild_on_open(ls, cfg);
-    if (pthread_create(&ls->worker, NULL, _ls_worker_main, ls) != 0) {
+    ls->nworkers = cfg->workers ? cfg->workers : 1;
+    ls->workers = calloc(ls->nworkers, sizeof(pthread_t));
+    if (!ls->workers) {
         po_logstore_close(&ls);
         return NULL;
+    }
+    for (unsigned i = 0; i < ls->nworkers; ++i) {
+        if (pthread_create(&ls->workers[i], NULL, _ls_worker_main, ls) != 0) {
+            ls->nworkers = i; // only join started
+            po_logstore_close(&ls);
+            return NULL;
+        }
     }
     if (cfg->background_fsync && ls->fsync_policy == PO_LS_FSYNC_INTERVAL &&
         ls->fsync_interval_ns) {
@@ -182,7 +191,9 @@ void po_logstore_close(po_logstore_t **pls) {
         ls->sentinel = sent;
         (void)perf_batcher_enqueue(ls->b, sent);
     }
-    pthread_join(ls->worker, NULL);
+    for (unsigned i = 0; i < ls->nworkers; ++i) {
+        pthread_join(ls->workers[i], NULL);
+    }
     // Additional defensive drain: free any leftover requests still in ring (should be rare)
     for (;;) {
         void *tmp = NULL;
@@ -203,6 +214,10 @@ void po_logstore_close(po_logstore_t **pls) {
     if (ls->sentinel) {
         free(ls->sentinel);
         ls->sentinel = NULL;
+    }
+    if (ls->workers) {
+        free(ls->workers);
+        ls->workers = NULL;
     }
     if (ls->b)
         perf_batcher_destroy(&ls->b);
@@ -231,22 +246,18 @@ int po_logstore_append(po_logstore_t *ls, const void *key, size_t keylen, const 
         _ls_validate_lengths(keylen, vallen, ls->max_key_bytes, ls->max_value_bytes) != 0) {
         return -1;
     }
-    append_req_t *r = (append_req_t *)calloc(1, sizeof(*r));
+    // Single allocation: [append_req_t][key bytes][val bytes]
+    size_t total = sizeof(append_req_t) + keylen + vallen;
+    append_req_t *r = (append_req_t *)malloc(total);
     if (!r)
         return -1;
-    r->k = malloc(keylen);
-    r->v = malloc(vallen);
-    if (!r->k || !r->v) {
-        free(r->k);
-        free(r->v);
-        free(r);
-        return -1;
-    }
-    atomic_fetch_add(&ls->outstanding_reqs, 1);
-    memcpy(r->k, key, keylen);
-    memcpy(r->v, val, vallen);
+    r->k = (uint8_t *)r + sizeof(append_req_t);
+    r->v = (uint8_t *)r + sizeof(append_req_t) + keylen;
     r->klen = keylen;
     r->vlen = vallen;
+    memcpy(r->k, key, keylen);
+    memcpy(r->v, val, vallen);
+    atomic_fetch_add(&ls->outstanding_reqs, 1);
     // Best-effort retry loop: the ring can become momentarily full during bursts.
     // Instead of failing immediately (causing spurious -1 to callers under load),
     // retry for a bounded period with short sleeps. This provides gentle
@@ -255,11 +266,9 @@ int po_logstore_append(po_logstore_t *ls, const void *key, size_t keylen, const 
     const long sleep_ns = 50 * 1000; // 50 microseconds
     int attempt = 0;
     while (perf_batcher_enqueue(ls->b, r) < 0) {
-        if (attempt++ >= max_retries || !atomic_load(&ls->running)) {
-            free(r->k);
-            free(r->v);
-            free(r);
+        if (ls->never_overwrite || attempt++ >= max_retries || !atomic_load(&ls->running)) {
             atomic_fetch_sub(&ls->outstanding_reqs, 1);
+            free(r); // single allocation
             return -1;
         }
         struct timespec ts = {.tv_sec = 0, .tv_nsec = sleep_ns};
@@ -298,11 +307,11 @@ int po_logstore_get(po_logstore_t *ls, const void *key, size_t keylen, void **ou
         pthread_rwlock_unlock(&ls->idx_lock);
     }
     // read from file
-    uint32_t kl, vl;
-    if (pread(ls->fd, &kl, sizeof(kl), (off_t)off) != (ssize_t)sizeof(kl))
+    uint32_t hdr[2];
+    if (pread(ls->fd, hdr, sizeof(hdr), (off_t)off) != (ssize_t)sizeof(hdr))
         return -1;
-    if (pread(ls->fd, &vl, sizeof(vl), (off_t)(off + sizeof(kl))) != (ssize_t)sizeof(vl))
-        return -1;
+    uint32_t kl = hdr[0];
+    uint32_t vl = hdr[1];
     if (kl > 16 * 1024 * 1024 || vl != len)
         return -1;
     void *buf = malloc(vl);
@@ -331,7 +340,7 @@ static void _ls_logger_sink(const char *line, void *ud) {
     uint8_t key[16];
     memcpy(key, &ts_ns, 8);
     memcpy(key + 8, &seq, 8);
-    size_t vlen = strnlen(line, 4096);
+    size_t vlen = strnlen(line, LOGGER_MSG_MAX);
     (void)po_logstore_append(ls, key, sizeof key, line, vlen);
 }
 

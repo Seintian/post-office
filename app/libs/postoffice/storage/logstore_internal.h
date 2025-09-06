@@ -17,14 +17,14 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include "storage/logstore.h"
 #include "perf/batcher.h"
 #include "perf/ringbuf.h"
 #include "storage/db_lmdb.h"
 #include "storage/index.h"
+#include "storage/logstore.h"
 
 // Hard upper bounds (guard against corruption / unreasonable values)
-#define LS_HARD_KEY_MAX   (32u * 1024u * 1024u)  /* 32 MiB */
+#define LS_HARD_KEY_MAX (32u * 1024u * 1024u)    /* 32 MiB */
 #define LS_HARD_VALUE_MAX (128u * 1024u * 1024u) /* 128 MiB */
 
 // Internal append request
@@ -39,9 +39,10 @@ struct po_logstore {
     int fd;                                  // append-only file descriptor
     db_env_t *env;                           // LMDB environment
     db_bucket_t *idx;                        // LMDB bucket for index
-    po_perf_ringbuf_t *q;                       // submission queue
-    po_perf_batcher_t *b;                       // batching helper
-    pthread_t worker;                        // flush worker thread
+    po_perf_ringbuf_t *q;                    // submission queue
+    po_perf_batcher_t *b;                    // batching helper
+    pthread_t *workers;                      // flush worker thread(s)
+    unsigned nworkers;                       // number of workers
     _Atomic int running;                     // running flag
     po_index_t *mem_idx;                     // fast path in-memory index
     pthread_rwlock_t idx_lock;               // RW lock protecting mem_idx
@@ -59,23 +60,33 @@ struct po_logstore {
     size_t max_key_bytes;                    // configured max key size
     size_t max_value_bytes;                  // configured max value size
     _Atomic size_t outstanding_reqs;         // diagnostic: live append requests (debug/leak guard)
+    // metrics (incremented atomically; cheap and optional)
+    _Atomic uint64_t metric_batches_flushed;
+    _Atomic uint64_t metric_records_flushed;
+    _Atomic uint64_t metric_enqueue_failures;
+    int never_overwrite; // if set, append returns -1 when full instead of retrying
 };
 
 // Length validation helper (0 ok, -1 invalid)
 static inline int _ls_validate_lengths(size_t klen, size_t vlen, size_t maxk, size_t maxv) {
-    if (klen == 0) return -1;
-    if (klen > maxk) return -1;
-    if (vlen > maxv) return -1;
-    if (klen > LS_HARD_KEY_MAX) return -1;
-    if (vlen > LS_HARD_VALUE_MAX) return -1;
+    if (klen == 0)
+        return -1;
+    if (klen > maxk)
+        return -1;
+    if (vlen > maxv)
+        return -1;
+    if (klen > LS_HARD_KEY_MAX)
+        return -1;
+    if (vlen > LS_HARD_VALUE_MAX)
+        return -1;
     return 0;
 }
 
-uint64_t _ls_now_ns(void);                      // time helper
-void * _ls_worker_main(void *arg);               // worker thread
-void * _ls_fsync_thread_main(void *arg);         // fsync thread
+uint64_t _ls_now_ns(void);                                              // time helper
+void *_ls_worker_main(void *arg);                                       // worker thread
+void *_ls_fsync_thread_main(void *arg);                                 // fsync thread
 int _ls_rebuild_on_open(po_logstore_t *ls, const po_logstore_cfg *cfg); // rebuild
 int _ls_integrity_scan(po_logstore_t *ls, int prune_nonexistent,
-                       po_logstore_integrity_stats *out_stats);         // integrity scan
+                       po_logstore_integrity_stats *out_stats); // integrity scan
 
 #endif /* POSTOFFICE_LOGSTORE_INTERNAL_H */

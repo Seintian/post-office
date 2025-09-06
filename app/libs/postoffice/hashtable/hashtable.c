@@ -24,7 +24,8 @@
 /** @brief Upper load factor threshold for resizing the table up. */
 #define LOAD_FACTOR_UP_THRESHOLD 0.7f
 
-/** @brief Upper load factor tolerance to continue po_hashtable_put() if po_hashtable_resize() fails */
+/** @brief Upper load factor tolerance to continue po_hashtable_put() if po_hashtable_resize() fails
+ */
 #define LOAD_FACTOR_UP_TOLERANCE 1.0f
 
 /** @brief Lower load factor threshold for resizing the table down. */
@@ -69,9 +70,9 @@ struct po_hashtable {
 } __attribute__((packed));
 
 struct po_hashtable_iter {
-    const po_hashtable_t *table;  ///< Pointer to the hashtable being iterated.
-    size_t index;              ///< Current index in the hashtable's bucket array.
-    hashtable_node_t *current; ///< Pointer to the current node in the iteration.
+    const po_hashtable_t *table; ///< Pointer to the hashtable being iterated.
+    size_t index;                ///< Current index in the hashtable's bucket array.
+    hashtable_node_t *current;   ///< Pointer to the current node in the iteration.
 };
 
 // *** STATIC *** //
@@ -166,7 +167,7 @@ po_hashtable_t *po_hashtable_create(int (*compare)(const void *, const void *),
 int po_hashtable_put(po_hashtable_t *table, void *key, void *value) {
     float load_factor = po_hashtable_load_factor(table);
     if (load_factor > LOAD_FACTOR_UP_THRESHOLD &&
-    po_hashtable_resize(table, table->capacity * 2) == -1 &&
+        po_hashtable_resize(table, table->capacity * 2) == -1 &&
         load_factor > LOAD_FACTOR_UP_TOLERANCE)
         return -1;
 
@@ -196,7 +197,7 @@ int po_hashtable_put(po_hashtable_t *table, void *key, void *value) {
 int po_hashtable_remove(po_hashtable_t *table, const void *key) {
     if (po_hashtable_load_factor(table) < LOAD_FACTOR_DOWN_THRESHOLD &&
         table->capacity / 2 >= INITIAL_CAPACITY &&
-    po_hashtable_resize(table, table->capacity / 2) == -1)
+        po_hashtable_resize(table, table->capacity / 2) == -1)
         return -1;
 
     size_t hash = table->hash_func(key);
@@ -411,7 +412,7 @@ void **po_hashtable_values(const po_hashtable_t *table) {
 }
 
 int po_hashtable_equals(const po_hashtable_t *table1, const po_hashtable_t *table2,
-                     int (*compare)(const void *, const void *)) {
+                        int (*compare)(const void *, const void *)) {
     if (table1->size != table2->size)
         return 0;
 

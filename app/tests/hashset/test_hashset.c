@@ -1,9 +1,10 @@
 // tests/hashset/test_hashset.c
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 #include "postoffice/hashset/hashset.h"
+
 #include "unity/unity_fixture.h"
 
 // Simple string hash and compare for tests (djb2)
@@ -16,7 +17,9 @@ static unsigned long test_hash(const void *key) {
     return h;
 }
 
-static int test_cmp(const void *a, const void *b) { return strcmp((const char *)a, (const char *)b); }
+static int test_cmp(const void *a, const void *b) {
+    return strcmp((const char *)a, (const char *)b);
+}
 
 TEST_GROUP(HASHSET);
 static po_hashset_t *set;
@@ -26,7 +29,9 @@ TEST_SETUP(HASHSET) {
     TEST_ASSERT_NOT_NULL(set);
 }
 
-TEST_TEAR_DOWN(HASHSET) { po_hashset_destroy(&set); }
+TEST_TEAR_DOWN(HASHSET) {
+    po_hashset_destroy(&set);
+}
 
 TEST(HASHSET, CREATE_DEFAULT) {
     po_hashset_t *s2 = po_hashset_create(test_cmp, test_hash);
@@ -144,4 +149,3 @@ TEST_GROUP_RUNNER(HASHSET) {
     RUN_TEST_CASE(HASHSET, RESIZE_UP);
     RUN_TEST_CASE(HASHSET, RESIZE_DOWN);
 }
-

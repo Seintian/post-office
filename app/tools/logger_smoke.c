@@ -44,7 +44,7 @@ int main(void) {
     const char *use_syslog = getenv("SYSLOG");
     if (use_syslog && *use_syslog == '1') {
         const char *ident = getenv("SYSLOG_IDENT");
-    po_logger_add_sink_syslog(ident && *ident ? ident : NULL);
+        po_logger_add_sink_syslog(ident && *ident ? ident : NULL);
     }
 
     LOG_INFO("logger smoke test started pid=%d", getpid());

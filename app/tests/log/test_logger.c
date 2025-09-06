@@ -31,9 +31,23 @@ TEST(LOGGER, INIT_AND_LEVEL) {
 
 TEST(LOGGER, CONSOLE_SINK_AND_WRITE) {
     TEST_ASSERT_EQUAL_INT(0, po_logger_add_sink_console(true));
+    // Temporarily discard stderr so console sink output doesn't pollute test output
+    int saved_stderr = dup(fileno(stderr));
+    TEST_ASSERT_NOT_EQUAL(-1, saved_stderr);
+    int devnull = open("/dev/null", O_WRONLY);
+    TEST_ASSERT_NOT_EQUAL(-1, devnull);
+    int rc_dup2 = dup2(devnull, fileno(stderr));
+    TEST_ASSERT_NOT_EQUAL(-1, rc_dup2);
+    close(devnull);
+
     LOG_INFO("hello %s", "world");
     // give consumer time to drain
     usleep(10 * 1000);
+
+    // Restore original stderr
+    rc_dup2 = dup2(saved_stderr, fileno(stderr));
+    TEST_ASSERT_NOT_EQUAL(-1, rc_dup2);
+    close(saved_stderr);
 }
 
 TEST(LOGGER, FILE_SINK_WRITES) {

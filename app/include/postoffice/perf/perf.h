@@ -11,8 +11,8 @@
 // -----------------------------------------------------------------------------
 // Public opaque types (canonical po_ names)
 // -----------------------------------------------------------------------------
-typedef struct po_perf_counter po_perf_counter_t; // opaque
-typedef struct po_perf_timer po_perf_timer_t;     // opaque
+typedef struct po_perf_counter po_perf_counter_t;     // opaque
+typedef struct po_perf_timer po_perf_timer_t;         // opaque
 typedef struct po_perf_histogram po_perf_histogram_t; // opaque
 
 // -----------------------------------------------------------------------------
@@ -101,7 +101,8 @@ int po_perf_timer_stop(const char *name) __nonnull((1));
  * @param nbins Number of bins
  * @return 0 on success, -1 on failure (errno set)
  */
-int po_perf_histogram_create(const char *name, const uint64_t *bins, size_t nbins) __nonnull((1, 2));
+int po_perf_histogram_create(const char *name, const uint64_t *bins, size_t nbins)
+    __nonnull((1, 2));
 
 /**
  * Record a value asynchronously into the histogram.

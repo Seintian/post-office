@@ -9,18 +9,21 @@ int main(int argc, char **argv) {
     int rc = po_args_parse(&args, argc, argv, STDERR_FILENO);
     if (rc != 0) {
         // help/version already printed when rc==1; error printed on rc<0
+        po_args_destroy(&args);
         return rc < 0 ? 1 : 0;
     }
 
     // Initialize logger according to CLI
     po_logger_config_t cfg = {
-        .level = (args.loglevel >= 0 && args.loglevel <= 5) ? (po_log_level_t)args.loglevel : LOG_INFO,
+        .level =
+            (args.loglevel >= 0 && args.loglevel <= 5) ? (po_log_level_t)args.loglevel : LOG_INFO,
         .ring_capacity = 1u << 14, // 16384 entries
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
     };
     if (po_logger_init(&cfg) != 0) {
         fprintf(stderr, "logger: init failed\n");
+        po_args_destroy(&args);
         return 1;
     }
 
@@ -35,5 +38,6 @@ int main(int argc, char **argv) {
     // TODO: wire configuration file and launch application subsystems
 
     po_logger_shutdown();
+    po_args_destroy(&args);
     return 0;
 }

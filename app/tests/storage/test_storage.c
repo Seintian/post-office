@@ -520,9 +520,9 @@ TEST(LOGSTORE, LOGGER_SINK_ATTACHED_WRITES_FILE) {
     TEST_ASSERT_EQUAL_INT(0, po_logstore_attach_logger(g_ls));
     // Init logger minimal if not already
     po_logger_config_t lcfg = {.level = LOG_INFO,
-                          .ring_capacity = 1024,
-                          .consumers = 1,
-                          .policy = LOGGER_OVERWRITE_OLDEST};
+                               .ring_capacity = 1024,
+                               .consumers = 1,
+                               .policy = LOGGER_OVERWRITE_OLDEST};
     po_logger_init(&lcfg);
     char path[512];
     snprintf(path, sizeof(path), "%s/aof.log", g_dir);

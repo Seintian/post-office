@@ -31,6 +31,10 @@ int po_args_parse(po_args_t *args, int argc, char **argv, int fd);
 // Print usage information to stdout
 void po_args_print_usage(int fd, const char *prog_name);
 
+// Destroy (free) any dynamically allocated fields inside args
+// Safe to call multiple times; leaves pointers NULL
+void po_args_destroy(po_args_t *args);
+
 #ifdef __cplusplus
 }
 #endif

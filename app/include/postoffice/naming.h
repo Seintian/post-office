@@ -31,17 +31,17 @@ extern "C" {
 #endif
 
 /* Forward includes for original declarations */
-#include "log/logger.h"
-#include "storage/storage.h"
-#include "perf/perf.h"
 #include "hashset/hashset.h"
 #include "hashtable/hashtable.h"
+#include "log/logger.h"
+#include "perf/perf.h"
+#include "storage/storage.h"
 #include "sysinfo/sysinfo.h"
 
 /* -------------------------------------------------------------------------- */
 /* Logger                                                                     */
 /* -------------------------------------------------------------------------- */
-typedef logger_level_t po_log_level_t; /* enum alias (not deprecated) */
+typedef logger_level_t po_log_level_t;    /* enum alias (not deprecated) */
 typedef logger_config po_logger_config_t; /* original had no _t suffix */
 typedef logger_config po_logger_config PO_DEPRECATED_TYPE("use po_logger_config_t");
 

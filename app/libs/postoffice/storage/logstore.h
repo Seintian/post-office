@@ -37,6 +37,7 @@ typedef struct po_logstore_cfg {
     int background_fsync;    // if non-zero and policy==INTERVAL: perform fsync in bg thread
     size_t max_key_bytes;    // maximum accepted key length (0 => default)
     size_t max_value_bytes;  // maximum accepted value length (0 => default)
+    unsigned workers;        // number of parallel flush workers (0 => 1)
 } po_logstore_cfg;
 
 // Open with explicit config

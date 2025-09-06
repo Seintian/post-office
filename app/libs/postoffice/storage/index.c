@@ -44,7 +44,8 @@ po_index_t *po_index_create(size_t expected_entries) {
     po_index_t *idx = (po_index_t *)calloc(1, sizeof(*idx));
     if (!idx)
         return NULL;
-    idx->ht = po_hashtable_create_sized(cmp_bin, hash_bin, expected_entries ? expected_entries : 128);
+    idx->ht =
+        po_hashtable_create_sized(cmp_bin, hash_bin, expected_entries ? expected_entries : 128);
     if (!idx->ht) {
         free(idx);
         return NULL;

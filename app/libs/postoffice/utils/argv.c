@@ -25,6 +25,15 @@ void po_args_print_usage(int fd, const char *prog_name) {
             "      --syslog-ident S  Set syslog ident (default: 'postoffice')\n");
 }
 
+void po_args_destroy(po_args_t *args) {
+    if (!args)
+        return;
+    free(args->config_file);
+    args->config_file = NULL;
+    free(args->syslog_ident);
+    args->syslog_ident = NULL;
+}
+
 int po_args_parse(po_args_t *args, int argc, char **argv, int fd) {
     static struct option long_opts[] = {{"help", no_argument, NULL, 'h'},
                                         {"version", no_argument, NULL, 'v'},

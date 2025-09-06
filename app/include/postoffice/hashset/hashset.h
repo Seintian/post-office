@@ -47,7 +47,8 @@ po_hashset_t *po_hashset_create(int (*compare)(const void *, const void *),
  */
 po_hashset_t *po_hashset_create_sized(int (*compare)(const void *, const void *),
                                       unsigned long (*hash_func)(const void *),
-                                      size_t initial_capacity) __attribute_malloc__ __nonnull((1, 2));
+                                      size_t initial_capacity) __attribute_malloc__
+    __nonnull((1, 2));
 
 /**
  * @brief Insert a key into the set.
