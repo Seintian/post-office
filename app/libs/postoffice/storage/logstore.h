@@ -17,10 +17,10 @@ typedef struct po_logstore po_logstore_t;
 
 // Fsync policy for durability vs throughput
 typedef enum po_logstore_fsync_policy {
-	PO_LS_FSYNC_NONE = 0,     // never fsync (fastest)
+	PO_LS_FSYNC_NONE = 0,     	// never fsync (fastest)
 	PO_LS_FSYNC_EACH_BATCH = 1, // fsync() after each drained batch
-	PO_LS_FSYNC_INTERVAL = 2,  // fsync() at most every fsync_interval_ms
-	PO_LS_FSYNC_EVERY_N = 3,   // fsync() after every N drained batches (fsync_every_n)
+	PO_LS_FSYNC_INTERVAL = 2,  	// fsync() at most every fsync_interval_ms
+	PO_LS_FSYNC_EVERY_N = 3,   	// fsync() after every N drained batches (fsync_every_n)
 } po_logstore_fsync_policy_t;
 
 typedef struct po_logstore_cfg {
