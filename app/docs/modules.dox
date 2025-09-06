@@ -1,0 +1,393 @@
+/** \file modules.dox
+ *  \brief Post Office Library – Module Reference & Usage Compendium
+ *
+ *  This file defines Doxygen groups for every public module of the Post Office system
+ *  and provides exhaustive, end–to–end usage examples. All snippets are self–contained
+ *  and demonstrate correct initialization, error handling, teardown, and interaction
+ *  among subsystems where relevant.
+ *
+ *  Build assumptions:
+ *   - All public headers are reachable via the project include paths
+ *   - The logger MUST be initialized early (many subsystems optionally log)
+ *   - Unless otherwise stated, functions returning int use 0 == success, <0 == error
+ *
+ *  Conventions:
+ *   - Types use the canonical po_* naming convention (e.g. ::po_logger_config_t)
+ *   - Ownership of returned pointers is explicitly stated in each section
+ *   - All examples omit detailed fatal error branching for brevity but show patterns
+ */
+
+/**************************** LOGGER *********************************/
+/** \defgroup logger Logger
+ *  High–performance, lock–minimized multi-consumer logging framework supporting
+ *  async batching, multiple sinks (console, file, syslog, custom), overflow
+ *  policies, level filtering, and graceful shutdown with in–flight flushing.
+ *
+ *  Features:
+ *   - Lock–free ring + batching (perf::ringbuf + perf::batcher)
+ *   - Drop or overwrite policies on saturation
+ *   - Structured, macro based API (LOG_TRACE..LOG_FATAL)
+ *   - Hot level mutation (atomic) via po_logger_set_level()
+ *   - Multiple sinks: console, file, syslog, user–defined
+ *   - Overflow notice emission (“logger overflow: dropped=… / overwritten=…”) automatically
+ *
+ *  Thread–Safety: Fully thread–safe; producers never block unless internal back–pressure
+ *  requires minimal spin/yield (bounded). Shutdown drains queue.
+ *
+ *  Lifetime Rules:
+ *   1. Call ::po_logger_init() once (idempotent defensive).
+ *   2. Register sinks.
+ *   3. Emit logs.
+ *   4. Change level dynamically if desired.
+ *   5. Call ::po_logger_shutdown() exactly once at process end or before re-init.
+ *
+ *  \par Minimal Example
+ *  \code{.c}
+ *  #include "log/logger.h"
+ *  int main(void) {
+ *      po_logger_config_t cfg = {
+ *          .level = LOG_INFO,
+ *          .ring_capacity = 4096,
+ *          .consumers = 1,
+ *          .policy = LOGGER_DROP_NEW,
+ *      };
+ *      if (po_logger_init(&cfg) != 0) return 1;
+ *      po_logger_add_sink_console(true);              // colored stderr
+ *      po_logger_add_sink_file("/tmp/app.log", false); // append mode
+ *      LOG_INFO("service starting pid=%d", getpid());
+ *      LOG_DEBUG("won't print because level=INFO");
+ *      po_logger_set_level(LOG_DEBUG);
+ *      LOG_DEBUG("now visible");
+ *      po_logger_shutdown();
+ *      return 0;
+ *  }
+ *  \endcode
+ *
+ *  \par Custom Sink Example
+ *  \code{.c}
+ *  static int my_sink(void *ud, const po_log_message_t *msg) {
+ *      (void)ud; fwrite(msg->formatted, 1, msg->formatted_len, stdout); return 0;
+ *  }
+ *  // ... after init
+ *  po_logger_add_sink(my_sink, NULL);
+ *  \endcode
+ */
+
+/**************************** PERF (RINGBUF / BATCHER / METRICS) *********************************/
+/** \defgroup perf Perf & Instrumentation
+ *  Lock–free structures and lightweight instrumentation primitives used internally
+ *  by logger & logstore and available to applications.
+ *
+ *  Components:
+ *   - ::po_perf_ringbuf_t : MPMC lock–free ring buffer (pointers) – bounded FIFO
+ *   - ::po_perf_batcher_t : Takes ring buffer and produces pointer batches (coalesces)
+ *   - Counters / timers / histograms (if exposed in headers) for runtime metrics
+ *
+ *  Usage Ordering: create ring → (optional) create batcher → producers enqueue → consumer drains
+ *
+ *  \par Ring Buffer Example
+ *  \code{.c}
+ *  po_perf_ringbuf_t *rb = perf_ringbuf_create(1024);
+ *  int value = 42; void *ptr = &value;
+ *  perf_ringbuf_enqueue(rb, ptr); // return 0 on success
+ *  void *out = NULL;
+ *  if (perf_ringbuf_dequeue(rb, &out) == 0) {
+ *      // out == &value
+ *  }
+ *  perf_ringbuf_destroy(&rb);
+ *  \endcode
+ *
+ *  \par Batching Example
+ *  \code{.c}
+ *  po_perf_ringbuf_t *rb = perf_ringbuf_create(512);
+ *  po_perf_batcher_t *b = perf_batcher_create(rb, /*batch_size=*/64, /*spin_max=*/1000);
+ *  for (int i=0;i<100;i++) perf_ringbuf_enqueue(rb, (void*)(uintptr_t)i);
+ *  void *batch[64];
+ *  ssize_t n = perf_batcher_next(b, batch); // up to 64 pointers
+ *  // process batch[0..n)
+ *  perf_batcher_destroy(&b);
+ *  perf_ringbuf_destroy(&rb);
+ *  \endcode
+ */
+
+/**************************** HASH TABLE *********************************/
+/** \defgroup hashtable Hashtable
+ *  Open addressing (or separate chaining – see implementation) generic hash table used
+ *  for in–memory indexing. Accepts user supplied comparator & hash functions and stores
+ *  opaque keys/values.
+ *
+ *  Typical Pattern:
+ *   - Create with sizing hint
+ *   - Insert key/value pairs (ownership of key/value may transfer based on design)
+ *   - Retrieve / iterate / remove
+ *   - Destroy to free all internal allocations
+ *
+ *  \par Example
+ *  \code{.c}
+ *  static int cmp(const void *a, const void *b) { return strcmp(a,b); }
+ *  static unsigned long hfun(const void *a) { const unsigned char *p=a; unsigned long h=1469598103934665603UL; while(*p){h^=*p++; h*=1099511628211UL;} return h; }
+ *  po_hashtable_t *ht = po_hashtable_create(cmp, hfun);
+ *  po_hashtable_put(ht, "k1", "v1");
+ *  char *v = po_hashtable_get(ht, "k1");
+ *  po_hashtable_remove(ht, "k1");
+ *  po_hashtable_destroy(&ht);
+ *  \endcode
+ */
+
+/**************************** HASH SET *********************************/
+/** \defgroup hashset Hashset
+ *  Set abstraction atop the hashtable implementation. Only keys are stored.
+ *
+ *  \par Example
+ *  \code{.c}
+ *  po_hashset_t *hs = po_hashset_create(cmp, hfun);
+ *  po_hashset_add(hs, "alpha");
+ *  if (po_hashset_contains(hs, "alpha")) { /* present */ }
+ *  po_hashset_remove(hs, "alpha");
+ *  po_hashset_destroy(&hs);
+ *  \endcode
+ */
+
+/**************************** INDEX *********************************/
+/** \defgroup index In-Memory Log Index
+ *  Lightweight mutable mapping from binary key -> (offset,len) describing persisted
+ *  records inside the logstore file. Uses hashtable underneath.
+ *
+ *  Responsibilities:
+ *   - Latest value wins (overwrite semantics)
+ *   - No historical versioning
+ *   - Memory owned internally (keys duplicated)
+ *
+ *  \par Example
+ *  \code{.c}
+ *  po_index_t *idx = po_index_create(1024);
+ *  po_index_put(idx, key_ptr, key_len, file_offset, value_len);
+ *  uint64_t off=0; uint32_t vlen=0;
+ *  if (po_index_get(idx, key_ptr, key_len, &off, &vlen) == 0) {
+ *      // use off / vlen
+ *  }
+ *  po_index_destroy(&idx);
+ *  \endcode
+ */
+
+/**************************** LOGSTORE *********************************/
+/** \defgroup logstore Log Structured KV Store
+ *  Append-only binary key/value store with coalesced batched disk writes, pluggable
+ *  fsync policies, optional background fsync thread, rebuild & integrity scan logic,
+ *  and streaming logger sink integration.
+ *
+ *  Guarantees:
+ *   - Crash safety: last *partial* record may be truncated & pruned on reopen
+ *   - Read-your-own-write after append returns (in-memory index updated before free)
+ *   - Overwrite semantics: latest append for key shadows prior ones
+ *
+ *  Fsync Policies (enum po_logstore_fsync_policy):
+ *   - PO_LS_FSYNC_NONE: rely on OS
+ *   - PO_LS_FSYNC_EACH_BATCH: fsync after every flush batch
+ *   - PO_LS_FSYNC_EVERY_N: fsync every N batches
+ *   - PO_LS_FSYNC_INTERVAL: periodic (wall clock nanoseconds)
+ *
+ *  Shutdown drains queue & joins worker; outstanding append requests freed.
+ *
+ *  \par Basic Example
+ *  \code{.c}
+ *  po_logstore_config_t cfg = {
+ *      .path = "./data.log",
+ *      .max_key_len = 1024,
+ *      .max_val_len = 1<<20,
+ *      .ring_capacity = 4096,
+ *      .batch_size = 128,
+ *      .fsync_policy = PO_LS_FSYNC_EVERY_N,
+ *      .fsync_every_n = 10,
+ *      .fsync_interval_ns = 0,
+ *      .workers = 1,
+ *  };
+ *  po_logstore_t *ls = po_logstore_open(&cfg);
+ *  const char *k = "user:42"; const char *v = "payload";
+ *  po_logstore_append(ls, k, strlen(k), v, strlen(v));
+ *  uint64_t off; uint32_t vlen; // lookup via in-memory index
+ *  if (po_logstore_lookup(ls, k, strlen(k), &off, &vlen) == 0) {
+ *      void *buf = malloc(vlen);
+ *      ssize_t rd = po_logstore_pread_value(ls, buf, vlen, off, vlen);
+ *      (void)rd; free(buf);
+ *  }
+ *  po_logstore_close(&ls);
+ *  \endcode
+ *
+ *  \par Rebuild Scenario
+ *  After a crash / partial tail write, open performs scan + truncation automatically.
+ */
+
+/**************************** LMDB WRAPPER *********************************/
+/** \defgroup db_lmdb LMDB Wrapper
+ *  Thin abstraction for subset operations (env open, bucket open, put/get/del, iterate)
+ *  used for secondary indexing or metadata persistence.
+ *
+ *  Ownership: caller owns keys/values supplied; library copies where needed.
+ *
+ *  \par Example
+ *  \code{.c}
+ *  po_db_env_t *env = db_env_open("./lmdb_env", 1<<20);
+ *  po_db_bucket_t *b = db_bucket_open(env, "objects");
+ *  db_put(b, "alpha", 5, "A", 1);
+ *  char val[8]; size_t vlen=sizeof val;
+ *  if (db_get(b, "alpha", 5, val, &vlen) == 0) {
+ *      // val[0]=='A'
+ *  }
+ *  db_bucket_close(&b); db_env_close(&env);
+ *  \endcode
+ */
+
+/**************************** STORAGE FACADE *********************************/
+/** \defgroup storage Storage Facade
+ *  High-level convenience layer bundling logstore + index + optional DB usage.
+ *  (If present in headers) exposes simplified CRUD style helpers.
+ */
+
+/**************************** NET *********************************/
+/** \defgroup net Networking Primitives
+ *  Low-level framed protocol helpers: framing, poller (epoll abstraction), protocol codec,
+ *  sockets utilities (non-blocking set, common opts).
+ *
+ *  Typical Flow:
+ *   - Create listening socket (helper)
+ *   - Accept / connect
+ *   - Use framing encode/decode for length–prefixed messages
+ *   - Poll connections using poller wait
+ *
+ *  \par Framing Example
+ *  \code{.c}
+ *  uint8_t frame[1024]; size_t out=0;
+ *  framing_encode((const uint8_t*)"hi", 2, frame, sizeof frame, &out);
+ *  const uint8_t *payload=NULL; size_t paylen=0; framing_decode(frame, out, &payload, &paylen);
+ *  \endcode
+ */
+
+/**************************** UTILS *********************************/
+/** \defgroup utils Utilities
+ *  Support helpers: argv parsing, configs (INI wrapper), random, files, errors.
+ *
+ *  \par CLI Args Example
+ *  \code{.c}
+ *  po_argv_t *a = po_argv_parse(argc, argv);
+ *  if (po_argv_help(a)) { po_argv_print_usage(stdout); return 0; }
+ *  if (po_argv_version(a)) { puts(PO_VERSION_STRING); return 0; }
+ *  const char *cfg_path = po_argv_config_path(a);
+ *  po_argv_destroy(&a);
+ *  \endcode
+ *
+ *  \par Configs Example
+ *  \code{.c}
+ *  po_configs_t *cfg = po_configs_load("./app.ini");
+ *  const char *host = po_configs_get_string(cfg, "net", "host", "127.0.0.1");
+ *  int port = po_configs_get_int(cfg, "net", "port", 8080);
+ *  po_configs_destroy(&cfg);
+ *  \endcode
+ */
+
+/**************************** SYSINFO *********************************/
+/** \defgroup sysinfo System Information
+ *  Runtime collection of filesystem, hugepage, and general OS metrics (if enabled).
+ *
+ *  \par Example
+ *  \code{.c}
+ *  po_sysinfo_t si; memset(&si,0,sizeof si);
+ *  if (po_sysinfo_collect(&si) == 0) {
+ *      po_sysinfo_print(&si, stdout);
+ *  }
+ *  \endcode
+ */
+
+/**************************** PRIME *********************************/
+/** \defgroup prime Prime Utilities
+ *  Deterministic prime number helpers (is_prime, next_prime) used for sizing hash tables.
+ *
+ *  \par Example
+ *  \code{.c}
+ *  if (po_is_prime(97)) { size_t n = po_next_prime(1024); }
+ *  \endcode
+ */
+
+/**************************** RANDOM *********************************/
+/** \ingroup utils
+ *  Pseudorandom utilities (deterministic seeding, ranges, shuffle) backing tests & data tools.
+ */
+
+/**************************** ERROR HANDLING *********************************/
+/** \ingroup utils
+ *  Standardized error codes & helper to stringify them (see errors module).
+ */
+
+/**************************** INTEGRATION SCENARIO *********************************/
+/** \page integration_scenario Putting It All Together
+ *  \brief End-to-end snippet combining logger, config parsing, logstore, and graceful shutdown.
+ *
+ *  \code{.c}
+ *  int main(int argc, char **argv){
+ *      // Parse CLI
+ *      po_argv_t *a = po_argv_parse(argc, argv);
+ *      if (po_argv_help(a)) { po_argv_print_usage(stdout); return 0; }
+ *      const char *cfg_path = po_argv_config_path(a);
+ *
+ *      // Load config (optional)
+ *      po_configs_t *cfg = cfg_path ? po_configs_load(cfg_path) : NULL;
+ *
+ *      // Init logger
+ *      po_logger_config_t lcfg = {.level=LOG_INFO,.ring_capacity=8192,.consumers=1,.policy=LOGGER_DROP_NEW};
+ *      if (po_logger_init(&lcfg)!=0) return 1;
+ *      po_logger_add_sink_console(true);
+ *
+ *      // Open logstore
+ *      po_logstore_config_t scfg = {
+ *          .path = "./data.log", .max_key_len=1024, .max_val_len=1<<20,
+ *          .ring_capacity=4096, .batch_size=128,
+ *          .fsync_policy=PO_LS_FSYNC_INTERVAL, .fsync_interval_ns=50ULL*1000000ULL,
+ *          .fsync_every_n=0, .workers=1
+ *      };
+ *      po_logstore_t *ls = po_logstore_open(&scfg);
+ *      if(!ls){ LOG_FATAL("logstore open failed"); goto shutdown; }
+ *
+ *      // Write & read
+ *      const char *k="demo", *v="value"; po_logstore_append(ls,k,4,v,5);
+ *      uint64_t off; uint32_t vlen; if(po_logstore_lookup(ls,k,4,&off,&vlen)==0){
+ *          char *buf = malloc(vlen);
+ *          po_logstore_pread_value(ls, buf, vlen, off, vlen);
+ *          free(buf);
+ *      }
+ *      LOG_INFO("completed operations");
+ *
+ *  shutdown:
+ *      po_logstore_close(&ls);
+ *      po_logger_shutdown();
+ *      po_configs_destroy(&cfg);
+ *      po_argv_destroy(&a);
+ *      return 0;
+ *  }
+ *  \endcode
+ */
+
+/** \mainpage Post Office Library
+ *  \tableofcontents
+ *  \section intro Overview
+ *  A modular, high–throughput logging & append-only storage toolkit integrating
+ *  lock–free data structures, batched persistence, and flexible configuration.
+ *
+ *  \section modules Module Index
+ *  - \ref logger
+ *  - \ref perf
+ *  - \ref hashtable
+ *  - \ref hashset
+ *  - \ref index
+ *  - \ref logstore
+ *  - \ref db_lmdb
+ *  - \ref storage
+ *  - \ref net
+ *  - \ref utils
+ *  - \ref sysinfo
+ *  - \ref prime
+ *
+ *  \section design_notes Design Notes
+ *  Emphasis on: minimal blocking, predictable latency, observability, recovery safety.
+ *
+ *  See also: tuning_guide.md, statistics_format.md, design_report.md
+ */
