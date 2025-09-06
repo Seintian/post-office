@@ -30,6 +30,8 @@ static char *g_dir = NULL;
 static po_logstore_t *g_ls = NULL;
 
 static void make_dir(void) {
+	// reset template tail because mkdtemp mutates it
+	memcpy(g_dir_template, "/tmp/ls_testXXXXXX", sizeof("/tmp/ls_testXXXXXX"));
 	g_dir = mkdtemp(g_dir_template);
 	TEST_ASSERT_NOT_NULL_MESSAGE(g_dir, "mkdtemp failed");
 }
@@ -155,6 +157,173 @@ TEST(LOGSTORE, PERSISTENCE_REOPEN) {
 	free(out);
 }
 
+TEST(LOGSTORE, PERSISTENCE_TRUNCATED_LAST_RECORD) {
+	const char *k1 = "k_one"; const char *v1 = "value1";
+	const char *k2 = "k_two"; const char *v2 = "value_that_will_be_truncated";
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k1, strlen(k1), v1, strlen(v1)));
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k2, strlen(k2), v2, strlen(v2)));
+	void *out=NULL; size_t outlen=0;
+	TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, k2, strlen(k2), &out, &outlen, 400));
+	free(out);
+	// truncate last record partially (remove 5 bytes from end of file)
+	po_logstore_close(&g_ls);
+	char path[512]; snprintf(path,sizeof(path),"%s/aof.log", g_dir);
+	int fd = open(path, O_RDWR);
+	TEST_ASSERT_TRUE(fd>=0);
+	off_t sz = lseek(fd, 0, SEEK_END);
+	TEST_ASSERT_TRUE(sz>10);
+	int trc = ftruncate(fd, sz - 5); // chop tail
+	TEST_ASSERT_EQUAL_INT(0, trc);
+	close(fd);
+	po_logstore_cfg cfg = {
+		.dir = g_dir,
+		.bucket = "idx",
+		.map_size = 1 << 20,
+		.ring_capacity = 128,
+		.batch_size = 16,
+		.fsync_policy = PO_LS_FSYNC_NONE,
+		.fsync_interval_ms = 0,
+	};
+	g_ls = po_logstore_open_cfg(&cfg);
+	TEST_ASSERT_NOT_NULL(g_ls);
+	// first key still retrievable
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_get(g_ls, k1, strlen(k1), &out, &outlen));
+	TEST_ASSERT_EQUAL_UINT(strlen(v1), outlen); free(out);
+	// second key should now fail due to truncated value
+	out=NULL; outlen=0;
+	TEST_ASSERT_EQUAL_INT(-1, po_logstore_get(g_ls, k2, strlen(k2), &out, &outlen));
+}
+
+TEST(LOGSTORE, FSYNC_INTERVAL_POLICY_FUNCTIONAL) {
+	po_logstore_close(&g_ls);
+	po_logstore_cfg cfg = {
+		.dir = g_dir,
+		.bucket = "idx",
+		.map_size = 1 << 20,
+		.ring_capacity = 64,
+		.batch_size = 8,
+		.fsync_policy = PO_LS_FSYNC_INTERVAL,
+		.fsync_interval_ms = 20,
+		.fsync_every_n = 0,
+	};
+	g_ls = po_logstore_open_cfg(&cfg);
+	TEST_ASSERT_NOT_NULL(g_ls);
+	// append a few entries and ensure they are retrievable
+	for (int i=0;i<10;i++) {
+		char k[16]; char v[16];
+		int klen = snprintf(k,sizeof(k),"ik%d", i);
+		int vlen = snprintf(v,sizeof(v),"iv%d", i);
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k, (size_t)klen, v, (size_t)vlen));
+		void *out=NULL; size_t outlen=0;
+	TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, k, (size_t)klen, &out, &outlen, 300));
+		TEST_ASSERT_EQUAL_UINT((size_t)vlen, outlen);
+		free(out);
+	}
+}
+
+TEST(LOGSTORE, FSYNC_EVERY_N_POLICY_FUNCTIONAL) {
+	po_logstore_close(&g_ls);
+	po_logstore_cfg cfg = {
+		.dir = g_dir,
+		.bucket = "idx",
+		.map_size = 1 << 20,
+		.ring_capacity = 64,
+		.batch_size = 4,
+		.fsync_policy = PO_LS_FSYNC_EVERY_N,
+		.fsync_interval_ms = 0,
+		.fsync_every_n = 3,
+	};
+	g_ls = po_logstore_open_cfg(&cfg);
+	TEST_ASSERT_NOT_NULL(g_ls);
+	for (int i=0;i<9;i++) {
+		char k[16]; char v[16];
+		int klen = snprintf(k,sizeof(k),"enk%d", i);
+		int vlen = snprintf(v,sizeof(v),"env%d", i);
+		TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k, (size_t)klen, v, (size_t)vlen));
+		void *out=NULL; size_t outlen=0;
+		TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, k, (size_t)klen, &out, &outlen, 300));
+		free(out);
+	}
+}
+
+TEST(LOGSTORE, REBUILD_ON_OPEN_WITH_TRUNCATE) {
+	po_logstore_close(&g_ls);
+	// Create with rebuild enabled
+	po_logstore_cfg cfg = {
+		.dir = g_dir,
+		.bucket = "idx",
+		.map_size = 1 << 20,
+		.ring_capacity = 128,
+		.batch_size = 8,
+		.fsync_policy = PO_LS_FSYNC_NONE,
+		.rebuild_on_open = 1,
+		.truncate_on_rebuild = 1,
+	};
+	g_ls = po_logstore_open_cfg(&cfg);
+	TEST_ASSERT_NOT_NULL(g_ls);
+	const char *k1="rbk1"; const char *v1="rbv1";
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k1, strlen(k1), v1, strlen(v1)));
+	void *out=NULL; size_t outlen=0; TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, k1, strlen(k1), &out, &outlen, 300)); free(out);
+	po_logstore_close(&g_ls);
+	// Corrupt tail by appending junk partial header
+	char path[512]; snprintf(path,sizeof(path),"%s/aof.log", g_dir);
+	int fd = open(path, O_WRONLY|O_APPEND);
+	TEST_ASSERT_TRUE(fd>=0);
+	uint32_t bogus = 0xFFFFFFFF; ssize_t wr = write(fd, &bogus, sizeof(bogus)); (void)wr; // incomplete record
+	close(fd);
+	// Reopen with rebuild+truncate: should drop bogus tail and still allow original key fetch
+	po_logstore_cfg cfg2 = {
+		.dir = g_dir,
+		.bucket = "idx",
+		.map_size = 1 << 20,
+		.ring_capacity = 64,
+		.batch_size = 4,
+		.fsync_policy = PO_LS_FSYNC_NONE,
+		.rebuild_on_open = 1,
+		.truncate_on_rebuild = 1,
+	};
+	g_ls = po_logstore_open_cfg(&cfg2);
+	TEST_ASSERT_NOT_NULL(g_ls);
+	out=NULL; outlen=0;
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_get(g_ls, k1, strlen(k1), &out, &outlen));
+	TEST_ASSERT_EQUAL_UINT(strlen(v1), outlen); free(out);
+}
+
+TEST(LOGSTORE, INTEGRITY_SCAN_PRUNE) {
+	const char *k="ik"; const char *v="val";
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k, strlen(k), v, strlen(v)));
+	void *out=NULL; size_t outlen=0; TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, k, strlen(k), &out, &outlen, 300)); free(out);
+	// Create stale entry (offset beyond EOF)
+	uint64_t bad_off = 5ULL * 1024 * 1024; uint32_t bad_len = 55;
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_debug_put_index(g_ls, "stale", 5, bad_off, bad_len));
+	po_logstore_integrity_stats st; po_logstore_integrity_scan(g_ls, 1, &st);
+	TEST_ASSERT_TRUE(st.pruned >= 1);
+}
+
+TEST(LOGSTORE, TAIL_TRUNCATION_PARTIAL_VALUE_REBUILD) {
+	po_logstore_close(&g_ls);
+	po_logstore_cfg cfg = { .dir=g_dir, .bucket="idx", .map_size=1<<20, .ring_capacity=128, .batch_size=8, .fsync_policy=PO_LS_FSYNC_NONE };
+	g_ls = po_logstore_open_cfg(&cfg); TEST_ASSERT_NOT_NULL(g_ls);
+	const char *k1="pv_k1"; const char *v1="AAAA";
+	const char *k2="pv_k2"; const char *v2="BBBBBBBB"; // we'll truncate half
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k1, strlen(k1), v1, strlen(v1)));
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k2, strlen(k2), v2, strlen(v2)));
+	void *out=NULL; size_t outlen=0; TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, k2, strlen(k2), &out, &outlen, 400)); free(out);
+	po_logstore_close(&g_ls);
+	char path[512]; snprintf(path,sizeof(path),"%s/aof.log", g_dir);
+	int fd=open(path,O_RDWR); TEST_ASSERT_TRUE(fd>=0);
+	off_t sz=lseek(fd,0,SEEK_END); TEST_ASSERT_TRUE(sz>0);
+	// truncate last 4 bytes (half of second value)
+	TEST_ASSERT_EQUAL_INT(0, ftruncate(fd, sz-4)); close(fd);
+	po_logstore_cfg cfg2 = { .dir=g_dir, .bucket="idx", .map_size=1<<20, .ring_capacity=64, .batch_size=4, .fsync_policy=PO_LS_FSYNC_NONE, .rebuild_on_open=1, .truncate_on_rebuild=1 };
+	g_ls = po_logstore_open_cfg(&cfg2); TEST_ASSERT_NOT_NULL(g_ls);
+	// first key intact
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_get(g_ls, k1, strlen(k1), &out, &outlen));
+	TEST_ASSERT_EQUAL_UINT(strlen(v1), outlen); free(out);
+	// second key should fail (truncated)
+	out=NULL; outlen=0; TEST_ASSERT_EQUAL_INT(-1, po_logstore_get(g_ls, k2, strlen(k2), &out, &outlen));
+}
+
 TEST(LOGSTORE, BATCH_WRITE_MANY) {
 	// Write many entries quickly to exercise batching
 	for (int i=0;i<200;i++) {
@@ -214,6 +383,10 @@ TEST(LOGSTORE, CONCURRENT_APPENDS) {
 		TEST_ASSERT_EQUAL_INT(0, pthread_create(&th[t], NULL, writer_thread, &ctx[t]));
 	}
 	for (int t=0;t<THREADS;t++) pthread_join(th[t], NULL);
+	// enqueue a flush marker and wait until it's visible to ensure drain
+	const char *fk = "flush_key"; const char *fv = "flush_val";
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, fk, strlen(fk), fv, strlen(fv)));
+	void *fout=NULL; size_t foutlen=0; TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, fk, strlen(fk), &fout, &foutlen, 500)); free(fout);
 	// Verify a few from each thread
 	for (int t=0;t<THREADS;t++) {
 		for (int i=0;i<PER_THREAD;i+=17) {
@@ -257,6 +430,62 @@ TEST(LOGSTORE, LOGGER_SINK_ATTACHED_WRITES_FILE) {
 	TEST_ASSERT_TRUE(st_after.st_size >= st_before.st_size);
 }
 
+TEST(LOGSTORE, APPEND_ZERO_LENGTH_KEY_REJECT) {
+	// Attempt to append with zero-length key should fail.
+	const char *val = "value";
+	TEST_ASSERT_EQUAL_INT(-1, po_logstore_append(g_ls, "", 0, val, strlen(val)));
+}
+
+TEST(LOGSTORE, APPEND_EXCEED_MAX_KEY) {
+	// Reopen with small max_key_bytes=16 and try 17-byte key.
+	po_logstore_close(&g_ls);
+	po_logstore_cfg cfg = {
+		.dir = g_dir,
+		.bucket = "idx",
+		.map_size = 1 << 20,
+		.ring_capacity = 64,
+		.batch_size = 8,
+		.fsync_policy = PO_LS_FSYNC_NONE,
+		.max_key_bytes = 16,
+	};
+	g_ls = po_logstore_open_cfg(&cfg); TEST_ASSERT_NOT_NULL(g_ls);
+	char key[32]; memset(key, 'k', 17); key[17] = '\0';
+	TEST_ASSERT_EQUAL_INT(-1, po_logstore_append(g_ls, key, 17, "v", 1));
+	// 16 bytes should succeed
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, key, 16, "v", 1));
+	void *out=NULL; size_t outlen=0; TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, key, 16, &out, &outlen, 300)); free(out);
+}
+
+TEST(LOGSTORE, APPEND_EXCEED_MAX_VALUE) {
+	// Reopen with small max_value_bytes=32 and try 33-byte value.
+	po_logstore_close(&g_ls);
+	po_logstore_cfg cfg = {
+		.dir = g_dir,
+		.bucket = "idx",
+		.map_size = 1 << 20,
+		.ring_capacity = 64,
+		.batch_size = 8,
+		.fsync_policy = PO_LS_FSYNC_NONE,
+		.max_value_bytes = 32,
+	};
+	g_ls = po_logstore_open_cfg(&cfg); TEST_ASSERT_NOT_NULL(g_ls);
+	char val[40]; memset(val,'a',33);
+	TEST_ASSERT_EQUAL_INT(-1, po_logstore_append(g_ls, "k", 1, val, 33));
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, "k", 1, val, 32));
+	void *out=NULL; size_t outlen=0; TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, "k", 1, &out, &outlen, 300)); free(out);
+}
+
+TEST(LOGSTORE, DEBUG_LOOKUP_RETURNS_OFFSET) {
+	const char *k = "dblk"; const char *v = "debug_lookup_value";
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k, strlen(k), v, strlen(v)));
+	void *out=NULL; size_t outlen=0; TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, k, strlen(k), &out, &outlen, 400)); free(out);
+	uint64_t off=0; uint32_t len=0; TEST_ASSERT_EQUAL_INT(0, po_logstore_debug_lookup(g_ls, k, strlen(k), &off, &len));
+	TEST_ASSERT_EQUAL_UINT(strlen(v), len);
+	// sanity: reading via get again returns same length
+	TEST_ASSERT_EQUAL_INT(0, po_logstore_get(g_ls, k, strlen(k), &out, &outlen));
+	TEST_ASSERT_EQUAL_UINT(len, outlen); free(out);
+}
+
 // ---------------------------------------------------------------------
 // Group Runner
 // ---------------------------------------------------------------------
@@ -267,9 +496,19 @@ TEST_GROUP_RUNNER(LOGSTORE) {
 	RUN_TEST_CASE(LOGSTORE, OVERWRITE_KEY_RETURNS_LAST);
 	RUN_TEST_CASE(LOGSTORE, GET_MISSING_KEY_FAILS);
 	RUN_TEST_CASE(LOGSTORE, PERSISTENCE_REOPEN);
+	RUN_TEST_CASE(LOGSTORE, PERSISTENCE_TRUNCATED_LAST_RECORD);
 	RUN_TEST_CASE(LOGSTORE, BATCH_WRITE_MANY);
 	RUN_TEST_CASE(LOGSTORE, LARGE_VALUE);
 	RUN_TEST_CASE(LOGSTORE, CONCURRENT_APPENDS);
 	RUN_TEST_CASE(LOGSTORE, LOGGER_SINK_ATTACHED_WRITES_FILE);
+	RUN_TEST_CASE(LOGSTORE, FSYNC_INTERVAL_POLICY_FUNCTIONAL);
+	RUN_TEST_CASE(LOGSTORE, FSYNC_EVERY_N_POLICY_FUNCTIONAL);
+	RUN_TEST_CASE(LOGSTORE, REBUILD_ON_OPEN_WITH_TRUNCATE);
+	RUN_TEST_CASE(LOGSTORE, INTEGRITY_SCAN_PRUNE);
+	RUN_TEST_CASE(LOGSTORE, TAIL_TRUNCATION_PARTIAL_VALUE_REBUILD);
+	RUN_TEST_CASE(LOGSTORE, APPEND_ZERO_LENGTH_KEY_REJECT);
+	RUN_TEST_CASE(LOGSTORE, APPEND_EXCEED_MAX_KEY);
+	RUN_TEST_CASE(LOGSTORE, APPEND_EXCEED_MAX_VALUE);
+	RUN_TEST_CASE(LOGSTORE, DEBUG_LOOKUP_RETURNS_OFFSET);
 }
 
