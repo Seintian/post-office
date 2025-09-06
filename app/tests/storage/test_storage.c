@@ -119,8 +119,26 @@ TEST(LOGSTORE, OVERWRITE_KEY_RETURNS_LAST) {
 	const char *k = "key";
 	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k, strlen(k), "first", 5));
 	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k, strlen(k), "second", 6));
-	void *out=NULL; size_t outlen=0;
-	TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, k, strlen(k), &out, &outlen, 300));
+	// We must ensure we read the LAST appended value. wait_get() returns on first
+	// visibility (which might be the initial value if the second append is still
+	// queued). Poll until the retrieved value matches the expected length/content
+	// or timeout.
+	const int timeout_ms = 300;
+	const int step_us = 2000; // 2ms
+	int waited_us = 0;
+	void *out = NULL; size_t outlen = 0;
+	while (waited_us < timeout_ms * 1000) {
+		if (po_logstore_get(g_ls, k, strlen(k), &out, &outlen) == 0) {
+			if (outlen == 6 && memcmp(out, "second", 6) == 0) {
+				break; // success
+			}
+			// got old value; discard and retry
+			free(out); out = NULL; outlen = 0;
+		}
+		usleep(step_us);
+		waited_us += step_us;
+	}
+	TEST_ASSERT_NOT_NULL_MESSAGE(out, "Did not observe overwritten value within timeout");
 	TEST_ASSERT_EQUAL_UINT(6, outlen);
 	TEST_ASSERT_EQUAL_MEMORY("second", out, 6);
 	free(out);
@@ -213,9 +231,9 @@ TEST(LOGSTORE, FSYNC_INTERVAL_POLICY_FUNCTIONAL) {
 		char k[16]; char v[16];
 		int klen = snprintf(k,sizeof(k),"ik%d", i);
 		int vlen = snprintf(v,sizeof(v),"iv%d", i);
-	TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k, (size_t)klen, v, (size_t)vlen));
+		TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k, (size_t)klen, v, (size_t)vlen));
 		void *out=NULL; size_t outlen=0;
-	TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, k, (size_t)klen, &out, &outlen, 300));
+		TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, k, (size_t)klen, &out, &outlen, 300));
 		TEST_ASSERT_EQUAL_UINT((size_t)vlen, outlen);
 		free(out);
 	}
