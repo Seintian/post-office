@@ -76,6 +76,17 @@ ssize_t perf_batcher_next(perf_batcher_t *b, void **out) __nonnull((1, 2));
  */
 bool perf_batcher_is_empty(const perf_batcher_t *b) __nonnull((1));
 
+/**
+ * @brief Wake up a blocked consumer in perf_batcher_next().
+ *
+ * This signals the batcher's eventfd to wake up any thread blocked in
+ * perf_batcher_next(). Useful for graceful shutdown scenarios.
+ *
+ * @param b Batcher handle
+ * @return 0 on success, -1 on error (errno set)
+ */
+int perf_batcher_wakeup(perf_batcher_t *b) __nonnull((1));
+
 #ifdef __cplusplus
 }
 #endif

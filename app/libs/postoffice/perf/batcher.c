@@ -168,3 +168,18 @@ bool perf_batcher_is_empty(const perf_batcher_t *b) {
 
     return perf_ringbuf_count(b->rb) == 0;
 }
+
+int perf_batcher_wakeup(perf_batcher_t *b) {
+    if (b->efd < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    // Signal eventfd to wake up any blocked reader
+    uint64_t inc = 1;
+    if (write(b->efd, &inc, sizeof(inc)) != sizeof(inc)) {
+        return -1;
+    }
+
+    return 0;
+}

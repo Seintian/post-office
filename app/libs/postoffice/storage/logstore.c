@@ -94,8 +94,11 @@ static void *worker_main(void *arg) {
 		uint64_t cur = (uint64_t)base;
 		uint64_t *offs = (uint64_t *)malloc(sizeof(uint64_t) * (size_t)n);
 		uint32_t *lens = (uint32_t *)malloc(sizeof(uint32_t) * (size_t)n);
-		if (!offs || !lens) {
-			free(iov); free(offs); free(lens);
+		// Allocate space for length values to avoid stack-use-after-scope
+		uint32_t *klens = (uint32_t *)malloc(sizeof(uint32_t) * (size_t)n);
+		uint32_t *vlens = (uint32_t *)malloc(sizeof(uint32_t) * (size_t)n);
+		if (!offs || !lens || !klens || !vlens) {
+			free(iov); free(offs); free(lens); free(klens); free(vlens);
 			// fallback single as above
 			for (ssize_t i = 0; i < n; ++i) {
 				append_req_t *req = (append_req_t *)batch[i];
@@ -121,13 +124,14 @@ static void *worker_main(void *arg) {
 		size_t j = 0;
 		for (ssize_t i = 0; i < n; ++i) {
 			append_req_t *req = (append_req_t *)batch[i];
-			uint32_t kl = (uint32_t)req->klen, vl = (uint32_t)req->vlen;
+			klens[i] = (uint32_t)req->klen;
+			vlens[i] = (uint32_t)req->vlen;
 			offs[i] = cur;
-			lens[i] = vl;
-			iov[j++] = (struct iovec){ .iov_base = &kl, .iov_len = sizeof(kl) };
-			cur += sizeof(kl);
-			iov[j++] = (struct iovec){ .iov_base = &vl, .iov_len = sizeof(vl) };
-			cur += sizeof(vl);
+			lens[i] = vlens[i];
+			iov[j++] = (struct iovec){ .iov_base = &klens[i], .iov_len = sizeof(klens[i]) };
+			cur += sizeof(klens[i]);
+			iov[j++] = (struct iovec){ .iov_base = &vlens[i], .iov_len = sizeof(vlens[i]) };
+			cur += sizeof(vlens[i]);
 			iov[j++] = (struct iovec){ .iov_base = req->k, .iov_len = req->klen };
 			cur += (uint64_t)req->klen;
 			iov[j++] = (struct iovec){ .iov_base = req->v, .iov_len = req->vlen };
@@ -155,7 +159,7 @@ static void *worker_main(void *arg) {
 			append_req_t *req = (append_req_t *)batch[i];
 			free(req->k); free(req->v); free(req);
 		}
-		free(iov); free(offs); free(lens);
+		free(iov); free(offs); free(lens); free(klens); free(vlens);
 	}
 	free(batch);
 	return NULL;
@@ -240,6 +244,10 @@ void po_logstore_close(po_logstore_t **pls) {
 	if (!*pls) return;
 	po_logstore_t *ls = *pls;
 	atomic_store(&ls->running, 0);
+	// Wake up the worker thread if it's blocked waiting for work
+	if (ls->b) {
+		(void)perf_batcher_wakeup(ls->b);
+	}
 	pthread_join(ls->worker, NULL);
 	if (ls->b) perf_batcher_destroy(&ls->b);
 	if (ls->q) perf_ringbuf_destroy(&ls->q);

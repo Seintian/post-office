@@ -25,11 +25,12 @@
 // Helpers
 // ---------------------------------------------------------------------
 
-static char g_dir_template[] = "/tmp/ls_testXXXXXX";
+static char g_dir_template[32];
 static char *g_dir = NULL;
 static po_logstore_t *g_ls = NULL;
 
 static void make_dir(void) {
+	strcpy(g_dir_template, "/tmp/ls_testXXXXXX");
 	g_dir = mkdtemp(g_dir_template);
 	TEST_ASSERT_NOT_NULL_MESSAGE(g_dir, "mkdtemp failed");
 }
