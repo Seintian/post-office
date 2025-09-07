@@ -73,7 +73,7 @@ int framing_write_msg(int fd, const po_header_t *header_net, const uint8_t *payl
         return -1;
     }
     PO_METRIC_COUNTER_INC("framing.write.msg");
-    PO_METRIC_COUNTER_ADD("framing.write.msg.bytes", (uint64_t)payload_len);
+    PO_METRIC_COUNTER_ADD("framing.write.msg.bytes", payload_len);
 
     uint32_t total = (uint32_t)sizeof(po_header_t) + payload_len;
     uint32_t len_be = htonl(total);
@@ -145,7 +145,7 @@ int framing_write_zcp(int fd, const po_header_t *header_net, const zcp_buffer_t 
         return -1;
     }
     PO_METRIC_COUNTER_INC("framing.write_zcp");
-    PO_METRIC_COUNTER_ADD("framing.write_zcp.bytes", (uint64_t)payload_len);
+    PO_METRIC_COUNTER_ADD("framing.write_zcp.bytes", payload_len);
 
     uint32_t total = (uint32_t)sizeof(po_header_t) + payload_len;
     uint32_t len_be = htonl(total);
@@ -287,7 +287,7 @@ int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
         return rc;
     }
     PO_METRIC_COUNTER_INC("framing.read.msg");
-    PO_METRIC_COUNTER_ADD("framing.read.msg.bytes", (uint64_t)payload_len);
+    PO_METRIC_COUNTER_ADD("framing.read.msg.bytes", payload_len);
     *payload_out = NULL;
     return 0;
 }
@@ -337,13 +337,17 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
         errno = EMSGSIZE;
         return -1;
     }
+
     rc = read_full(fd, payload_buf, payload_len);
     if (rc != 0) {
         if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_into.payload.fail");
         return rc;
     }
-    if (payload_len_out) *payload_len_out = payload_len;
+
+    if (payload_len_out)
+        *payload_len_out = payload_len;
+
     PO_METRIC_COUNTER_INC("framing.read_into.msg");
-    PO_METRIC_COUNTER_ADD("framing.read_into.msg.bytes", (uint64_t)payload_len);
+    PO_METRIC_COUNTER_ADD("framing.read_into.msg.bytes", payload_len);
     return 0;
 }

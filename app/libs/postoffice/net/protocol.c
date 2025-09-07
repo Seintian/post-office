@@ -17,14 +17,18 @@ int protocol_encode(
     uint32_t payload_len,
     po_header_t *out_hdr
 ) {
-    if (!out_hdr) return -1;
+    if (!out_hdr)
+        return -1;
+
     if (payload_len && !payload) {
         PO_METRIC_COUNTER_INC("protocol.encode.invalid");
         return -1;
     }
+
     protocol_init_header(out_hdr, msg_type, flags, payload_len);
+
     PO_METRIC_COUNTER_INC("protocol.encode.ok");
-    PO_METRIC_COUNTER_ADD("protocol.encode.bytes", (uint64_t)payload_len);
+    PO_METRIC_COUNTER_ADD("protocol.encode.bytes", payload_len);
     return 0;
 }
 
@@ -34,9 +38,12 @@ int protocol_decode(
     uint32_t payload_buf_size,
     uint32_t *payload_len_out
 ) {
-    if (!net_hdr) return -1;
+    if (!net_hdr)
+        return -1;
+
     po_header_t tmp = *net_hdr; // copy to convert
     protocol_header_to_host(&tmp);
+
     uint32_t need = tmp.payload_len;
     if (need > 0) {
         if (!payload_buf || payload_buf_size < need) {
@@ -44,9 +51,11 @@ int protocol_decode(
             return -1;
         }
     }
-    if (payload_len_out) *payload_len_out = need;
+    if (payload_len_out)
+        *payload_len_out = need;
+
     PO_METRIC_COUNTER_INC("protocol.decode.ok");
-    PO_METRIC_COUNTER_ADD("protocol.decode.bytes", (uint64_t)need);
+    PO_METRIC_COUNTER_ADD("protocol.decode.bytes", need);
     return 0;
 }
 

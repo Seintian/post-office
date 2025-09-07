@@ -289,7 +289,7 @@ int po_logstore_append(po_logstore_t *ls, const void *key, size_t keylen, const 
         nanosleep(&ts, NULL);
     }
     PO_METRIC_COUNTER_INC("logstore.append.ok");
-    PO_METRIC_COUNTER_ADD("logstore.append.bytes", (uint64_t)(keylen + vallen));
+    PO_METRIC_COUNTER_ADD("logstore.append.bytes", (keylen + vallen));
     return 0;
 }
 
@@ -342,7 +342,7 @@ int po_logstore_get(po_logstore_t *ls, const void *key, size_t keylen, void **ou
     *out_val = buf;
     *out_len = vl;
     PO_METRIC_COUNTER_INC("logstore.get.ok");
-    PO_METRIC_COUNTER_ADD("logstore.get.bytes", (uint64_t)vl);
+    PO_METRIC_COUNTER_ADD("logstore.get.bytes", vl);
     return 0;
 }
 
