@@ -24,6 +24,17 @@ extern "C" {
 #endif
 
 /**
+ * @brief Sentinel return value used by socket helpers to signal a non-blocking
+ *        operation would block (EAGAIN / EWOULDBLOCK) and should be retried
+ *        after readiness notification.
+ *
+ * We deliberately use a dedicated negative value (-2) distinct from the generic
+ * error return (-1) to remove ambiguity for callers: -1 now always means a
+ * hard error (check errno), while PO_SOCKET_WOULDBLOCK means transient.
+ */
+#define PO_SOCKET_WOULDBLOCK (-2)
+
+/**
  * @brief Create, bind, and listen on a TCP socket.
  *
  * The function resolves the provided address (NULL or empty string means
@@ -35,7 +46,7 @@ extern "C" {
  * @param backlog Listen backlog.
  * @return Listening socket fd on success, -1 on error (errno set).
  */
-int socket_listen(const char *address, const char *port, int backlog) __nonnull((2));
+int po_socket_listen(const char *address, const char *port, int backlog) __nonnull((2));
 
 /**
  * @brief Connect to a remote TCP server.
@@ -49,7 +60,7 @@ int socket_listen(const char *address, const char *port, int backlog) __nonnull(
  * @param port Remote port string.
  * @return Connected socket fd (non-blocking) on success, -1 on immediate error.
  */
-int socket_connect(const char *address, const char *port) __nonnull((1, 2));
+int po_socket_connect(const char *address, const char *port) __nonnull((1, 2));
 
 /**
  * @brief Accept a new connection on a listening socket.
@@ -64,7 +75,7 @@ int socket_connect(const char *address, const char *port) __nonnull((1, 2));
  * @return New client fd on success, -1 on error, -2 if no pending connections
  *         (EAGAIN/EWOULDBLOCK).
  */
-int socket_accept(int listen_fd, char *out_addr_buf, size_t addr_buf_len);
+int po_socket_accept(int listen_fd, char *out_addr_buf, size_t addr_buf_len);
 
 /**
  * @brief Create, bind, and listen on a Unix domain socket path.
@@ -76,7 +87,7 @@ int socket_accept(int listen_fd, char *out_addr_buf, size_t addr_buf_len);
  * @param backlog Listen backlog.
  * @return Listening socket fd on success, -1 on error.
  */
-int socket_listen_unix(const char *path, int backlog) __nonnull((1));
+int po_socket_listen_unix(const char *path, int backlog) __nonnull((1));
 
 /**
  * @brief Connect to a Unix domain socket path.
@@ -87,7 +98,7 @@ int socket_listen_unix(const char *path, int backlog) __nonnull((1));
  * @param path Filesystem path or abstract namespace (if starts with '\0').
  * @return Non-blocking socket fd on success, -1 on error.
  */
-int socket_connect_unix(const char *path) __nonnull((1));
+int po_socket_connect_unix(const char *path) __nonnull((1));
 
 /**
  * @brief Close a socket and ignore EINTR.
@@ -96,7 +107,7 @@ int socket_connect_unix(const char *path) __nonnull((1));
  *
  * @param fd File descriptor to close.
  */
-void socket_close(int fd);
+void po_socket_close(int fd);
 
 /**
  * @brief Set a socket to non-blocking mode.
@@ -104,7 +115,7 @@ void socket_close(int fd);
  * @param fd Socket fd.
  * @return 0 on success, -1 on error (errno set).
  */
-int socket_set_nonblocking(int fd);
+int po_socket_set_nonblocking(int fd);
 
 /**
  * @brief Set common socket options (TCP_NODELAY, REUSEADDR, KEEPALIVE).
@@ -119,7 +130,46 @@ int socket_set_nonblocking(int fd);
  * @param keepalive Set SO_KEEPALIVE if non-zero.
  * @return 0 on success, -1 on error (errno set).
  */
-int socket_set_common_options(int fd, int enable_nodelay, int reuseaddr, int keepalive);
+int po_socket_set_common_options(int fd, int enable_nodelay, int reuseaddr, int keepalive);
+
+/**
+ * @brief Send bytes on a non-blocking socket with metrics instrumentation.
+ *
+ * Wrapper around send(2) that records success/failure counters and bytes
+ * transferred. EAGAIN/EWOULDBLOCK are treated as a transient condition and
+ * reported to the caller via a -1 return (errno is preserved) while a hard
+ * failure also returns -1 after incrementing a failure counter. Partial
+ * writes are returned directly (short writes are possible with non-blocking
+ * sockets and should be handled by the caller).
+ *
+ * @param fd   Socket file descriptor.
+ * @param buf  Data buffer to write (must not be NULL if len > 0).
+ * @param len  Number of bytes to attempt to send.
+ * @param flags send(2) flags (e.g. MSG_NOSIGNAL, 0).
+ * @return Number of bytes sent (>0) on success; 0 is never returned; -1 on
+ *         hard error (errno set); PO_SOCKET_WOULDBLOCK (-2) if the operation
+ *         would block and should be retried later.
+ */
+ssize_t po_socket_send(int fd, const void *buf, size_t len, int flags) __nonnull((2));
+
+/**
+ * @brief Receive bytes from a non-blocking socket with metrics instrumentation.
+ *
+ * Wrapper around recv(2) that records success/failure/EOF counters and bytes
+ * transferred. On EAGAIN/EWOULDBLOCK it returns -1 (errno preserved) allowing
+ * caller to retry after readiness notification. On EOF (peer orderly close)
+ * it returns 0 and increments an EOF counter. On error it returns -1 after
+ * incrementing a failure counter. Successful positive byte counts increment
+ * both a recv counter and byte accumulator metric.
+ *
+ * @param fd   Socket file descriptor.
+ * @param buf  Destination buffer (must not be NULL if len > 0).
+ * @param len  Maximum number of bytes to read.
+ * @param flags recv(2) flags.
+ * @return >0 number of bytes read, 0 on EOF, -1 on hard error (errno set),
+ *         PO_SOCKET_WOULDBLOCK (-2) if the operation would block.
+ */
+ssize_t po_socket_recv(int fd, void *buf, size_t len, int flags) __nonnull((2));
 
 #ifdef __cplusplus
 }

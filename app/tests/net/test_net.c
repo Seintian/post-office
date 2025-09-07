@@ -26,8 +26,8 @@ TEST(NET, SEND_RECV_EMPTY_PAYLOAD) {
     TEST_ASSERT_NULL(buf);
     TEST_ASSERT_EQUAL_HEX8(0x33u, hdr.msg_type);
     TEST_ASSERT_EQUAL_UINT32(0u, hdr.payload_len);
-    socket_close(sv[0]);
-    socket_close(sv[1]);
+    po_socket_close(sv[0]);
+    po_socket_close(sv[1]);
 }
 
 TEST(NET, SEND_RECV_SMALL_PAYLOAD) {
@@ -44,8 +44,8 @@ TEST(NET, SEND_RECV_SMALL_PAYLOAD) {
     TEST_ASSERT_NULL(buf); // framing discards payload until zero-copy wired
     TEST_ASSERT_EQUAL_HEX8(0x34u, hdr.msg_type);
     TEST_ASSERT_EQUAL_UINT32(sizeof payload, hdr.payload_len);
-    socket_close(sv[0]);
-    socket_close(sv[1]);
+    po_socket_close(sv[0]);
+    po_socket_close(sv[1]);
 }
 
 TEST_GROUP_RUNNER(NET) {
@@ -78,8 +78,8 @@ TEST(NET, SEND_RECV_BACK_TO_BACK_MESSAGES) {
     TEST_ASSERT_EQUAL_UINT32(sizeof p2, h.payload_len);
     TEST_ASSERT_NULL(buf);
 
-    socket_close(sv[0]);
-    socket_close(sv[1]);
+    po_socket_close(sv[0]);
+    po_socket_close(sv[1]);
 }
 
 TEST(NET, LARGE_PAYLOAD_BOUNDARY_HEADER_ONLY) {
