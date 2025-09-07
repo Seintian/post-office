@@ -1,8 +1,8 @@
 /** \file modules.dox
- *  \brief Post Office Library – Module Reference & Usage Compendium
+ *  \brief Post Office Library - Module Reference & Usage Compendium
  *
  *  This file defines Doxygen groups for every public module of the Post Office system
- *  and provides exhaustive, end–to–end usage examples. All snippets are self–contained
+ *  and provides exhaustive, end-to-end usage examples. All snippets are self-contained
  *  and demonstrate correct initialization, error handling, teardown, and interaction
  *  among subsystems where relevant.
  *
@@ -19,19 +19,19 @@
 
 /**************************** LOGGER *********************************/
 /** \defgroup logger Logger
- *  High–performance, lock–minimized multi-consumer logging framework supporting
+ *  High-performance, lock-minimized multi-consumer logging framework supporting
  *  async batching, multiple sinks (console, file, syslog, custom), overflow
- *  policies, level filtering, and graceful shutdown with in–flight flushing.
+ *  policies, level filtering, and graceful shutdown with in-flight flushing.
  *
  *  Features:
- *   - Lock–free ring + batching (perf::ringbuf + perf::batcher)
+ *   - Lock-free ring + batching (perf::ringbuf + perf::batcher)
  *   - Drop or overwrite policies on saturation
  *   - Structured, macro based API (LOG_TRACE..LOG_FATAL)
  *   - Hot level mutation (atomic) via po_logger_set_level()
- *   - Multiple sinks: console, file, syslog, user–defined
- *   - Overflow notice emission (“logger overflow: dropped=… / overwritten=…”) automatically
+ *   - Multiple sinks: console, file, syslog, user-defined
+ *   - Overflow notice emission ("logger overflow: dropped=… / overwritten=…") automatically
  *
- *  Thread–Safety: Fully thread–safe; producers never block unless internal back–pressure
+ *  Thread-Safety: Fully thread-safe; producers never block unless internal back-pressure
  *  requires minimal spin/yield (bounded). Shutdown drains queue.
  *
  *  Lifetime Rules:
@@ -75,11 +75,11 @@
 
 /**************************** PERF (RINGBUF / BATCHER / METRICS) *********************************/
 /** \defgroup perf Perf & Instrumentation
- *  Lock–free structures and lightweight instrumentation primitives used internally
+ *  Lock-free structures and lightweight instrumentation primitives used internally
  *  by logger & logstore and available to applications.
  *
  *  Components:
- *   - ::po_perf_ringbuf_t : MPMC lock–free ring buffer (pointers) – bounded FIFO
+ *   - ::po_perf_ringbuf_t : MPMC lock-free ring buffer (pointers) - bounded FIFO
  *   - ::po_perf_batcher_t : Takes ring buffer and produces pointer batches (coalesces)
  *   - Counters / timers / histograms (if exposed in headers) for runtime metrics
  *
@@ -112,8 +112,8 @@
 
 /**************************** HASH TABLE *********************************/
 /** \defgroup hashtable Hashtable
- *  Open addressing (or separate chaining – see implementation) generic hash table used
- *  for in–memory indexing. Accepts user supplied comparator & hash functions and stores
+ *  Open addressing (or separate chaining - see implementation) generic hash table used
+ *  for in-memory indexing. Accepts user supplied comparator & hash functions and stores
  *  opaque keys/values.
  *
  *  Typical Pattern:
@@ -252,7 +252,7 @@
  *  Typical Flow:
  *   - Create listening socket (helper)
  *   - Accept / connect
- *   - Use framing encode/decode for length–prefixed messages
+ *   - Use framing encode/decode for length-prefixed messages
  *   - Poll connections using poller wait
  *
  *  \par Framing Example
@@ -261,6 +261,26 @@
  *  framing_encode((const uint8_t*)"hi", 2, frame, sizeof frame, &out);
  *  const uint8_t *payload=NULL; size_t paylen=0; framing_decode(frame, out, &payload, &paylen);
  *  \endcode
+ *
+ *  \par Protocol Encode / Decode Example
+ *  \code{.c}
+ *  po_header_t hdr;
+ *  if (protocol_encode(/*type=*/1, /*flags=*/0, some_buf, some_len, &hdr)==0) {
+ *      // hdr now host-order fields; convert if writing raw
+ *      protocol_header_to_network(&hdr);
+ *      // write header then payload
+ *  }
+ *  // On receive
+ *  po_header_t net_hdr; // filled from network (already network order)
+ *  uint32_t paylen=0;
+ *  if (protocol_decode(&net_hdr, NULL, 0, &paylen)==0) {
+ *      // allocate/read payload of length paylen
+ *  }
+ *  \endcode
+ *
+ *  Metrics emitted use component.operation.metric naming, e.g.:
+ *   - protocol.encode.ok / protocol.encode.invalid / protocol.encode.bytes
+ *   - protocol.decode.ok / protocol.decode.emsgsize_buf / protocol.decode.bytes
  */
 
 /**************************** UTILS *********************************/
@@ -369,8 +389,8 @@
 /** \mainpage Post Office Library
  *  \tableofcontents
  *  \section intro Overview
- *  A modular, high–throughput logging & append-only storage toolkit integrating
- *  lock–free data structures, batched persistence, and flexible configuration.
+ *  A modular, high-throughput logging & append-only storage toolkit integrating
+ *  lock-free data structures, batched persistence, and flexible configuration.
  *
  *  \section modules Module Index
  *  - \ref logger
@@ -390,4 +410,22 @@
  *  Emphasis on: minimal blocking, predictable latency, observability, recovery safety.
  *
  *  See also: tuning_guide.md, statistics_format.md, design_report.md
+ *
+ *  \section metrics Metrics & Latency Helper
+ *  Instrumentation macros (counters, timers, histograms) live under metrics/ and
+ *  are exposed via a macro facade. Naming: component.operation.metric.
+ *
+ *  Latency measurement convenience:
+ *  \code{.c}
+ *  PO_METRIC_LATENCY_RECORD_BEGIN(lat_ctx);
+ *  critical_operation();
+ *  PO_METRIC_LATENCY_RECORD_END(lat_ctx, "logstore.flush.latency_ns");
+ *  \endcode
+ *  This uses a monotonic clock diff and records the delta into a histogram if one
+ *  exists for the metric name, otherwise falls back to a counter of total ns.
+ *
+ *  Histograms: Declare via appropriate registration (see metrics.h). Timers emit
+ *  start/stop deltas; counters use *_INC / *_ADD helpers. All metric paths MUST be
+ *  concise, stable, and lowercase with dots separating component, operation, and
+ *  the metric semantic.
  */
