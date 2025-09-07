@@ -37,13 +37,13 @@ SRC_DIR                = src
 HASHTABLE_DIR          = $(POSTOFFICE_LIBS_DIR)/hashtable
 HASHSET_DIR            = $(POSTOFFICE_LIBS_DIR)/hashset
 NET_DIR                = $(POSTOFFICE_LIBS_DIR)/net
-PERF_DIR		   = $(POSTOFFICE_LIBS_DIR)/perf
-METRICS_DIR        = $(POSTOFFICE_LIBS_DIR)/metrics
+PERF_DIR               = $(POSTOFFICE_LIBS_DIR)/perf
+METRICS_DIR            = $(POSTOFFICE_LIBS_DIR)/metrics
 PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
-STORAGE_DIR		   = $(POSTOFFICE_LIBS_DIR)/storage
-UTILS_DIR		   = $(POSTOFFICE_LIBS_DIR)/utils
+STORAGE_DIR            = $(POSTOFFICE_LIBS_DIR)/storage
+UTILS_DIR              = $(POSTOFFICE_LIBS_DIR)/utils
 LOG_DIR                = $(POSTOFFICE_LIBS_DIR)/log
-SYSINFO_DIR	       = $(POSTOFFICE_LIBS_DIR)/sysinfo
+SYSINFO_DIR            = $(POSTOFFICE_LIBS_DIR)/sysinfo
 
 ## Third-party Libraries
 INIH_DIR               = $(THIRDPARTY_LIBS_DIR)/inih
@@ -52,7 +52,7 @@ LMDB_DIR               = $(THIRDPARTY_LIBS_DIR)/lmdb
 LOG_C_DIR              = $(THIRDPARTY_LIBS_DIR)/log_c
 UNITY_DIR              = $(THIRDPARTY_LIBS_DIR)/unity
 
-## Core source tree root (refactored layout)
+## Core source tree root
 CORE_SRC_DIR           = $(SRC_DIR)/core
 # Processes' sources directories
 MAIN_DIR               = $(CORE_SRC_DIR)/main
