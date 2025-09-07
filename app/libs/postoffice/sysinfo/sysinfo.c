@@ -309,9 +309,14 @@ int po_sysinfo_collect(po_sysinfo_t *info) {
     if (load_resource_limits(info) != 0)
         return -1;
 
-    load_filesysteminfo(info); // best-effort
-    load_networkinfo(info);    // best-effort
-    load_kernelinfo(info);     // best-effort
+    if (load_filesysteminfo(info) != 0)
+        return -1;
+
+    if (load_networkinfo(info) != 0)
+        return -1;
+
+    if (load_kernelinfo(info) != 0)
+        return -1;
 
     info->is_little_endian = __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__;
 
@@ -323,28 +328,28 @@ void po_sysinfo_print(const po_sysinfo_t *info, FILE *out) {
         return;
 
     fprintf(out, "System Information:\n");
-    fprintf(out, "  Physical Cores: %d\n", info->physical_cores);
-    fprintf(out, "  Logical Processors: %lld\n", (long long)info->logical_processors);
-    fprintf(out, "  L1 Cache Size: %lld bytes\n", (long long)info->cache_l1);
-    fprintf(out, "  Data Cache L1 Size: %lld bytes\n", (long long)info->dcache_l1);
-    fprintf(out, "  Data Cache Line Size: %lld bytes\n", (long long)info->dcache_lnsize);
-    fprintf(out, "  L2 Cache Size: %lld bytes\n", (long long)info->cache_l2);
-    fprintf(out, "  L3 Cache Size: %lld bytes\n", (long long)info->cache_l3);
-    fprintf(out, "  Total RAM: %lld bytes\n", (long long)info->total_ram);
-    fprintf(out, "  Free RAM: %lld bytes\n", (long long)info->free_ram);
-    fprintf(out, "  Page Size: %lld bytes\n", (long long)info->page_size);
-    fprintf(out, "  Huge Page Size: %lu kB\n", info->hugepage_info.size_kB);
-    fprintf(out, "  Number of Huge Pages: %ld\n", info->hugepage_info.nr);
-    fprintf(out, "  Free Huge Pages: %ld\n", info->hugepage_info.free);
-    fprintf(out, "  Overcommit Huge Pages: %ld\n", info->hugepage_info.overcommit);
-    fprintf(out, "  Surplus Huge Pages: %ld\n", info->hugepage_info.surplus);
-    fprintf(out, "  Reserved Huge Pages: %ld\n", info->hugepage_info.reserved);
-    fprintf(out, "  Max Open Files: %llu\n", (unsigned long long)info->max_open_files);
-    fprintf(out, "  Max Processes: %llu\n", (unsigned long long)info->max_processes);
-    fprintf(out, "  Max Stack Size: %llu bytes\n", (unsigned long long)info->max_stack_size);
-    fprintf(out, "  Free Disk Space: %llu bytes\n", (unsigned long long)info->disk_free);
-    fprintf(out, "  Filesystem Type: %s\n", info->fs_type);
-    fprintf(out, "  MTU: %d\n", info->mtu);
-    fprintf(out, "  Somaxconn: %d\n", info->somaxconn);
-    fprintf(out, "  Is Little Endian: %d\n", info->is_little_endian);
+    fprintf(out, "  Physical Cores: %d\n",               info->physical_cores);
+    fprintf(out, "  Logical Processors: %ld\n",         info->logical_processors);
+    fprintf(out, "  L1 Cache Size: %ld bytes\n",        info->cache_l1);
+    fprintf(out, "  Data Cache L1 Size: %ld bytes\n",   info->dcache_l1);
+    fprintf(out, "  Data Cache Line Size: %ld bytes\n", info->dcache_lnsize);
+    fprintf(out, "  L2 Cache Size: %ld bytes\n",        info->cache_l2);
+    fprintf(out, "  L3 Cache Size: %ld bytes\n",        info->cache_l3);
+    fprintf(out, "  Total RAM: %ld bytes\n",            info->total_ram);
+    fprintf(out, "  Free RAM: %ld bytes\n",             info->free_ram);
+    fprintf(out, "  Page Size: %ld bytes\n",            info->page_size);
+    fprintf(out, "  Huge Page Size: %lu kB\n",           info->hugepage_info.size_kB);
+    fprintf(out, "  Number of Huge Pages: %ld\n",        info->hugepage_info.nr);
+    fprintf(out, "  Free Huge Pages: %ld\n",             info->hugepage_info.free);
+    fprintf(out, "  Overcommit Huge Pages: %ld\n",       info->hugepage_info.overcommit);
+    fprintf(out, "  Surplus Huge Pages: %ld\n",          info->hugepage_info.surplus);
+    fprintf(out, "  Reserved Huge Pages: %ld\n",         info->hugepage_info.reserved);
+    fprintf(out, "  Max Open Files: %lu\n",             info->max_open_files);
+    fprintf(out, "  Max Processes: %lu\n",              info->max_processes);
+    fprintf(out, "  Max Stack Size: %lu bytes\n",       info->max_stack_size);
+    fprintf(out, "  Free Disk Space: %lu bytes\n",      info->disk_free);
+    fprintf(out, "  Filesystem Type: %s\n",              info->fs_type);
+    fprintf(out, "  MTU: %d\n",                          info->mtu);
+    fprintf(out, "  Somaxconn: %d\n",                    info->somaxconn);
+    fprintf(out, "  Is Little Endian: %s\n",             info->is_little_endian ? "true" : "false");
 }
