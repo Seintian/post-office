@@ -3,6 +3,12 @@
  * @brief Flush worker & background fsync threads.
  */
 
+// Feature test macros MUST be defined before any system header to expose
+// pwritev(2). _GNU_SOURCE is sufficient on glibc; POSIX 200809L enables
+// clock_gettime and other APIs we rely on.
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -11,13 +17,22 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
 
 #include "log/logger.h"
 #include "metrics/metrics.h"
 #include "storage/logstore_internal.h"
+
+// Optional test hook: a test may provide this symbol to force vector allocation
+// failure in the worker to exercise fallback path. When not defined, linker's
+// weak resolution leaves it NULL and normal behavior proceeds.
+__attribute__((weak)) int po_test_logstore_fail_vector_alloc(void);
 
 uint64_t _ls_now_ns(void) {
     struct timespec ts;
@@ -51,7 +66,7 @@ void *_ls_worker_main(void *arg) {
             continue; // spurious wake
         }
     PO_METRIC_COUNTER_INC("logstore.flush.batch_count");
-    PO_METRIC_COUNTER_ADD("logstore.flush.batch_records", (uint64_t)n);
+    PO_METRIC_COUNTER_ADD("logstore.flush.batch_records", n);
     PO_METRIC_TIMER_START("logstore.flush.ns");
     PO_METRIC_TICK(_flush_start);
         if (n == 1) {
@@ -101,8 +116,27 @@ void *_ls_worker_main(void *arg) {
         uint64_t *offs = (uint64_t *)malloc(sizeof(uint64_t) * (size_t)live);
         uint32_t *lens = (uint32_t *)malloc(sizeof(uint32_t) * (size_t)live);
         uint32_t *kls_arr = (uint32_t *)malloc(sizeof(uint32_t) * (size_t)live);
+        if (po_test_logstore_fail_vector_alloc && po_test_logstore_fail_vector_alloc()) {
+            // Simulate allocation failure by freeing any partial buffers and nulling pointers.
+            if (iov) free(iov);
+            if (offs) free(offs);
+            if (lens) free(lens);
+            if (kls_arr) free(kls_arr);
+            iov = NULL; offs = NULL; lens = NULL; kls_arr = NULL;
+        }
         if (!iov || !offs || !lens || !kls_arr) {
-            // Fallback single write path (duplicated intentionally for isolation)
+            // Allocation failure for vectorized flush path: free any partial allocations
+            // and fall back to the per-record write path to ensure requests are not leaked.
+            if (iov)
+                free(iov);
+            if (offs)
+                free(offs);
+            if (lens)
+                free(lens);
+            if (kls_arr)
+                free(kls_arr);
+            iov = NULL; offs = NULL; lens = NULL; kls_arr = NULL;
+
             for (ssize_t i = 0; i < n; ++i) {
                 append_req_t *req = (append_req_t *)batch[i];
                 if (req == ls->sentinel)
@@ -155,9 +189,29 @@ void *_ls_worker_main(void *arg) {
             cur += (uint64_t)req->vlen;
             rec_index++;
         }
-        ssize_t w = pwritev(ls->fd, iov, (int)iov_cnt, base);
+        // Primary path: atomic positional write via pwritev where available.
+        // We intentionally use pwritev for correctness under concurrent writers
+        // (even if today only this thread appends) and to avoid disturbing the
+        // file offset, which keeps the fallback path simpler.
+        ssize_t w = -1;
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || defined(__GLIBC__)
+        // Some minimal libc / kernel combinations might lack pwritev at link
+        // time. We keep a runtime ENOSYS fallback to a seek+writev sequence.
+        errno = 0;
+        w = pwritev(ls->fd, iov, (int)iov_cnt, base);
+        if (w < 0 && (errno == ENOSYS || errno == EINVAL)) {
+            // Fallback: emulate with lseek + writev. Non-atomic, but preserves functionality.
+            if (lseek(ls->fd, base, SEEK_SET) >= 0) {
+                w = writev(ls->fd, iov, (int)iov_cnt);
+            }
+        }
+#else
+        // Conservative portable fallback: reposition then writev.
+        if (lseek(ls->fd, base, SEEK_SET) >= 0)
+            w = writev(ls->fd, iov, (int)iov_cnt);
+#endif
         if (w < 0) {
-            LOG_ERROR("logstore: pwritev failed");
+            LOG_ERROR("logstore: pwritev/writev failed");
         } else {
             rec_index = 0;
             for (ssize_t i = 0; i < n; ++i) {
@@ -199,7 +253,7 @@ void *_ls_worker_main(void *arg) {
         }
         atomic_fetch_add(&ls->metric_records_flushed, (uint64_t)live);
         atomic_fetch_add(&ls->metric_batches_flushed, 1);
-    PO_METRIC_COUNTER_ADD("logstore.flush.records", (uint64_t)live);
+    PO_METRIC_COUNTER_ADD("logstore.flush.records", live);
     PO_METRIC_COUNTER_INC("logstore.flush.batch_count");
     PO_METRIC_TIMER_STOP("logstore.flush.ns");
     uint64_t elapsed = PO_METRIC_ELAPSED_NS(_flush_start);

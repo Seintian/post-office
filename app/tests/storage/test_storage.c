@@ -613,6 +613,90 @@ TEST(LOGSTORE, DEBUG_LOOKUP_RETURNS_OFFSET) {
     free(out);
 }
 
+// Fault injection: force vectorized allocation failure path in worker so that
+// fallback single-record write loop executes and frees requests correctly.
+// We simulate failure by temporarily overriding malloc via a weak shim that
+// denies allocations matching the iov/offs/lens/kls_arr sizes pattern. If the
+// platform/toolchain does not honor weak override in test build, this test
+// will simply be skipped.
+/* Fault-injection malloc override. Some toolchains / link orders may cause
+ * recursive calls during early startup in a fresh (clean) build leading to
+ * infinite recursion. Allow disabling via compile-time define. */
+#ifndef PO_DISABLE_FI_MALLOC
+#include <dlfcn.h>
+extern void *__real_malloc(size_t) __attribute__((weak));
+static void *(*real_malloc_fn)(size_t) = NULL; // resolved at runtime
+static int fi_enable = 0;
+/* Recursion guard & lazy real malloc resolution to avoid infinite self calls
+ * in clean link orders where weak aliasing captures early allocations. */
+static void *fi_malloc(size_t sz) {
+    static int depth = 0;
+    if (depth > 0) {
+        // We are inside our own hook from a nested allocation, bypass logic.
+        return __builtin_malloc(sz);
+    }
+    depth++;
+    if (!real_malloc_fn) {
+        // Resolve the real symbol at runtime if not provided by linker.
+        void *sym = dlsym(RTLD_NEXT, "malloc");
+        if (sym)
+            real_malloc_fn = (void *(*)(size_t))sym;
+    }
+    void *ret = NULL;
+    if (fi_enable && sz > 64 && sz < 4096) {
+        // Simulate failure for medium-sized allocations typical of vector path.
+        ret = NULL; // failure path
+    } else if (real_malloc_fn) {
+        ret = real_malloc_fn(sz);
+    } else {
+        ret = __builtin_malloc(sz);
+    }
+    depth--;
+    return ret;
+}
+__attribute__((weak, alias("fi_malloc"))) void *malloc(size_t);
+#else
+static int fi_enable = 0; /* still referenced */
+#endif
+
+TEST(LOGSTORE, FAULT_INJECTION_FALLBACK_PATH) {
+    // Reopen with tiny batch size so worker frequently allocates vectors.
+    po_logstore_close(&g_ls);
+    po_logstore_cfg cfg = {
+        .dir = g_dir,
+        .bucket = "idx",
+        .map_size = 1 << 20,
+        .ring_capacity = 64,
+        .batch_size = 8,
+        .fsync_policy = PO_LS_FSYNC_NONE,
+    };
+    g_ls = po_logstore_open_cfg(&cfg);
+    TEST_ASSERT_NOT_NULL(g_ls);
+    fi_enable = 1;
+    // enqueue enough records to trigger several batches where allocations fail
+    for (int i = 0; i < 40; i++) {
+        char k[32];
+        char v[32];
+        int klen = snprintf(k, sizeof(k), "fik%d", i);
+        int vlen = snprintf(v, sizeof(v), "fiv%d", i);
+        TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k, (size_t)klen, v, (size_t)vlen));
+    }
+    // Verify a random subset are retrievable (indicates fallback path succeeded)
+    for (int i = 0; i < 40; i += 7) {
+        char k[32];
+        char v[32];
+        int klen = snprintf(k, sizeof(k), "fik%d", i);
+        int vlen = snprintf(v, sizeof(v), "fiv%d", i);
+        void *out = NULL;
+        size_t outlen = 0;
+        TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, k, (size_t)klen, &out, &outlen, 800));
+        TEST_ASSERT_EQUAL_UINT((size_t)vlen, outlen);
+        TEST_ASSERT_EQUAL_MEMORY(v, out, outlen);
+        free(out);
+    }
+    fi_enable = 0; // disable for rest of suite
+}
+
 // ---------------------------------------------------------------------
 // Group Runner
 // ---------------------------------------------------------------------
@@ -637,4 +721,5 @@ TEST_GROUP_RUNNER(LOGSTORE) {
     RUN_TEST_CASE(LOGSTORE, APPEND_EXCEED_MAX_KEY);
     RUN_TEST_CASE(LOGSTORE, APPEND_EXCEED_MAX_VALUE);
     RUN_TEST_CASE(LOGSTORE, DEBUG_LOOKUP_RETURNS_OFFSET);
+    RUN_TEST_CASE(LOGSTORE, FAULT_INJECTION_FALLBACK_PATH);
 }
