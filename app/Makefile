@@ -197,13 +197,20 @@ LOG_C_SRC       = $(wildcard $(LOG_C_DIR)/*.c)
 UNITY_SRC       = $(wildcard $(UNITY_DIR)/*.c)
 
 # Source Files for each process
-MAIN_APP_SRC          = $(wildcard $(MAIN_DIR)/*.c)
-DIRECTOR_APP_SRC      = $(wildcard $(DIRECTOR_DIR)/*.c)
-TICKET_ISSUER_APP_SRC = $(wildcard $(TICKET_ISSUER_DIR)/*.c)
-USERS_MANAGER_APP_SRC = $(wildcard $(USERS_MANAGER_DIR)/*.c)
-WORKER_APP_SRC        = $(wildcard $(WORKER_DIR)/*.c)
-USER_APP_SRC          = $(wildcard $(USER_DIR)/*.c)
-TEST_SRC              = $(shell find $(TESTS_DIR) -name '*.c')
+MAIN_APP_SRC          = $(shell find $(MAIN_DIR) -name '*.c')
+DIRECTOR_APP_SRC      = $(shell find $(DIRECTOR_DIR) -name '*.c')
+TICKET_ISSUER_APP_SRC = $(shell find $(TICKET_ISSUER_DIR) -name '*.c')
+USERS_MANAGER_APP_SRC = $(shell find $(USERS_MANAGER_DIR) -name '*.c')
+WORKER_APP_SRC        = $(shell find $(WORKER_DIR) -name '*.c')
+USER_APP_SRC          = $(shell find $(USER_DIR) -name '*.c')
+TEST_SRC              = $(shell find $(TESTS_DIR) -name '*.c') \
+						$(filter-out $(MAIN_DIR)/main.c,$(MAIN_APP_SRC)) \
+						$(filter-out $(DIRECTOR_DIR)/director.c,$(DIRECTOR_APP_SRC)) \
+						$(filter-out $(TICKET_ISSUER_DIR)/ticket_issuer.c,$(TICKET_ISSUER_APP_SRC)) \
+						$(filter-out $(USERS_MANAGER_DIR)/users_manager.c,$(USERS_MANAGER_APP_SRC)) \
+						$(filter-out $(WORKER_DIR)/worker.c,$(WORKER_APP_SRC)) \
+						$(filter-out $(USER_DIR)/user.c,$(USER_APP_SRC)) \
+
 
 # *** Object Files *** #
 
