@@ -1,0 +1,237 @@
+/** \mainpage Post Office Simulation & Library Suite
+ *  \tableofcontents
+ *  \section mp_intro 1. Introduction
+ *  The <b>Post Office</b> project is a modular C codebase that combines a <em>multi-process
+ *  discrete simulation</em> ("Director" + specialized child processes) with a reusable systems
+ *  programming library (logging, lock-free structures, storage, networking, metrics, IPC
+ *  helpers, configuration). It is intended both as a realistic academic/industrial exercise
+ *  in systems design and as a collection of production-grade primitives (logger, ring buffer,
+ *  append-only log store, metrics, hash table, etc.).
+ *
+ *  The system exposes two principal execution entry modes (see \ref usage_modes):
+ *   - <b>Main Application</b>: interactive dashboard (menu) wrapping simulation lifecycle,
+ *     log/statistics inspection, configuration selection.
+ *   - <b>Simulation Only</b>: directly launches the Director process which forks/spawns
+ *     all specialized actors (workers, ticket issuer, users manager, users) and runs until
+ *     a termination condition is met (timeout / explode threshold / signal / error).
+ *
+ *  This documentation unifies <b>all architectural layers</b>:
+ *   - High-level simulation processes & life-cycle
+ *   - Inter-Process Communication (IPC) topology & synchronization barriers
+ *   - Foreground vs background threads inside library subsystems (logger, logstore, perf)
+ *   - Configuration model (INI via <code>inih</code>) and reproducibility toggles
+ *   - Performance & metrics instrumentation
+ *   - Storage engines (in-memory index + append-only log + LMDB wrapper)
+ *   - Networking building blocks (framing, protocol encoding/decoding, poller)
+ *   - Utilities (argv parsing, random, errors, crash handling, statistics aggregation)
+ *
+ *  For an in-depth narrative design discussion consult: \ref design_report.md "design_report.md".
+ *  For statistics layout: \ref statistics_format.md "statistics_format.md".
+ *  For usage walk-through: \ref usage_instructions.md "usage_instructions.md".
+ *  For performance knobs: \ref tuning_guide.md "tuning_guide.md" (if populated).
+ *
+ *  \section mp_module_index 2. Library Module Index
+ *  The reusable components are grouped for navigation (see also groups.dox):
+ *   - \ref logger            "Logger" - asynchronous, lock-minimized multi-sink logging
+ *   - \ref perf              "Perf & Instrumentation" - ring buffer, batcher, metrics layer
+ *   - \ref hashtable         "Hashtable" - generic key/value mapping
+ *   - \ref hashset           "Hashset" - set abstraction
+ *   - \ref index             "In-Memory Log Index" - key -> (offset,length) catalog
+ *   - \ref logstore          "Log Structured KV Store" - append-only storage with fsync policies
+ *   - \ref db_lmdb           "LMDB Wrapper" - thin facade for persistent buckets
+ *   - \ref storage           "Storage Facade" - composition of index + logstore (+ optional DB)
+ *   - \ref net               "Networking Primitives" - framing, protocol, poller, sockets
+ *   - \ref utils             "Utilities" - argv, configs/INI, random, file helpers, errors
+ *   - \ref sysinfo           "System Information" - runtime host metrics collection
+ *   - \ref prime             "Prime Utilities" - hashing support / sizing heuristics
+ *
+ *  An integrated end-to-end example combining many of these subsystems lives at
+ *  \ref integration_scenario "Putting It All Together".
+ *
+ *  \section mp_process_arch 3. Simulation Process Architecture
+ *  <b>Actor / Process Roles</b> (multi-process environment):
+ *  <table border="0" cellspacing="4" cellpadding="4">
+ *   <tr><th>Process</th><th>Role</th><th>Key Responsibilities</th></tr>
+ *   <tr><td><b>Main</b></td><td>Interactive shell</td><td>Menu UI, configuration selection, statistics & log inspection, simulation launcher</td></tr>
+ *   <tr><td><b>Director</b></td><td>Central orchestrator</td><td>IPC creation, global state machine, spawning children, day cycle timing, termination detection, statistics collation</td></tr>
+ *   <tr><td><b>Ticket Issuer</b></td><td>Queue & ticket allocator</td><td>Receives service requests, assigns tickets respecting seat/availability constraints</td></tr>
+ *   <tr><td><b>Worker(s)</b></td><td>Service executors</td><td>Consume queued service requests, apply per-service timing, take configured pauses/breaks, update stats</td></tr>
+ *   <tr><td><b>User(s)</b></td><td>Simulation clients</td><td>Generate probabilistic service requests, await issuance, optionally re-request multiple times</td></tr>
+ *   <tr><td><b>Users Manager</b></td><td>External injector</td><td>Signals Director to increase population (adds bursts of new users mid-run)</td></tr>
+ *  </table>
+ *
+ *  <b>Lifecycle (per simulation day)</b>:
+ *   1. Director loads/validates configuration (INI) and initializes IPC & shared memory
+ *   2. All child processes attach & rendezvous via start barrier / semaphores
+ *   3. Director sets state to <code>SIM_RUNNING</code>, initializes per-day timing window
+ *   4. Users issue service requests → Ticket Issuer enqueues / allocates tickets
+ *   5. Workers dequeue, process, update shared atomic statistics & possibly pause
+ *   6. Day timeout OR termination condition triggers end-of-day aggregation & logging
+ *   7. Simulation ends when global condition met (timeout, explosion threshold, signal, error)
+ *
+ *  Termination codes (state machine): <code>SIM_ENDED_TIMEOUT</code>, <code>SIM_ENDED_EXPLODED</code>,
+ *  <code>SIM_ENDED_SIGNALED</code>, <code>SIM_ENDED_ERROR</code> (see \ref statistics_format.md for mapping).
+ *
+ *  \section mp_ipc 4. IPC & Synchronization Topology
+ *  The system employs multiple System V / POSIX primitives:
+ *   - <b>Semaphores</b>: <code>process_sync_sem</code> (startup rendezvous), <code>worker_seats_sem</code>
+ *     (seat availability), <code>stats_ready_sem</code> (statistics publication), <code>service_issuance_sem</code> (ticket gating)
+ *   - <b>Shared Memory</b>: <code>sim_stats</code>, <code>sim_state</code>, <code>available_services</code>, counters & arrays
+ *   - <b>Synchronization Objects</b>: pthread read/write lock (<code>state_lock</code>), pthread barrier (<code>sync_barrier</code>)
+ *   - <b>Message Queues</b>: <code>ticket_issuer_queue</code>, per-service <code>service_wait_queues</code>
+ *
+ *  <b>Data Integrity Strategies</b>:
+ *   - All statistic counters are atomic (preventing torn updates)
+ *   - rwlock guards structural state transitions; barrier aligns day boundaries
+ *   - Queues isolate producer (users) from consumer (workers) pacing
+ *
+ *  \section mp_threads 5. Foreground vs Background Threads (Intra-Process)
+ *  Although the simulation core is multi-<em>process</em>, certain library subsystems spin up
+ *  internal <em>background threads</em> to offload work:
+ *   - <b>Logger</b>: N worker threads (cfg.consumers) draining a lock-free ring + batcher,
+ *     formatting + sinking lines (console, file, syslog, custom). Overflow notices emitted
+ *     on power-of-two drop/overwrite counts.
+ *   - <b>Logstore</b>: Worker thread(s) consuming append requests from ring buffer, performing
+ *     batched disk writes; optional dedicated fsync thread depending on fsync policy.
+ *   - <b>Perf / Metrics</b>: Optional internal worker for periodic maintenance / flushing if
+ *     configured (see perf.c). (Exact behavior depends on compiled feature flags.)
+ *
+ *  \subsection mp_thread_safety Thread-Safety Contract
+ *   - Public APIs avoid blocking on hot paths (ring-buffer enqueue done in bounded steps)
+ *   - Back-pressure strategies: drop-new or overwrite-old (logger); bounded queue for logstore
+ *   - Shutdown phases inject sentinel records and join threads deterministically
+ *
+ *  \section mp_storage 6. Storage Stack Layers
+ *  <b>Index</b> (in-memory) maps key → (file_offset, value_length). Latest write wins.
+ *  <b>Logstore</b> is an append-only file with crash-recovery scan/truncation on reopen,
+ *  supporting pluggable fsync strategies (batch-based, periodic, every-N, or disabled).
+ *  <b>LMDB Wrapper</b> optionally provides auxiliary persistent buckets for secondary data.
+ *  The <b>Storage Facade</b> composes these for simplified CRUD semantics.
+ *
+ *  \subsection mp_storage_policies Fsync Policies
+ *  Enumerated by <code>po_logstore_fsync_policy</code>:
+ *   - <code>PO_LS_FSYNC_NONE</code>: rely on OS flush heuristics
+ *   - <code>PO_LS_FSYNC_EACH_BATCH</code>: durability after each batch flush
+ *   - <code>PO_LS_FSYNC_EVERY_N</code>: amortized durability every N batches
+ *   - <code>PO_LS_FSYNC_INTERVAL</code>: time-based periodic fsync (nano-second interval)
+ *
+ *  \section mp_network 7. Networking Primitives
+ *  The networking layer supplies framing encode/decode (length-prefixed), protocol header
+ *  packing/unpacking, a poller abstraction over epoll, and socket helpers for non-blocking
+ *  configuration. Metrics name pattern: <code>protocol.encode.*</code>, <code>protocol.decode.*</code> etc.
+ *  These primitives enable future extension (remote ingestion, distributed workers) without
+ *  entangling simulation core logic.
+ *
+ *  \section mp_config 8. Configuration Model (INI via inih)
+ *  Configuration files (see <code>config/timeout.ini</code>, <code>config/explode.ini</code>) specify:
+ *  <table border="0" cellspacing="2" cellpadding="3">
+ *   <tr><th>Section</th><th>Keys</th><th>Meaning</th></tr>
+ *   <tr><td>simulation</td><td>SIM_DURATION, N_NANO_SECS, EXPLODE_THRESHOLD</td><td>Day count, virtual minute (ns), explosion threshold (users waiting)</td></tr>
+ *   <tr><td>users</td><td>NOF_USERS, P_SERV_MIN, P_SERV_MAX, N_REQUESTS</td><td>Initial population, probability bounds, per-user request count cap</td></tr>
+ *   <tr><td>workers</td><td>NOF_WORKERS, NOF_WORKER_SEATS, NOF_PAUSE</td><td>Total workers, concurrently active seats, per-worker breaks</td></tr>
+ *   <tr><td>users_manager</td><td>N_NEW_USERS</td><td>Batch size for injected users</td></tr>
+ *  </table>
+ *  The <code>explode</code> profile accelerates pressure testing by lowering thresholds & time scaling.
+ *
+ *  \section mp_metrics 9. Metrics & Instrumentation
+ *  All subsystems emit counters/histograms via a macro facade (see \ref perf). Naming format:
+ *  <code>component.operation.metric</code> (e.g. <code>logger.batch.records</code>, <code>logstore.flush.latency_ns</code>).
+ *  Latency helper usage:
+ *  \code{.c}
+ *  PO_METRIC_LATENCY_RECORD_BEGIN(ctx);
+ *  critical_section();
+ *  PO_METRIC_LATENCY_RECORD_END(ctx, "logstore.flush.latency_ns");
+ *  \endcode
+ *
+ *  \section mp_logging 10. Logging Subsystem Deep Dive
+ *  The asynchronous logger (\ref logger) provides:
+ *   - Lock-free freelist + eventfd-backed batcher for high throughput
+ *   - Multiple sink mask (console, file, syslog, custom) + runtime hot level change
+ *   - Overflow accounting (drop-new vs overwrite-old policies) with power-of-two notices
+ *   - Structured formatting: timestamp + thread id + level + file:line + function + message
+ *  <b>Initialization Pattern</b>:
+ *  \code{.c}
+ *  po_logger_config_t cfg = {.level=LOG_INFO,.ring_capacity=4096,.consumers=1,.policy=LOGGER_DROP_NEW};
+ *  po_logger_init(&cfg);
+ *  po_logger_add_sink_console(true);
+ *  po_logger_add_sink_file("/tmp/app.log", false);
+ *  LOG_INFO("boot complete");
+ *  po_logger_shutdown();
+ *  \endcode
+ *
+ *  \section mp_stats 11. Statistics Life-Cycle
+ *  Live counters (see \ref statistics_format.md) accumulate per-service & global metrics:
+ *   - Issued vs not-issued services, serviced users, waiting & service time totals
+ *   - Operator participation (active operators today / cumulative) & pauses
+ *  At end-of-day Director derives averages (per-day & simulation-wide) and appends CSV rows.
+ *
+ *  \section mp_error_handling 12. Error & Crash Handling
+ *  Unified error codes (\ref utils) + stringification helpers. Fatal signals trigger crash
+ *  handler producing memory map snapshot, register dump, backtrace (platform dependent) and a
+ *  human-readable report under the configured crash reports directory. Logging remains usable
+ *  until final teardown due to graceful sentinel-based draining.
+ *
+ *  \section mp_thread_model 13. Concurrency Design Summary
+ *  <b>Process-level parallelism</b>: isolates failure domains; IPC boundaries explicit.
+ *  <b>Thread-level parallelism</b> (logger, logstore) hidden behind APIs - callers interact via
+ *  non-blocking enqueue semantics, improving determinism for simulation logic.
+ *  <b>Atomic primitives</b>: statistics & counters (no coarse global locks on hot path).
+ *  <b>Determinism aids</b>: configuration-driven probabilities + stable time scaling facilitate
+ *  reproducible scenarios for testing (seed management in random utilities).
+ *
+ *  \section mp_extensibility 14. Extensibility Notes
+ *   - Networking layer can be bound to remote dispatcher(s) for distributed simulations
+ *   - Storage facade could mount alternative persistence backends with same index contract
+ *   - Metrics naming stable → facilitates external scraping/export adapters
+ *   - Logger custom sinks allow integration (e.g., journald, cloud collectors)
+ *
+ *  \section mp_dev_workflow 15. Development & Documentation
+ *  Build targets (Makefile) provide: <code>make start</code>, <code>make simulation</code>,
+ *  <code>make timeout</code>, <code>make explode</code>, <code>make test</code>, <code>make doc</code>.
+ *  Doxygen generation (requires Graphviz) yields HTML + LaTeX; PDF via <code>make</code> inside
+ *  generated <code>docs/latex</code> folder. Crash artifacts & logs stored under dedicated
+ *  project directories (see macros headers). Use <code>LOG_LEVEL=TRACE</code> for fine-grained tracing.
+ *
+ *  \section mp_usage 16. Quick Start (Simulation Only)
+ *  \code{.bash}
+ *  make simulation CONFIG="config/timeout.ini"
+ *  # or pressure scenario
+ *  make explode
+ *  \endcode
+ *  Inspect CSV + logs after run; consult statistics tables via Main menu or by reading the
+ *  generated files directly.
+ *
+ *  \section mp_cross_links 17. Cross-Reference Guide
+ *  | Topic | Reference |
+ *  |-------|-----------|
+ *  | Full architectural narrative | design_report.md |
+ *  | Statistics field reference | statistics_format.md |
+ *  | Usage & CLI / menu | usage_instructions.md |
+ *  | Module API compendium | modules.dox |
+ *  | Performance tuning knobs | tuning_guide.md |
+ *  | Integrated example | integration_scenario |
+ *
+ *  \section mp_glossary 18. Glossary
+ *  <b>Seat</b>: Concurrent worker slot for a service.
+ *  <b>Explode Threshold</b>: Upper bound on users waiting; triggers simulation termination.
+ *  <b>Day</b>: Virtual time window defined by N_NANO_SECS * 60 * 8.
+ *  <b>Batch</b>: Group of dequeued ring entries processed in one logger/logstore cycle.
+ *  <b>Overflow Notice</b>: Informational log emitted when drop/overwrite counts hit powers of two.
+ *
+ *  \section mp_related_groups 19. Group Index Shortcut
+ *   - \ref libraries
+ *   - \ref executables
+ *   - \ref utils
+ *   - \ref net
+ *   - \ref storage
+ *   - \ref perf
+ *   - \ref sysinfo
+ *
+ *  \section mp_closing 20. Closing Remarks
+ *  The project unifies educational clarity with production-grade concurrency patterns.
+ *  Explore the groups and headers for detailed API contracts; leverage integration examples
+ *  and configuration profiles to craft reproducible performance or correctness tests.
+ *  Contributions can extend subsystems independently thanks to the layered, lock-minimized design.
+ *
+ *  \author Seintian
+ */

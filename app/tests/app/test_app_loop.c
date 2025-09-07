@@ -203,7 +203,7 @@ TEST(APP, METRICS_AND_PUBLIC_APIS_SMOKE) {
 
     // argv parsing (simulate program with log level + syslog enabled)
     po_args_t args; po_args_init(&args);
-    char *argvv[] = { (char*)"prog", (char*)"--loglevel", (char*)"2", (char*)"--syslog" };
+    char *argvv[] = { (char*)"test", (char*)"--loglevel", (char*)"2", (char*)"--syslog" };
     TEST_ASSERT_EQUAL_INT(0, po_args_parse(&args, 4, argvv, fileno(stdout)));
     TEST_ASSERT_TRUE(args.syslog);
     po_args_destroy(&args);
