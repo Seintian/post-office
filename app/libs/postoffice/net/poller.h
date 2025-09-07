@@ -12,6 +12,11 @@
 #include <stdint.h>
 #include <sys/cdefs.h>
 #include <sys/epoll.h>
+#include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /** Forward declaration of the internal poller structure. */
 typedef struct poller poller_t;
@@ -64,5 +69,38 @@ int poller_remove(const poller_t *poller, int fd) __nonnull((1));
  */
 int poller_wait(const poller_t *poller, struct epoll_event *events, int max_events, int timeout)
     __nonnull((1, 2));
+
+/**
+ * @brief Wake any thread blocked in poller_wait().
+ *
+ * Internally uses an eventfd registered with epoll. The wake event is consumed
+ * and filtered out before returning to the caller (thus it is not visible in
+ * the returned events array). Safe to call from any thread.
+ *
+ * @return 0 on success, -1 on error (errno set).
+ */
+int poller_wake(const poller_t *poller) __nonnull((1));
+
+/**
+ * @brief Wait up to total_timeout_ms for events, supporting early wake.
+ *
+ * Repeatedly invokes poller_wait with the remaining time. Returns as soon as
+ * at least one real event is available, on timeout, or if a wake is issued.
+ *
+ * @param poller  Poller instance.
+ * @param events  Output array for events.
+ * @param max_events Capacity of events array.
+ * @param total_timeout_ms Total timeout budget in milliseconds (<=0 means immediate check).
+ * @param timed_out Optional out flag set to true when the timeout fully elapsed (no wake/events).
+ *                  Set to false when returning due to wake or real events.
+ * @return number of events (>0), 0 on wake/timeout (check *timed_out), -1 on error.
+ */
+int poller_timed_wait(const poller_t *poller, struct epoll_event *events, int max_events,
+                      int total_timeout_ms, bool *timed_out) __nonnull((1,2));
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
 
 #endif // _POLLER_H

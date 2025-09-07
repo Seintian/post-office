@@ -71,8 +71,34 @@ TEST(POLLER, WAIT_TIMEOUT) {
     poller_destroy(p);
 }
 
+TEST(POLLER, WAKE_NO_EVENTS) {
+    poller_t *p = poller_create();
+    TEST_ASSERT_NOT_NULL(p);
+    struct epoll_event ev[2];
+    // Issue a wake and then wait with a long timeout; should return 0 (wake only) quickly.
+    TEST_ASSERT_EQUAL_INT(0, poller_wake(p));
+    int n = poller_wait(p, ev, 2, 1000);
+    TEST_ASSERT_EQUAL_INT(0, n); // wake consumed, no external fds
+    poller_destroy(p);
+}
+
+TEST(POLLER, TIMED_WAIT_WAKE_BEFORE_TIMEOUT) {
+    poller_t *p = poller_create();
+    TEST_ASSERT_NOT_NULL(p);
+    struct epoll_event ev[4];
+    bool timed_out = false;
+    // Trigger wake before calling timed wait to simulate asynchronous wake
+    TEST_ASSERT_EQUAL_INT(0, poller_wake(p));
+    int n = poller_timed_wait(p, ev, 4, 200, &timed_out);
+    TEST_ASSERT_EQUAL_INT(0, n); // wake only (no external events)
+    TEST_ASSERT_FALSE(timed_out); // should not be reported as a timeout
+    poller_destroy(p);
+}
+
 TEST_GROUP_RUNNER(POLLER) {
     RUN_TEST_CASE(POLLER, CREATE_AND_DESTROY);
     RUN_TEST_CASE(POLLER, ADD_MODIFY_REMOVE_AND_WAIT);
     RUN_TEST_CASE(POLLER, WAIT_TIMEOUT);
+    RUN_TEST_CASE(POLLER, WAKE_NO_EVENTS);
+    RUN_TEST_CASE(POLLER, TIMED_WAIT_WAKE_BEFORE_TIMEOUT);
 }
