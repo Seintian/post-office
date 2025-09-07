@@ -23,18 +23,18 @@ typedef struct {
 } po_args_t;
 
 // Initialize default values
-void po_args_init(po_args_t *args);
+void po_args_init(po_args_t *args) __nonnull((1));
 
 // Parse command-line arguments
 // Returns 0 on success, non-zero on error or help/version exit
-int po_args_parse(po_args_t *args, int argc, char **argv, int fd);
+int po_args_parse(po_args_t *args, int argc, char **argv, int fd) __nonnull((1,3));
 
 // Print usage information to stdout
-void po_args_print_usage(int fd, const char *prog_name);
+void po_args_print_usage(int fd, const char *prog_name) __nonnull((2));
 
 // Destroy (free) any dynamically allocated fields inside args
 // Safe to call multiple times; leaves pointers NULL
-void po_args_destroy(po_args_t *args);
+void po_args_destroy(po_args_t *args) __nonnull((1));
 
 #ifdef __cplusplus
 }

@@ -26,8 +26,6 @@ void po_args_print_usage(int fd, const char *prog_name) {
 }
 
 void po_args_destroy(po_args_t *args) {
-    if (!args)
-        return;
     free(args->config_file);
     args->config_file = NULL;
     free(args->syslog_ident);
