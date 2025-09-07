@@ -8,6 +8,10 @@
 #ifndef POSTOFFICE_LOGSTORE_INTERNAL_H
 #define POSTOFFICE_LOGSTORE_INTERNAL_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -88,5 +92,9 @@ void *_ls_fsync_thread_main(void *arg);                                 // fsync
 int _ls_rebuild_on_open(po_logstore_t *ls, const po_logstore_cfg *cfg); // rebuild
 int _ls_integrity_scan(po_logstore_t *ls, int prune_nonexistent,
                        po_logstore_integrity_stats *out_stats); // integrity scan
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif /* POSTOFFICE_LOGSTORE_INTERNAL_H */

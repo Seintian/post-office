@@ -3,6 +3,7 @@
 /** \ingroup utils */
 
 #include <stdbool.h>
+#include <sys/cdefs.h>
 
 #ifdef __cplusplus
 extern "C" {

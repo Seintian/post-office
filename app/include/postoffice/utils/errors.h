@@ -1,8 +1,13 @@
+// Added C linkage guards for C++ compatibility
 #ifndef _PO_ERRORS_H
 #define _PO_ERRORS_H
 /** \ingroup utils */
 
 #include "lmdb/lmdb.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @brief Converts an error code to a human-readable string.
@@ -197,6 +202,10 @@ const char *po_strerror(int err);
 
 /// Underlying socket error
 #define NET_ESOCK (NET_EBASE + 4)
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 /// Timeout waiting for socket/event
 #define NET_ETIMEOUT (NET_EBASE + 5)

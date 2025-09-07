@@ -1,6 +1,10 @@
 #ifndef POSTOFFICE_UTILS_FILES_H
 #define POSTOFFICE_UTILS_FILES_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <sys/stat.h>
@@ -105,5 +109,9 @@ bool fs_create_directory_recursive(const char *path, mode_t mode);
  * a memory allocation failure.
  */
 char *fs_path_join(const char *base, const char *leaf);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif // POSTOFFICE_UTILS_FILES_H

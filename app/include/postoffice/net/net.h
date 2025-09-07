@@ -6,6 +6,7 @@
  * buffers and batched I/O for high-performance message exchange.
  * @ingroup net
  */
+// Added C linkage guards for C++ consumers.
 #ifndef _NET_H
 #define _NET_H
 
@@ -15,6 +16,10 @@
 #include "net/framing.h"
 #include "net/protocol.h"
 #include "net/socket.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @brief Send a protocol message on a connected socket.
@@ -84,5 +89,9 @@ int net_recv_message_zcp(int fd, po_header_t *header_out, void **payload_out,
  * (via zcp_release(*payload_out)) when finished with it.
  */
 int net_recv_message(int fd, po_header_t *header_out, zcp_buffer_t **payload_out) __nonnull((2, 3));
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif // _NET_H

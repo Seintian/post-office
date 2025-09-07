@@ -2,6 +2,10 @@
 /** \ingroup perf */
 #define _PO_PERF_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -125,5 +129,9 @@ int po_perf_histogram_record(const char *name, uint64_t value) __nonnull((1));
  * @return 0 on success, -1 on failure
  */
 int po_perf_report(FILE *out);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif // _PO_PERF_H

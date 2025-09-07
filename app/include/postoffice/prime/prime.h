@@ -10,12 +10,17 @@
  * @see hashtable.h
  */
 
+// NOTE: Added C++ linkage guards for compatibility.
 #ifndef _PRIME_H
 #define _PRIME_H
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <sys/cdefs.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @brief checks if a number is prime
@@ -37,5 +42,9 @@ bool is_prime(size_t n);
  * @return the next prime number after n
  */
 size_t next_prime(size_t n);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif // _PRIME_H_
