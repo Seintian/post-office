@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "log/logger.h"
+#include "metrics/metrics.h"
 #include "storage/logstore_internal.h"
 
 uint64_t _ls_now_ns(void) {
@@ -31,6 +32,10 @@ void *_ls_worker_main(void *arg) {
     if (!batch)
         return NULL;
 
+    PO_METRIC_TIMER_CREATE("logstore.flush.ns");
+    static const uint64_t _flush_bins[] = {1000,5000,10000,50000,100000,500000,1000000,5000000,10000000};
+    PO_METRIC_HISTO_CREATE("logstore.flush.latency", _flush_bins, sizeof(_flush_bins)/sizeof(_flush_bins[0]));
+
     for (;;) {
         ssize_t n = perf_batcher_next(ls->b, batch);
         if (n < 0) {
@@ -45,6 +50,10 @@ void *_ls_worker_main(void *arg) {
                 break;
             continue; // spurious wake
         }
+    PO_METRIC_COUNTER_INC("logstore.flush.batch_count");
+    PO_METRIC_COUNTER_ADD("logstore.flush.batch_records", (uint64_t)n);
+    PO_METRIC_TIMER_START("logstore.flush.ns");
+    PO_METRIC_TICK(_flush_start);
         if (n == 1) {
             append_req_t *only = (append_req_t *)batch[0];
             if (only && only->k == NULL && only->v == NULL) {
@@ -52,8 +61,11 @@ void *_ls_worker_main(void *arg) {
                 ls->sentinel = NULL;
                 if (!atomic_load(&ls->running) && perf_ringbuf_count(ls->q) == 0)
                     break;
-                else
+                else {
+                    PO_METRIC_TIMER_STOP("logstore.flush.ns");
+                    PO_METRIC_HISTO_RECORD("logstore.flush.latency", 0);
                     continue;
+                }
             }
         }
 
@@ -187,6 +199,11 @@ void *_ls_worker_main(void *arg) {
         }
         atomic_fetch_add(&ls->metric_records_flushed, (uint64_t)live);
         atomic_fetch_add(&ls->metric_batches_flushed, 1);
+    PO_METRIC_COUNTER_ADD("logstore.flush.records", (uint64_t)live);
+    PO_METRIC_COUNTER_INC("logstore.flush.batch_count");
+    PO_METRIC_TIMER_STOP("logstore.flush.ns");
+    uint64_t elapsed = PO_METRIC_ELAPSED_NS(_flush_start);
+    PO_METRIC_HISTO_RECORD("logstore.flush.latency", elapsed);
         if (sentinel_seen && ls->sentinel) {
             free(ls->sentinel);
             ls->sentinel = NULL;

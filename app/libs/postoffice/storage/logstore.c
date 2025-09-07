@@ -12,6 +12,7 @@
 #include "storage/logstore.h"
 
 #include "storage/logstore_internal.h"
+#include "metrics/metrics.h"
 
 // Standard headers needed for open/close & API functions
 #include <errno.h>
@@ -58,6 +59,7 @@ static int preload_cb(const void *k, size_t klen, const void *v, size_t vlen, vo
 }
 
 po_logstore_t *po_logstore_open_cfg(const po_logstore_cfg *cfg) {
+    PO_METRIC_COUNTER_INC("logstore.open.attempt");
     if (!cfg || !cfg->dir || !cfg->bucket)
         return NULL;
     char path[512];
@@ -65,18 +67,21 @@ po_logstore_t *po_logstore_open_cfg(const po_logstore_cfg *cfg) {
     int fd = open(path, O_CREAT | O_RDWR, 0664); // need read for pread()
     if (fd < 0) {
         LOG_ERROR("logstore: open(%s) failed", path);
+        PO_METRIC_COUNTER_INC("logstore.open.fail");
         return NULL;
     }
 
     db_env_t *env = NULL;
     if (db_env_open(cfg->dir, 8, cfg->map_size, &env) != 0) {
         LOG_ERROR("logstore: db_env_open failed");
+        PO_METRIC_COUNTER_INC("logstore.open.fail");
         close(fd);
         return NULL;
     }
     db_bucket_t *idx = NULL;
     if (db_bucket_open(env, cfg->bucket, &idx) != 0) {
         LOG_ERROR("logstore: db_bucket_open(%s) failed", cfg->bucket);
+        PO_METRIC_COUNTER_INC("logstore.open.fail");
         db_env_close(&env);
         close(fd);
         return NULL;
@@ -87,6 +92,7 @@ po_logstore_t *po_logstore_open_cfg(const po_logstore_cfg *cfg) {
         db_bucket_close(&idx);
         db_env_close(&env);
         close(fd);
+        PO_METRIC_COUNTER_INC("logstore.open.fail");
         return NULL;
     }
     ls->fd = fd;
@@ -96,16 +102,19 @@ po_logstore_t *po_logstore_open_cfg(const po_logstore_cfg *cfg) {
     ls->q = perf_ringbuf_create(cap);
     if (!ls->q) {
         po_logstore_close(&ls);
+        PO_METRIC_COUNTER_INC("logstore.open.fail");
         return NULL;
     }
     ls->b = perf_batcher_create(ls->q, cfg->batch_size ? cfg->batch_size : 32);
     if (!ls->b) {
         po_logstore_close(&ls);
+        PO_METRIC_COUNTER_INC("logstore.open.fail");
         return NULL;
     }
     ls->mem_idx = po_index_create(1024);
     if (!ls->mem_idx) {
         po_logstore_close(&ls);
+        PO_METRIC_COUNTER_INC("logstore.open.fail");
         return NULL;
     }
     pthread_rwlock_init(&ls->idx_lock, NULL);
@@ -152,6 +161,7 @@ po_logstore_t *po_logstore_open_cfg(const po_logstore_cfg *cfg) {
         if (pthread_create(&ls->workers[i], NULL, _ls_worker_main, ls) != 0) {
             ls->nworkers = i; // only join started
             po_logstore_close(&ls);
+            PO_METRIC_COUNTER_INC("logstore.open.fail");
             return NULL;
         }
     }
@@ -183,6 +193,7 @@ po_logstore_t *po_logstore_open(const char *dir, const char *bucket, size_t map_
 void po_logstore_close(po_logstore_t **pls) {
     if (!*pls)
         return;
+    PO_METRIC_COUNTER_INC("logstore.close.calls");
     po_logstore_t *ls = *pls;
     atomic_store(&ls->running, 0);
     // enqueue sentinel to wake worker if blocked on eventfd
@@ -235,6 +246,7 @@ void po_logstore_close(po_logstore_t **pls) {
     size_t leaks = atomic_load(&ls->outstanding_reqs);
     if (leaks != 0) {
         LOG_ERROR("logstore: %zu outstanding append requests at close (freed defensively)", leaks);
+        PO_METRIC_COUNTER_ADD("logstore.close.leaks", leaks);
     }
     free(ls);
     *pls = NULL;
@@ -244,6 +256,7 @@ int po_logstore_append(po_logstore_t *ls, const void *key, size_t keylen, const 
                        size_t vallen) {
     if (!ls || !key ||
         _ls_validate_lengths(keylen, vallen, ls->max_key_bytes, ls->max_value_bytes) != 0) {
+        PO_METRIC_COUNTER_INC("logstore.append.invalid");
         return -1;
     }
     // Single allocation: [append_req_t][key bytes][val bytes]
@@ -269,11 +282,14 @@ int po_logstore_append(po_logstore_t *ls, const void *key, size_t keylen, const 
         if (ls->never_overwrite || attempt++ >= max_retries || !atomic_load(&ls->running)) {
             atomic_fetch_sub(&ls->outstanding_reqs, 1);
             free(r); // single allocation
+            PO_METRIC_COUNTER_INC("logstore.append.enqueue_fail");
             return -1;
         }
         struct timespec ts = {.tv_sec = 0, .tv_nsec = sleep_ns};
         nanosleep(&ts, NULL);
     }
+    PO_METRIC_COUNTER_INC("logstore.append.ok");
+    PO_METRIC_COUNTER_ADD("logstore.append.bytes", (uint64_t)(keylen + vallen));
     return 0;
 }
 
@@ -306,6 +322,7 @@ int po_logstore_get(po_logstore_t *ls, const void *key, size_t keylen, void **ou
         (void)po_index_put(ls->mem_idx, key, keylen, off, len);
         pthread_rwlock_unlock(&ls->idx_lock);
     }
+    PO_METRIC_COUNTER_INC("logstore.get.hit_mem");
     // read from file
     uint32_t hdr[2];
     if (pread(ls->fd, hdr, sizeof(hdr), (off_t)off) != (ssize_t)sizeof(hdr))
@@ -324,6 +341,8 @@ int po_logstore_get(po_logstore_t *ls, const void *key, size_t keylen, void **ou
     }
     *out_val = buf;
     *out_len = vl;
+    PO_METRIC_COUNTER_INC("logstore.get.ok");
+    PO_METRIC_COUNTER_ADD("logstore.get.bytes", (uint64_t)vl);
     return 0;
 }
 
