@@ -8,6 +8,7 @@
 #endif
 
 #include "net/framing.h"
+#include "metrics/metrics.h" // metrics
 
 #include <errno.h>
 #include <stdlib.h>
@@ -67,9 +68,12 @@ static int write_full(int fd, const void *buf, size_t len) {
 int framing_write_msg(int fd, const po_header_t *header_net, const uint8_t *payload,
                       uint32_t payload_len) {
     if (payload_len > g_max_payload) {
+        PO_METRIC_COUNTER_INC("framing.write.emsgsize");
         errno = EMSGSIZE;
         return -1;
     }
+    PO_METRIC_COUNTER_INC("framing.write.msg");
+    PO_METRIC_COUNTER_ADD("framing.write.msg.bytes", (uint64_t)payload_len);
 
     uint32_t total = (uint32_t)sizeof(po_header_t) + payload_len;
     uint32_t len_be = htonl(total);
@@ -95,7 +99,7 @@ int framing_write_msg(int fd, const po_header_t *header_net, const uint8_t *payl
     if (n < 0) {
         if (errno == EINTR)
             return framing_write_msg(fd, header_net, payload, payload_len);
-
+        PO_METRIC_COUNTER_INC("framing.write.msg.fail");
         return -1;
     }
 
@@ -136,9 +140,12 @@ int framing_write_zcp(int fd, const po_header_t *header_net, const zcp_buffer_t 
     uint32_t payload_len = ntohl(header_net->payload_len);
 
     if (payload_len > g_max_payload) {
+        PO_METRIC_COUNTER_INC("framing.write_zcp.emsgsize");
         errno = EMSGSIZE;
         return -1;
     }
+    PO_METRIC_COUNTER_INC("framing.write_zcp");
+    PO_METRIC_COUNTER_ADD("framing.write_zcp.bytes", (uint64_t)payload_len);
 
     uint32_t total = (uint32_t)sizeof(po_header_t) + payload_len;
     uint32_t len_be = htonl(total);
@@ -163,7 +170,7 @@ int framing_write_zcp(int fd, const po_header_t *header_net, const zcp_buffer_t 
     if (n < 0) {
         if (errno == EINTR)
             return framing_write_zcp(fd, header_net, payload_buf);
-
+        PO_METRIC_COUNTER_INC("framing.write_zcp.fail");
         return -1;
     }
 
@@ -225,8 +232,10 @@ int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
     // 1) read 4-byte length prefix
     uint32_t len_be = 0;
     int rc = read_full(fd, &len_be, sizeof(len_be));
-    if (rc != 0)
-        return rc; // -1 error, -2 EOF
+    if (rc != 0) {
+        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read.len.fail");
+        return rc;
+    }
 
     uint32_t total = ntohl(len_be);
     if (total < sizeof(po_header_t)) {
@@ -237,8 +246,10 @@ int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
     // 2) read header
     po_header_t net_hdr;
     rc = read_full(fd, &net_hdr, sizeof(net_hdr));
-    if (rc != 0)
+    if (rc != 0) {
+        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read.hdr.fail");
         return rc;
+    }
 
     // convert to host for validation and return
     *header_out = net_hdr;
@@ -250,6 +261,7 @@ int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
 
     uint32_t payload_len = total - (uint32_t)sizeof(po_header_t);
     if (payload_len > g_max_payload) {
+        PO_METRIC_COUNTER_INC("framing.read.emsgsize");
         errno = EMSGSIZE;
         return -1;
     }
@@ -258,6 +270,7 @@ int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
     // translation unit, so we read and discard payload for now and return NULL.
     if (payload_len == 0) {
         *payload_out = NULL;
+        PO_METRIC_COUNTER_INC("framing.read.msg");
         return 0;
     }
 
@@ -269,9 +282,12 @@ int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
 
     rc = read_full(fd, tmp, payload_len);
     free(tmp);
-    if (rc != 0)
+    if (rc != 0) {
+        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read.payload.fail");
         return rc;
-
+    }
+    PO_METRIC_COUNTER_INC("framing.read.msg");
+    PO_METRIC_COUNTER_ADD("framing.read.msg.bytes", (uint64_t)payload_len);
     *payload_out = NULL;
     return 0;
 }
@@ -280,8 +296,10 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
                           uint32_t payload_buf_size, uint32_t *payload_len_out) {
     uint32_t len_be = 0;
     int rc = read_full(fd, &len_be, sizeof(len_be));
-    if (rc != 0)
+    if (rc != 0) {
+        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_into.len.fail");
         return rc;
+    }
 
     uint32_t total = ntohl(len_be);
     if (total < sizeof(po_header_t)) {
@@ -291,8 +309,10 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
 
     po_header_t net_hdr;
     rc = read_full(fd, &net_hdr, sizeof(net_hdr));
-    if (rc != 0)
+    if (rc != 0) {
+        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_into.hdr.fail");
         return rc;
+    }
 
     *header_out = net_hdr;
     protocol_header_to_host(header_out);
@@ -303,27 +323,27 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
 
     uint32_t payload_len = total - (uint32_t)sizeof(po_header_t);
     if (payload_len > g_max_payload) {
+        PO_METRIC_COUNTER_INC("framing.read_into.emsgsize");
         errno = EMSGSIZE;
         return -1;
     }
-
     if (payload_len == 0) {
-        if (payload_len_out)
-            *payload_len_out = 0;
+        if (payload_len_out) *payload_len_out = 0;
+        PO_METRIC_COUNTER_INC("framing.read_into.msg");
         return 0;
     }
-
     if (!payload_buf || payload_buf_size < payload_len) {
+        PO_METRIC_COUNTER_INC("framing.read_into.emsgsize_buf");
         errno = EMSGSIZE;
         return -1;
     }
-
     rc = read_full(fd, payload_buf, payload_len);
-    if (rc != 0)
+    if (rc != 0) {
+        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_into.payload.fail");
         return rc;
-
-    if (payload_len_out)
-        *payload_len_out = payload_len;
-
+    }
+    if (payload_len_out) *payload_len_out = payload_len;
+    PO_METRIC_COUNTER_INC("framing.read_into.msg");
+    PO_METRIC_COUNTER_ADD("framing.read_into.msg.bytes", (uint64_t)payload_len);
     return 0;
 }
