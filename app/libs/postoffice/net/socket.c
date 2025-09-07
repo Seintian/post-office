@@ -8,6 +8,7 @@
 #endif
 
 #include "net/socket.h"
+#include "metrics/metrics.h"
 
 #include <errno.h>
 #include <netinet/tcp.h>
@@ -282,4 +283,105 @@ void socket_close(int fd) {
     if (fd >= 0)
         while (close(fd) == -1 && errno == EINTR)
             ; // retry
+}
+
+int po_socket_create(int domain, int type, int protocol) {
+    int fd = socket(domain, type, protocol);
+    if (fd < 0) {
+        PO_METRIC_COUNTER_INC("socket.create.fail");
+        return -1;
+    }
+    PO_METRIC_COUNTER_INC("socket.create");
+    return fd;
+}
+
+int po_socket_bind(int fd, const struct sockaddr *addr, socklen_t addrlen) {
+    int rc = bind(fd, addr, addrlen);
+    if (rc < 0) {
+        PO_METRIC_COUNTER_INC("socket.bind.fail");
+        return -1;
+    }
+    PO_METRIC_COUNTER_INC("socket.bind");
+    return 0;
+}
+
+int po_socket_listen(int fd, int backlog) {
+    int rc = listen(fd, backlog);
+    if (rc < 0) {
+        PO_METRIC_COUNTER_INC("socket.listen.fail");
+        return -1;
+    }
+    PO_METRIC_COUNTER_INC("socket.listen");
+    return 0;
+}
+
+int po_socket_connect(int fd, const struct sockaddr *addr, socklen_t addrlen) {
+    int rc = connect(fd, addr, addrlen);
+    if (rc < 0) {
+        if (errno == EINPROGRESS) {
+            PO_METRIC_COUNTER_INC("socket.connect.inprogress");
+            return 0;
+        }
+        PO_METRIC_COUNTER_INC("socket.connect.fail");
+        return -1;
+    }
+    PO_METRIC_COUNTER_INC("socket.connect");
+    return 0;
+}
+
+int po_socket_accept(int fd, struct sockaddr *addr, socklen_t *addrlen) {
+    int cfd = accept(fd, addr, addrlen);
+    if (cfd < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            PO_METRIC_COUNTER_INC("socket.accept.again");
+            return -1;
+        }
+        PO_METRIC_COUNTER_INC("socket.accept.fail");
+        return -1;
+    }
+    PO_METRIC_COUNTER_INC("socket.accept");
+    return cfd;
+}
+
+ssize_t po_socket_send(int fd, const void *buf, size_t len, int flags) {
+    ssize_t n = send(fd, buf, len, flags);
+    if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            PO_METRIC_COUNTER_INC("socket.send.again");
+            return -1;
+        }
+        PO_METRIC_COUNTER_INC("socket.send.fail");
+        return -1;
+    }
+    PO_METRIC_COUNTER_INC("socket.send");
+    PO_METRIC_COUNTER_ADD("socket.send.bytes", (uint64_t)n);
+    return n;
+}
+
+ssize_t po_socket_recv(int fd, void *buf, size_t len, int flags) {
+    ssize_t n = recv(fd, buf, len, flags);
+    if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            PO_METRIC_COUNTER_INC("socket.recv.again");
+            return -1;
+        }
+        PO_METRIC_COUNTER_INC("socket.recv.fail");
+        return -1;
+    } else if (n == 0) {
+        PO_METRIC_COUNTER_INC("socket.recv.eof");
+        return 0;
+    }
+    PO_METRIC_COUNTER_INC("socket.recv");
+    PO_METRIC_COUNTER_ADD("socket.recv.bytes", (uint64_t)n);
+    return n;
+}
+
+int po_socket_close(int fd) {
+    int rc = close(fd);
+    if (rc < 0) {
+        PO_METRIC_COUNTER_INC("socket.close.fail");
+        return -1;
+    }
+    PO_METRIC_COUNTER_INC("socket.close");
+    return 0;
 }
