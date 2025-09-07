@@ -38,6 +38,7 @@ HASHTABLE_DIR          = $(POSTOFFICE_LIBS_DIR)/hashtable
 HASHSET_DIR            = $(POSTOFFICE_LIBS_DIR)/hashset
 NET_DIR                = $(POSTOFFICE_LIBS_DIR)/net
 PERF_DIR		   = $(POSTOFFICE_LIBS_DIR)/perf
+METRICS_DIR        = $(POSTOFFICE_LIBS_DIR)/metrics
 PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
 STORAGE_DIR		   = $(POSTOFFICE_LIBS_DIR)/storage
 UTILS_DIR		   = $(POSTOFFICE_LIBS_DIR)/utils
@@ -181,6 +182,7 @@ HASHTABLE_SRC   = $(wildcard $(HASHTABLE_DIR)/*.c)
 HASHSET_SRC     = $(wildcard $(HASHSET_DIR)/*.c)
 NET_SRC         = $(wildcard $(NET_DIR)/*.c)
 PERF_SRC        = $(wildcard $(PERF_DIR)/*.c)
+METRICS_SRC     = $(wildcard $(METRICS_DIR)/*.c)
 PRIME_SRC       = $(wildcard $(PRIME_DIR)/*.c)
 STORAGE_SRC     = $(wildcard $(STORAGE_DIR)/*.c)
 UTILS_SRC       = $(wildcard $(UTILS_DIR)/*.c)
@@ -212,6 +214,7 @@ HASHTABLE_OBJS      = $(patsubst $(HASHTABLE_DIR)/%.c,$(BUILD_DIR)/hashtable/%.o
 HASHSET_OBJS        = $(patsubst $(HASHSET_DIR)/%.c,$(BUILD_DIR)/hashset/%.o,$(HASHSET_SRC))
 NET_OBJS            = $(patsubst $(NET_DIR)/%.c,$(BUILD_DIR)/net/%.o,$(NET_SRC))
 PERF_OBJS           = $(patsubst $(PERF_DIR)/%.c,$(BUILD_DIR)/perf/%.o,$(PERF_SRC))
+METRICS_OBJS        = $(patsubst $(METRICS_DIR)/%.c,$(BUILD_DIR)/metrics/%.o,$(METRICS_SRC))
 PRIME_OBJS          = $(patsubst $(PRIME_DIR)/%.c,$(BUILD_DIR)/prime/%.o,$(PRIME_SRC))
 STORAGE_OBJS        = $(patsubst $(STORAGE_DIR)/%.c,$(BUILD_DIR)/storage/%.o,$(STORAGE_SRC))
 UTILS_OBJS          = $(patsubst $(UTILS_DIR)/%.c,$(BUILD_DIR)/utils/%.o,$(UTILS_SRC))
@@ -227,7 +230,7 @@ LIBFORT_OBJS        = $(patsubst $(LIBFORT_DIR)/%.c,$(BUILD_DIR)/libfort/%.o,$(L
 
 # Common library objects needed by most executables
 DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(HASHTABLE_OBJS) \
-                      $(PRIME_OBJS) $(LOG_C_OBJS) \
+                      $(PRIME_OBJS) $(LOG_C_OBJS) $(METRICS_OBJS) \
 					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
 					  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS) $(SYSINFO_OBJS)
 
@@ -479,6 +482,10 @@ $(NET_OBJS): $(BUILD_DIR)/net/%.o: $(NET_DIR)/%.c
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 $(PERF_OBJS): $(BUILD_DIR)/perf/%.o: $(PERF_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+$(METRICS_OBJS): $(BUILD_DIR)/metrics/%.o: $(METRICS_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
