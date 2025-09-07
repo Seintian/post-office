@@ -1,9 +1,13 @@
+// Ensure feature test macros for syscall and related POSIX/GNU extensions.
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
 
 #include "log/logger.h"
-#include "metrics/metrics.h" // added metrics instrumentation
+#include "metrics/metrics.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -38,6 +42,12 @@ typedef struct log_record {
     char msg[LOGGER_MSG_MAX]; // truncated fmt result
 } log_record_t;
 
+typedef struct custom_sink {
+    void (*fn)(const char *, void *);
+    void *ud;
+    struct custom_sink *next;
+} custom_sink_t;
+
 // Ring and worker state
 static po_perf_ringbuf_t *g_ring = NULL;    // queue of ready records
 static po_perf_ringbuf_t *g_free = NULL;    // freelist of available records
@@ -56,17 +66,21 @@ static _Atomic unsigned long g_batches = 0;
 static _Atomic unsigned long g_max_batch = 0; // high water mark
 static int g_syslog_open = 0;
 static char *g_syslog_ident = NULL;
-typedef struct custom_sink {
-    void (*fn)(const char *, void *);
-    void *ud;
-    struct custom_sink *next;
-} custom_sink_t;
 static custom_sink_t *g_custom_sinks = NULL;
 
 // Preallocated pool
 static log_record_t *g_pool = NULL;
 static size_t g_pool_n = 0;
 static log_record_t g_sentinel; // shutdown marker (never in freelist)
+
+static const char *const level_metrics[] = {
+    "logger.level.trace",
+    "logger.level.debug",
+    "logger.level.info",
+    "logger.level.warn",
+    "logger.level.error",
+    "logger.level.fatal"
+};
 
 // --- Helpers ---
 static inline uint64_t get_tid(void) {
@@ -81,24 +95,33 @@ static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
     static const char *lvlstr[] = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
     struct tm tm;
     char tsbuf[32];
+
     time_t secs = r->ts.tv_sec;
     localtime_r(&secs, &tm);
     strftime(tsbuf, sizeof(tsbuf), "%Y-%m-%d %H:%M:%S", &tm);
+
     long usec = r->ts.tv_nsec / 1000L; // microseconds
-    snprintf(out, outsz, "%s.%06ld %llu %-5s %s:%d %s() - %s\n", tsbuf, usec,
-             (unsigned long long)r->tid, lvlstr[r->level], r->file, r->line, r->func, r->msg);
+    snprintf(
+        out, outsz,
+        "%s.%06ld %lu %-5s %s:%d %s() - %s\n",
+        tsbuf, usec, r->tid, lvlstr[r->level], r->file, r->line, r->func, r->msg
+    );
 }
 
 static inline int syslog_priority_for_level(uint8_t lvl) {
     switch (lvl) {
     case LOG_FATAL:
         return LOG_CRIT;
+
     case LOG_ERROR:
         return LOG_ERR;
+
     case LOG_WARN:
         return LOG_WARNING;
+
     case LOG_INFO:
         return LOG_INFO;
+
     case LOG_DEBUG: // fallthrough
     case LOG_TRACE:
     default:
@@ -109,27 +132,37 @@ static inline int syslog_priority_for_level(uint8_t lvl) {
 static void write_record(const log_record_t *r) {
     char line[MAX_RECORD_SIZE];
     record_format_line(r, line, sizeof(line));
+
     if ((g_sinks_mask & LOGGER_SINK_CONSOLE)) {
         FILE *out = g_console_stderr ? stderr : stdout;
         fputs(line, out);
     }
+
     if ((g_sinks_mask & LOGGER_SINK_FILE) && g_fp)
         fputs(line, g_fp);
+
     if ((g_sinks_mask & LOGGER_SINK_SYSLOG) && g_syslog_open)
-        syslog(syslog_priority_for_level(r->level), "%s:%d %s() - %s", r->file, r->line, r->func,
-               r->msg);
+        syslog(
+            syslog_priority_for_level(r->level),
+            "%s:%d %s() - %s",
+            r->file, r->line, r->func, r->msg
+        );
+
     for (custom_sink_t *c = g_custom_sinks; c; c = c->next)
         c->fn(line, c->ud);
 }
 
 static void *worker_main(void *arg) {
     (void)arg;
+
     if (!g_batcher)
         return NULL;
+
     const size_t max_batch = 256;
     void **batch = calloc(max_batch, sizeof(void *));
     if (!batch)
         return NULL;
+
     while (atomic_load_explicit(&g_running, memory_order_relaxed)) {
         ssize_t n = perf_batcher_next(g_batcher, batch);
         if (n <= 0) {
@@ -137,62 +170,57 @@ static void *worker_main(void *arg) {
                 break;
             continue; // spurious wake
         }
-    PO_METRIC_COUNTER_INC("logger.batch.count");
-    PO_METRIC_COUNTER_ADD("logger.batch.records", (uint64_t)n);
+
+        PO_METRIC_COUNTER_INC("logger.batch.count");
+        PO_METRIC_COUNTER_ADD("logger.batch.records", n);
         atomic_fetch_add_explicit(&g_batches, 1, memory_order_relaxed);
         unsigned long prev = atomic_load_explicit(&g_max_batch, memory_order_relaxed);
         if ((unsigned long)n > prev)
             atomic_compare_exchange_strong(&g_max_batch, &prev, (unsigned long)n);
+
         for (ssize_t i = 0; i < n; ++i) {
             log_record_t *r = (log_record_t *)batch[i];
             if (r == &g_sentinel)
                 continue; // shutdown wake
+
             write_record(r);
             PO_METRIC_COUNTER_INC("logger.processed");
-            switch (r->level) { // per-level counters
-            case LOG_TRACE: PO_METRIC_COUNTER_INC("logger.level.trace"); break;
-            case LOG_DEBUG: PO_METRIC_COUNTER_INC("logger.level.debug"); break;
-            case LOG_INFO:  PO_METRIC_COUNTER_INC("logger.level.info"); break;
-            case LOG_WARN:  PO_METRIC_COUNTER_INC("logger.level.warn"); break;
-            case LOG_ERROR: PO_METRIC_COUNTER_INC("logger.level.error"); break;
-            case LOG_FATAL: PO_METRIC_COUNTER_INC("logger.level.fatal"); break;
-            default: break;
-            }
+
+            if (r->level <= LOG_FATAL)
+                PO_METRIC_COUNTER_INC(level_metrics[r->level]);
+
             atomic_fetch_add_explicit(&g_processed, 1, memory_order_relaxed);
             recycle_record(r);
         }
     }
+
     void *p; // Drain remaining
     while (perf_ringbuf_dequeue(g_ring, &p) == 0) {
         log_record_t *r = (log_record_t *)p;
         if (r != &g_sentinel) {
             write_record(r);
             PO_METRIC_COUNTER_INC("logger.processed");
-            switch (r->level) {
-            case LOG_TRACE: PO_METRIC_COUNTER_INC("logger.level.trace"); break;
-            case LOG_DEBUG: PO_METRIC_COUNTER_INC("logger.level.debug"); break;
-            case LOG_INFO:  PO_METRIC_COUNTER_INC("logger.level.info"); break;
-            case LOG_WARN:  PO_METRIC_COUNTER_INC("logger.level.warn"); break;
-            case LOG_ERROR: PO_METRIC_COUNTER_INC("logger.level.error"); break;
-            case LOG_FATAL: PO_METRIC_COUNTER_INC("logger.level.fatal"); break;
-            default: break;
-            }
+
+            if (r->level <= LOG_FATAL)
+                PO_METRIC_COUNTER_INC(level_metrics[r->level]);
+
             recycle_record(r);
         }
     }
+
     free(batch);
     return NULL;
 }
 
 // --- Public API ---
+
 int po_logger_init(const po_logger_config_t *cfg) {
-    // ...existing code...
-    int rc_ret = 0;
-    // original body retained below
-    if (!cfg || cfg->ring_capacity < 2 || (cfg->ring_capacity & (cfg->ring_capacity - 1))) {
+    if (cfg->ring_capacity < 2 || (cfg->ring_capacity & (cfg->ring_capacity - 1))) {
         errno = EINVAL;
         return -1;
     }
+
+    int rc_ret = 0;
 
     _logger_runtime_level = cfg->level;
     g_policy = cfg->policy;
@@ -201,17 +229,19 @@ int po_logger_init(const po_logger_config_t *cfg) {
     g_sinks_mask = 0u; // reset sinks and counters
     if (g_fp)
         fclose(g_fp);
+
     g_fp = NULL;
     atomic_store_explicit(&g_dropped_new, 0ul, memory_order_relaxed);
     atomic_store_explicit(&g_overwritten_old, 0ul, memory_order_relaxed);
 
-    perf_ringbuf_set_cacheline(64);
+    size_t cacheline = cfg->cacheline_bytes;
+    perf_ringbuf_set_cacheline(cacheline);
     g_ring = perf_ringbuf_create(cfg->ring_capacity);
     if (!g_ring)
         return -1;
 
     g_pool_n = cfg->ring_capacity;
-    g_pool = (log_record_t *)calloc(g_pool_n, sizeof(*g_pool));
+    g_pool = calloc(g_pool_n, sizeof(*g_pool));
     if (!g_pool) {
         perf_ringbuf_destroy(&g_ring);
         return -1;
@@ -255,6 +285,7 @@ int po_logger_init(const po_logger_config_t *cfg) {
     atomic_store_explicit(&g_running, 1, memory_order_relaxed);
     for (unsigned i = 0; i < g_nworkers; i++)
         pthread_create(&g_workers[i], NULL, worker_main, NULL);
+
     PO_METRIC_COUNTER_INC("logger.init");
     return rc_ret;
 }
@@ -262,8 +293,10 @@ int po_logger_init(const po_logger_config_t *cfg) {
 void po_logger_shutdown(void) {
     if (!g_ring)
         return;
+
     PO_METRIC_COUNTER_INC("logger.shutdown");
     atomic_store_explicit(&g_running, 0, memory_order_relaxed);
+
     for (unsigned i = 0; i < g_nworkers; i++) {
         if (g_batcher)
             perf_batcher_enqueue(g_batcher, &g_sentinel);
@@ -278,6 +311,7 @@ void po_logger_shutdown(void) {
     g_nworkers = 0;
     if (g_batcher)
         perf_batcher_destroy(&g_batcher);
+
     perf_ringbuf_destroy(&g_ring);
     perf_ringbuf_destroy(&g_free);
     free(g_pool);
@@ -297,12 +331,14 @@ void po_logger_shutdown(void) {
         free(g_syslog_ident);
         g_syslog_ident = NULL;
     }
+
     custom_sink_t *c = g_custom_sinks;
     while (c) {
         custom_sink_t *n = c->next;
         free(c);
         c = n;
     }
+
     g_custom_sinks = NULL;
 }
 
@@ -311,6 +347,7 @@ int po_logger_set_level(po_log_level_t level) {
         errno = EINVAL;
         return -1;
     }
+
     _logger_runtime_level = level;
     return 0;
 }
@@ -330,6 +367,7 @@ int po_logger_add_sink_file(const char *path, bool append) {
     FILE *fp = fopen(path, mode);
     if (!fp)
         return -1;
+
     g_fp = fp;
     g_sinks_mask |= LOGGER_SINK_FILE;
     return 0;
@@ -341,21 +379,24 @@ int po_logger_add_sink_syslog(const char *ident) {
             free(g_syslog_ident);
             g_syslog_ident = NULL;
         }
+
         if (ident && *ident)
             g_syslog_ident = strdup(ident);
+
         openlog(g_syslog_ident ? g_syslog_ident : "postoffice", LOG_PID | LOG_NDELAY, LOG_USER);
         g_syslog_open = 1;
     }
+
     g_sinks_mask |= LOGGER_SINK_SYSLOG;
     return 0;
 }
 
 int po_logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *udata) {
-    if (!fn)
-        return -1;
+
     custom_sink_t *c = (custom_sink_t *)malloc(sizeof(*c));
     if (!c)
         return -1;
+
     c->fn = fn;
     c->ud = udata;
     c->next = g_custom_sinks;
@@ -369,7 +410,8 @@ static void enqueue_record(log_record_t *rec) {
             PO_METRIC_COUNTER_INC("logger.enqueue");
             return;
         }
-    } else if (perf_ringbuf_enqueue(g_ring, rec) == 0) {
+    }
+    else if (perf_ringbuf_enqueue(g_ring, rec) == 0) {
         PO_METRIC_COUNTER_INC("logger.enqueue");
         return;
     }
@@ -388,20 +430,22 @@ static void enqueue_record(log_record_t *rec) {
         recycle_record((log_record_t *)old);
     }
     if (g_batcher) {
-        if (perf_batcher_enqueue(g_batcher, rec) == 0) {
+        if (perf_batcher_enqueue(g_batcher, rec) == 0)
             PO_METRIC_COUNTER_INC("logger.enqueue");
-        }
-    } else if (perf_ringbuf_enqueue(g_ring, rec) == 0) {
-        PO_METRIC_COUNTER_INC("logger.enqueue");
     }
+    else if (perf_ringbuf_enqueue(g_ring, rec) == 0)
+        PO_METRIC_COUNTER_INC("logger.enqueue");
 }
 
 static inline int should_emit_overflow_notice(unsigned long v) {
     return (v != 0ul) && ((v & (v - 1ul)) == 0ul);
 }
 
-static inline void fill_overflow_notice(log_record_t *rec, unsigned long dropped,
-                                        unsigned long overwritten) {
+static inline void fill_overflow_notice(
+    log_record_t *rec,
+    unsigned long dropped,
+    unsigned long overwritten
+) {
     clock_gettime(CLOCK_REALTIME, &rec->ts);
     rec->tid = get_tid();
     rec->level = (uint8_t)LOG_ERROR;
@@ -409,31 +453,45 @@ static inline void fill_overflow_notice(log_record_t *rec, unsigned long dropped
     rec->file[0] = '\0';
     strncpy(rec->func, "logger", sizeof(rec->func) - 1);
     rec->func[sizeof(rec->func) - 1] = '\0';
-    snprintf(rec->msg, sizeof(rec->msg),
-             "logger overflow: dropped_new=%lu overwritten_old=%lu (policy=%s)", dropped,
-             overwritten, g_policy == LOGGER_DROP_NEW ? "DROP_NEW" : "OVERWRITE_OLDEST");
+    snprintf(
+        rec->msg, sizeof(rec->msg),
+        "logger overflow: dropped_new=%lu overwritten_old=%lu (policy=%s)",
+        dropped, overwritten, g_policy == LOGGER_DROP_NEW ? "DROP_NEW" : "OVERWRITE_OLDEST"
+    );
 }
 
-void po_logger_logv(po_log_level_t level, const char *file, int line, const char *func,
-                    const char *fmt, va_list ap) {
+void po_logger_logv(
+    po_log_level_t level,
+    const char *file,
+    int line,
+    const char *func,
+    const char *fmt,
+    va_list ap
+) {
     if (!g_ring)
         return; // not initialized yet
 
     void *ptr = NULL; // obtain a record from freelist (non-blocking)
     if (perf_ringbuf_dequeue(g_free, &ptr) != 0) {
         PO_METRIC_COUNTER_INC("logger.no_free_record");
-        unsigned long dropped =
-            atomic_fetch_add_explicit(&g_dropped_new, 1, memory_order_relaxed) + 1ul;
+
+        unsigned long dropped = atomic_fetch_add_explicit(
+            &g_dropped_new, 1, memory_order_relaxed
+        ) + 1ul;
         if (should_emit_overflow_notice(dropped)) {
             PO_METRIC_COUNTER_INC("logger.overflow.notice");
+
             log_record_t w2;
-            unsigned long overwritten =
-                atomic_load_explicit(&g_overwritten_old, memory_order_relaxed);
+            unsigned long overwritten = atomic_load_explicit(
+                &g_overwritten_old, memory_order_relaxed
+            );
             fill_overflow_notice(&w2, dropped, overwritten);
             write_record(&w2);
         }
+
         return;
     }
+
     log_record_t *r = (log_record_t *)ptr;
 
     clock_gettime(CLOCK_REALTIME, &r->ts);
@@ -446,7 +504,8 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
         memcpy(r->file, file + (n >= sizeof(r->file) ? n - (sizeof(r->file) - 1) : 0),
                n >= sizeof(r->file) ? sizeof(r->file) - 1 : n);
         r->file[sizeof(r->file) - 1] = '\0';
-    } else
+    }
+    else
         r->file[0] = '\0';
 
     if (func) {
@@ -466,6 +525,7 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
     unsigned long overwritten = atomic_load_explicit(&g_overwritten_old, memory_order_relaxed);
     if (should_emit_overflow_notice(dropped) || should_emit_overflow_notice(overwritten)) {
         PO_METRIC_COUNTER_INC("logger.overflow.notice");
+
         void *p2 = NULL;
         if (perf_ringbuf_dequeue(g_free, &p2) == 0) {
             log_record_t *w = (log_record_t *)p2;
@@ -474,7 +534,8 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
                 write_record(w);
                 recycle_record(w);
             }
-        } else {
+        }
+        else {
             log_record_t w2;
             fill_overflow_notice(&w2, dropped, overwritten);
             write_record(&w2);
@@ -482,11 +543,18 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
     }
 }
 
-void po_logger_log(po_log_level_t level, const char *file, int line, const char *func,
-                   const char *fmt, ...) {
+void po_logger_log(
+    po_log_level_t level,
+    const char *file,
+    int line,
+    const char *func,
+    const char *fmt,
+    ...
+) {
     if ((level < (po_log_level_t)LOGGER_COMPILE_LEVEL) ||
         (level < (po_log_level_t)_logger_runtime_level))
         return;
+
     va_list ap;
     va_start(ap, fmt);
     po_logger_logv(level, file, line, func, fmt, ap);
