@@ -116,7 +116,7 @@ else
 endif
 
 # Linker flags
-LDFLAGS = -lrt -lpthread -flto=auto -Wl,--gc-sections \
+LDFLAGS = -ldl -lrt -lpthread -flto=auto -Wl,--gc-sections \
 -fPIE -pie -Wl,-z,relro,-z,now -rdynamic
 PROFILER = # strace -e trace=all -o strace.log
 
