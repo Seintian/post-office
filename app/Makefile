@@ -74,7 +74,11 @@ LIBS_I     = -I$(POSTOFFICE_LIBS_DIR) -I$(THIRDPARTY_LIBS_DIR)
 CORE_I     = -I$(CORE_SRC_DIR)/main -I$(CORE_SRC_DIR)/simulation
 SRC_I      = -I$(SRC_DIR)
 
-ALL_I      = $(INCLUDES_I) $(LIBS_I) $(CORE_I) $(SRC_I)
+TUI_DIR            = $(SRC_DIR)/tui
+APP_MAIN_TUI_DIR   = $(CORE_SRC_DIR)/main/tui
+TUI_I              = -I$(TUI_DIR)
+APP_MAIN_TUI_I     = -I$(APP_MAIN_TUI_DIR)
+ALL_I              = $(INCLUDES_I) $(LIBS_I) $(CORE_I) $(SRC_I) $(TUI_I) $(APP_MAIN_TUI_I)
 
 #! set to `true` to enable debug flags
 DEV = true
@@ -198,6 +202,10 @@ UNITY_SRC       = $(wildcard $(UNITY_DIR)/*.c)
 
 # Source Files for each process
 MAIN_APP_SRC          = $(shell find $(MAIN_DIR) -name '*.c')
+TUI_SRC_UNNORMALIZED  = $(shell find $(TUI_DIR) -name '*.c')
+APP_MAIN_TUI_SRC_UNNORMALIZED = $(shell find $(APP_MAIN_TUI_DIR) -name '*.c')
+TUI_SRC               = $(patsubst ./%,%,$(TUI_SRC_UNNORMALIZED))
+APP_MAIN_TUI_SRC      = $(patsubst ./%,%,$(APP_MAIN_TUI_SRC_UNNORMALIZED))
 DIRECTOR_APP_SRC      = $(shell find $(DIRECTOR_DIR) -name '*.c')
 TICKET_ISSUER_APP_SRC = $(shell find $(TICKET_ISSUER_DIR) -name '*.c')
 USERS_MANAGER_APP_SRC = $(shell find $(USERS_MANAGER_DIR) -name '*.c')
@@ -243,6 +251,8 @@ DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(HASHTABLE_OBJS) \
 
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
+TUI_OBJS              = $(patsubst $(TUI_DIR)/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SRC))
+APP_MAIN_TUI_OBJS     = $(patsubst $(APP_MAIN_TUI_DIR)/%.c,$(BUILD_DIR)/app_tui/%.o,$(APP_MAIN_TUI_SRC))
 DIRECTOR_APP_OBJS 		= $(patsubst $(DIRECTOR_DIR)/%.c,$(BUILD_DIR)/director/%.o,$(DIRECTOR_APP_SRC))
 TICKET_ISSUER_APP_OBJS 	= $(patsubst $(TICKET_ISSUER_DIR)/%.c,$(BUILD_DIR)/ticket_issuer/%.o,$(TICKET_ISSUER_APP_SRC))
 USERS_MANAGER_APP_OBJS 	= $(patsubst $(USERS_MANAGER_DIR)/%.c,$(BUILD_DIR)/users_manager/%.o,$(USERS_MANAGER_APP_SRC))
@@ -251,7 +261,7 @@ USER_APP_OBJS 			= $(patsubst $(USER_DIR)/%.c,$(BUILD_DIR)/user/%.o,$(USER_APP_S
 TEST_OBJS      		    = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_SRC))
 
 # Full dependency list for each final executable
-MAIN_OBJS           = $(MAIN_APP_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
+MAIN_OBJS           = $(MAIN_APP_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
 DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 USERS_MANAGER_OBJS 	= $(USERS_MANAGER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
@@ -515,6 +525,25 @@ $(LOG_OBJS): $(BUILD_DIR)/log/%.o: $(LOG_DIR)/%.c
 $(SYSINFO_OBJS): $(BUILD_DIR)/sysinfo/%.o: $(SYSINFO_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+# --- Recursive Source (TUI) Explicit Rules ---
+# Pattern rules with % cannot match slashes; generate one rule per source to support nested dirs.
+
+define GEN_TUI_RULE
+$1: $2
+	@mkdir -p $$(dir $$@)
+	$$(CC) -MMD -MP $$(CFLAGS) $$(ALL_I) -c $2 -o $1
+endef
+
+$(foreach pair,$(join $(addsuffix ::,$(TUI_OBJS)),$(TUI_SRC)),$(eval $(call GEN_TUI_RULE,$(word 1,$(subst ::, ,$(pair))),$(word 2,$(subst ::, ,$(pair))))))
+
+define GEN_APP_TUI_RULE
+$1: $2
+	@mkdir -p $$(dir $$@)
+	$$(CC) -MMD -MP $$(CFLAGS) $$(ALL_I) -c $2 -o $1
+endef
+
+$(foreach pair,$(join $(addsuffix ::,$(APP_MAIN_TUI_OBJS)),$(APP_MAIN_TUI_SRC)),$(eval $(call GEN_APP_TUI_RULE,$(word 1,$(subst ::, ,$(pair))),$(word 2,$(subst ::, ,$(pair))))))
 
 # Rule for all test files
 $(TEST_OBJS): $(BUILD_DIR)/tests/%.o: $(TESTS_DIR)/%.c
