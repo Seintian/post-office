@@ -201,12 +201,19 @@ LOG_C_SRC       = $(wildcard $(LOG_C_DIR)/*.c)
 UNITY_SRC       = $(wildcard $(UNITY_DIR)/*.c)
 
 # Source Files for each process
-MAIN_APP_SRC          = $(shell find $(MAIN_DIR) -name '*.c')
+## NOTE:
+# Use non-recursive collection for MAIN and DIRECTOR to avoid feeding nested
+# paths to static pattern rules (which only allow a single-directory stem).
+# Nested trees (main/tui, director/ctrl_bridge) are handled separately below.
+MAIN_APP_SRC          = $(wildcard $(MAIN_DIR)/*.c)
 TUI_SRC_UNNORMALIZED  = $(shell find $(TUI_DIR) -name '*.c')
 APP_MAIN_TUI_SRC_UNNORMALIZED = $(shell find $(APP_MAIN_TUI_DIR) -name '*.c')
 TUI_SRC               = $(patsubst ./%,%,$(TUI_SRC_UNNORMALIZED))
 APP_MAIN_TUI_SRC      = $(patsubst ./%,%,$(APP_MAIN_TUI_SRC_UNNORMALIZED))
-DIRECTOR_APP_SRC      = $(shell find $(DIRECTOR_DIR) -name '*.c')
+DIRECTOR_APP_SRC      = $(wildcard $(DIRECTOR_DIR)/*.c)
+# Director control bridge (nested) sources (kept separate to preserve directory layout)
+DIRECTOR_BRIDGE_DIR   = $(DIRECTOR_DIR)/ctrl_bridge
+DIRECTOR_BRIDGE_SRC   = $(wildcard $(DIRECTOR_BRIDGE_DIR)/*.c)
 TICKET_ISSUER_APP_SRC = $(shell find $(TICKET_ISSUER_DIR) -name '*.c')
 USERS_MANAGER_APP_SRC = $(shell find $(USERS_MANAGER_DIR) -name '*.c')
 WORKER_APP_SRC        = $(shell find $(WORKER_DIR) -name '*.c')
@@ -254,6 +261,7 @@ MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_S
 TUI_OBJS              = $(patsubst $(TUI_DIR)/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SRC))
 APP_MAIN_TUI_OBJS     = $(patsubst $(APP_MAIN_TUI_DIR)/%.c,$(BUILD_DIR)/app_tui/%.o,$(APP_MAIN_TUI_SRC))
 DIRECTOR_APP_OBJS 		= $(patsubst $(DIRECTOR_DIR)/%.c,$(BUILD_DIR)/director/%.o,$(DIRECTOR_APP_SRC))
+DIRECTOR_BRIDGE_OBJS     = $(patsubst $(DIRECTOR_BRIDGE_DIR)/%.c,$(BUILD_DIR)/director/ctrl_bridge/%.o,$(DIRECTOR_BRIDGE_SRC))
 TICKET_ISSUER_APP_OBJS 	= $(patsubst $(TICKET_ISSUER_DIR)/%.c,$(BUILD_DIR)/ticket_issuer/%.o,$(TICKET_ISSUER_APP_SRC))
 USERS_MANAGER_APP_OBJS 	= $(patsubst $(USERS_MANAGER_DIR)/%.c,$(BUILD_DIR)/users_manager/%.o,$(USERS_MANAGER_APP_SRC))
 WORKER_APP_OBJS 		= $(patsubst $(WORKER_DIR)/%.c,$(BUILD_DIR)/worker/%.o,$(WORKER_APP_SRC))
@@ -262,7 +270,7 @@ TEST_OBJS      		    = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST
 
 # Full dependency list for each final executable
 MAIN_OBJS           = $(MAIN_APP_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
-DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
+DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 USERS_MANAGER_OBJS 	= $(USERS_MANAGER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 WORKER_OBJS 		= $(WORKER_APP_OBJS) $(DEFAULTS_OBJS)
@@ -544,6 +552,15 @@ $1: $2
 endef
 
 $(foreach pair,$(join $(addsuffix ::,$(APP_MAIN_TUI_OBJS)),$(APP_MAIN_TUI_SRC)),$(eval $(call GEN_APP_TUI_RULE,$(word 1,$(subst ::, ,$(pair))),$(word 2,$(subst ::, ,$(pair))))))
+
+# Explicit rules for director bridge nested sources
+define GEN_DIRECTOR_BRIDGE_RULE
+$1: $2
+	@mkdir -p $$(dir $$@)
+	$$(CC) -MMD -MP $$(CFLAGS) $$(ALL_I) -c $2 -o $1
+endef
+
+$(foreach pair,$(join $(addsuffix ::,$(DIRECTOR_BRIDGE_OBJS)),$(DIRECTOR_BRIDGE_SRC)),$(eval $(call GEN_DIRECTOR_BRIDGE_RULE,$(word 1,$(subst ::, ,$(pair))),$(word 2,$(subst ::, ,$(pair))))))
 
 # Rule for all test files
 $(TEST_OBJS): $(BUILD_DIR)/tests/%.o: $(TESTS_DIR)/%.c
