@@ -471,135 +471,122 @@ $(TEST_MAIN_EXEC): $(TEST_MAIN_OBJS) | $(BIN_DIR)
 # This is the robust way to compile object files. Each rule is explicitly
 # tied to the list of objects it's responsible for building.
 
-# Rule for main application executable
-$(MAIN_APP_OBJS): $(BUILD_DIR)/main/%.o: $(MAIN_DIR)/%.c
+# Rule for main application objects
+$(BUILD_DIR)/main/%.o: $(MAIN_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-# Rule for director application executable
-$(DIRECTOR_APP_OBJS): $(BUILD_DIR)/director/%.o: $(DIRECTOR_DIR)/%.c
+# Rule for director application objects
+$(BUILD_DIR)/director/%.o: $(DIRECTOR_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-# Rule for ticket_issuer application executable
-$(TICKET_ISSUER_APP_OBJS): $(BUILD_DIR)/ticket_issuer/%.o: $(TICKET_ISSUER_DIR)/%.c
+# Rule for ticket_issuer application objects
+$(BUILD_DIR)/ticket_issuer/%.o: $(TICKET_ISSUER_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-# Rule for users_manager application executable
-$(USERS_MANAGER_APP_OBJS): $(BUILD_DIR)/users_manager/%.o: $(USERS_MANAGER_DIR)/%.c
+# Rule for users_manager application objects
+$(BUILD_DIR)/users_manager/%.o: $(USERS_MANAGER_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-# Rule for worker application executable
-$(WORKER_APP_OBJS): $(BUILD_DIR)/worker/%.o: $(WORKER_DIR)/%.c
+# Rule for worker application objects
+$(BUILD_DIR)/worker/%.o: $(WORKER_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-# Rule for user application executable
-$(USER_APP_OBJS): $(BUILD_DIR)/user/%.o: $(USER_DIR)/%.c
+# Rule for user application objects
+$(BUILD_DIR)/user/%.o: $(USER_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+# Rule for shared TUI library objects
+$(BUILD_DIR)/tui/%.o: $(TUI_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+# Rule for app main TUI objects
+$(BUILD_DIR)/app_tui/%.o: $(APP_MAIN_TUI_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+# Rule for director control bridge objects
+$(BUILD_DIR)/director/ctrl_bridge/%.o: $(DIRECTOR_BRIDGE_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 # Rule for our internal libraries
-$(HASHTABLE_OBJS): $(BUILD_DIR)/hashtable/%.o: $(HASHTABLE_DIR)/%.c
+$(BUILD_DIR)/hashtable/%.o: $(HASHTABLE_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(HASHSET_OBJS): $(BUILD_DIR)/hashset/%.o: $(HASHSET_DIR)/%.c
+$(BUILD_DIR)/hashset/%.o: $(HASHSET_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(NET_OBJS): $(BUILD_DIR)/net/%.o: $(NET_DIR)/%.c
+$(BUILD_DIR)/net/%.o: $(NET_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(PERF_OBJS): $(BUILD_DIR)/perf/%.o: $(PERF_DIR)/%.c
+$(BUILD_DIR)/perf/%.o: $(PERF_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(METRICS_OBJS): $(BUILD_DIR)/metrics/%.o: $(METRICS_DIR)/%.c
+$(BUILD_DIR)/metrics/%.o: $(METRICS_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(PRIME_OBJS): $(BUILD_DIR)/prime/%.o: $(PRIME_DIR)/%.c
+$(BUILD_DIR)/prime/%.o: $(PRIME_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(STORAGE_OBJS): $(BUILD_DIR)/storage/%.o: $(STORAGE_DIR)/%.c
+$(BUILD_DIR)/storage/%.o: $(STORAGE_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(UTILS_OBJS): $(BUILD_DIR)/utils/%.o: $(UTILS_DIR)/%.c
+$(BUILD_DIR)/utils/%.o: $(UTILS_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(LOG_OBJS): $(BUILD_DIR)/log/%.o: $(LOG_DIR)/%.c
+$(BUILD_DIR)/log/%.o: $(LOG_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(SYSINFO_OBJS): $(BUILD_DIR)/sysinfo/%.o: $(SYSINFO_DIR)/%.c
+$(BUILD_DIR)/sysinfo/%.o: $(SYSINFO_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
-
-# --- Recursive Source (TUI) Explicit Rules ---
-# Pattern rules with % cannot match slashes; generate one rule per source to support nested dirs.
-
-define GEN_TUI_RULE
-$1: $2
-	@mkdir -p $$(dir $$@)
-	$$(CC) -MMD -MP $$(CFLAGS) $$(ALL_I) -c $2 -o $1
-endef
-
-$(foreach pair,$(join $(addsuffix ::,$(TUI_OBJS)),$(TUI_SRC)),$(eval $(call GEN_TUI_RULE,$(word 1,$(subst ::, ,$(pair))),$(word 2,$(subst ::, ,$(pair))))))
-
-define GEN_APP_TUI_RULE
-$1: $2
-	@mkdir -p $$(dir $$@)
-	$$(CC) -MMD -MP $$(CFLAGS) $$(ALL_I) -c $2 -o $1
-endef
-
-$(foreach pair,$(join $(addsuffix ::,$(APP_MAIN_TUI_OBJS)),$(APP_MAIN_TUI_SRC)),$(eval $(call GEN_APP_TUI_RULE,$(word 1,$(subst ::, ,$(pair))),$(word 2,$(subst ::, ,$(pair))))))
-
-# Explicit rules for director bridge nested sources
-define GEN_DIRECTOR_BRIDGE_RULE
-$1: $2
-	@mkdir -p $$(dir $$@)
-	$$(CC) -MMD -MP $$(CFLAGS) $$(ALL_I) -c $2 -o $1
-endef
-
-$(foreach pair,$(join $(addsuffix ::,$(DIRECTOR_BRIDGE_OBJS)),$(DIRECTOR_BRIDGE_SRC)),$(eval $(call GEN_DIRECTOR_BRIDGE_RULE,$(word 1,$(subst ::, ,$(pair))),$(word 2,$(subst ::, ,$(pair))))))
 
 # Rule for all test files
-$(TEST_OBJS): $(BUILD_DIR)/tests/%.o: $(TESTS_DIR)/%.c
+$(BUILD_DIR)/tests/%.o: $(TESTS_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@ -DUNITY_FIXTURE_NO_EXTRAS
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -DUNITY_FIXTURE_NO_EXTRAS -c $< -o $@
 
 # Rules for third-party libraries
-$(INIH_OBJS): $(BUILD_DIR)/inih/%.o: $(INIH_DIR)/%.c
+$(BUILD_DIR)/inih/%.o: $(INIH_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@ -DINI_ALLOW_NO_VALUE -DINI_STOP_ON_FIRST_ERROR -DINI_ALLOW_MULTILINE -DINI_ALLOW_REALLOC -DINI_USE_STACK=0 -DINI_MAX_LINE=1024
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -DINI_ALLOW_NO_VALUE -DINI_STOP_ON_FIRST_ERROR -DINI_ALLOW_MULTILINE -DINI_ALLOW_REALLOC -DINI_USE_STACK=0 -DINI_MAX_LINE=1024 -c $< -o $@
 
-$(LIBFORT_OBJS): $(BUILD_DIR)/libfort/%.o: $(LIBFORT_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(THIRDPARTY_CFLAGS) $(ALL_I) -c $< -o $@
-
-$(LMDB_OBJS): $(BUILD_DIR)/lmdb/%.o: $(LMDB_DIR)/%.c
+$(BUILD_DIR)/libfort/%.o: $(LIBFORT_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(THIRDPARTY_CFLAGS) $(ALL_I) -c $< -o $@
 
-$(LOG_C_OBJS): $(BUILD_DIR)/log_c/%.o: $(LOG_C_DIR)/%.c
+$(BUILD_DIR)/lmdb/%.o: $(LMDB_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@ -DLOG_USE_COLOR
+	$(CC) -MMD -MP $(THIRDPARTY_CFLAGS) $(ALL_I) -c $< -o $@
 
-$(UNITY_OBJS): $(BUILD_DIR)/unity/%.o: $(UNITY_DIR)/%.c
+$(BUILD_DIR)/log_c/%.o: $(LOG_C_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -DLOG_USE_COLOR -c $< -o $@
+
+$(BUILD_DIR)/unity/%.o: $(UNITY_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 # --- End of Static Pattern Rules ---
 
 # Include dependencies generated by -MMD
--include $(shell find $(BUILD_DIR) -name '*.d')
+-include $(shell find $(BUILD_DIR) -name '*.d' 2>/dev/null)
 
 # Create directories if not exist
 $(BIN_DIR):
