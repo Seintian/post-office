@@ -266,7 +266,8 @@ TICKET_ISSUER_APP_OBJS 	= $(patsubst $(TICKET_ISSUER_DIR)/%.c,$(BUILD_DIR)/ticke
 USERS_MANAGER_APP_OBJS 	= $(patsubst $(USERS_MANAGER_DIR)/%.c,$(BUILD_DIR)/users_manager/%.o,$(USERS_MANAGER_APP_SRC))
 WORKER_APP_OBJS 		= $(patsubst $(WORKER_DIR)/%.c,$(BUILD_DIR)/worker/%.o,$(WORKER_APP_SRC))
 USER_APP_OBJS 			= $(patsubst $(USER_DIR)/%.c,$(BUILD_DIR)/user/%.o,$(USER_APP_SRC))
-TEST_OBJS      		    = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_SRC))
+TEST_ONLY_SRCS         = $(shell find $(TESTS_DIR) -name '*.c')
+TEST_OBJS              = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_ONLY_SRCS))
 
 # Full dependency list for each final executable
 MAIN_OBJS           = $(MAIN_APP_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
@@ -275,7 +276,14 @@ TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 USERS_MANAGER_OBJS 	= $(USERS_MANAGER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 WORKER_OBJS 		= $(WORKER_APP_OBJS) $(DEFAULTS_OBJS)
 USER_OBJS 			= $(USER_APP_OBJS) $(DEFAULTS_OBJS)
-TEST_MAIN_OBJS 		= $(TEST_OBJS) $(DEFAULTS_OBJS) $(UNITY_OBJS)
+# Application objects (except entrypoints) to link into tests
+APP_ALL_OBJS       = $(MAIN_APP_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) \
+                     $(TICKET_ISSUER_APP_OBJS) $(USERS_MANAGER_APP_OBJS) $(WORKER_APP_OBJS) $(USER_APP_OBJS)
+APP_ENTRYPOINT_OBJS = $(BUILD_DIR)/main/main.o $(BUILD_DIR)/director/director.o $(BUILD_DIR)/ticket_issuer/ticket_issuer.o \
+                      $(BUILD_DIR)/users_manager/users_manager.o $(BUILD_DIR)/worker/worker.o $(BUILD_DIR)/user/user.o
+APP_COMMON_OBJS    = $(filter-out $(APP_ENTRYPOINT_OBJS),$(APP_ALL_OBJS))
+
+TEST_MAIN_OBJS 		= $(TEST_OBJS) $(APP_COMMON_OBJS) $(DEFAULTS_OBJS) $(UNITY_OBJS)
 
 # *** Targets *** #
 
