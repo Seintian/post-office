@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "unity/unity_fixture.h"
-#include "utils/random.h"
+#include "random/random.h"
 
 TEST_GROUP(RANDOM);
 

@@ -149,7 +149,7 @@ TEST(APP, MAIN_LOOP_END_TO_END) {
 // Additional integration: exercise metrics facade, random, hashset/hashtable, argv, sysinfo,
 // storage high-level API and logger sink attachment.
 #include "metrics/metrics.h"
-#include "utils/random.h"
+#include "random/random.h"
 #include "utils/argv.h"
 #include "utils/files.h"
 #include "utils/errors.h"

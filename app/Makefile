@@ -42,6 +42,8 @@ METRICS_DIR            = $(POSTOFFICE_LIBS_DIR)/metrics
 PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
 STORAGE_DIR            = $(POSTOFFICE_LIBS_DIR)/storage
 UTILS_DIR              = $(POSTOFFICE_LIBS_DIR)/utils
+RANDOM_DIR             = $(POSTOFFICE_LIBS_DIR)/random
+TUI_LIB_DIR            = $(POSTOFFICE_LIBS_DIR)/tui
 LOG_DIR                = $(POSTOFFICE_LIBS_DIR)/log
 SYSINFO_DIR            = $(POSTOFFICE_LIBS_DIR)/sysinfo
 
@@ -74,7 +76,7 @@ LIBS_I     = -I$(POSTOFFICE_LIBS_DIR) -I$(THIRDPARTY_LIBS_DIR)
 CORE_I     = -I$(CORE_SRC_DIR)/main -I$(CORE_SRC_DIR)/simulation
 SRC_I      = -I$(SRC_DIR)
 
-TUI_DIR            = $(SRC_DIR)/tui
+TUI_DIR            = $(TUI_LIB_DIR)
 APP_MAIN_TUI_DIR   = $(CORE_SRC_DIR)/main/tui
 TUI_I              = -I$(TUI_DIR)
 APP_MAIN_TUI_I     = -I$(APP_MAIN_TUI_DIR)
@@ -190,6 +192,7 @@ METRICS_SRC     = $(wildcard $(METRICS_DIR)/*.c)
 PRIME_SRC       = $(wildcard $(PRIME_DIR)/*.c)
 STORAGE_SRC     = $(wildcard $(STORAGE_DIR)/*.c)
 UTILS_SRC       = $(wildcard $(UTILS_DIR)/*.c)
+RANDOM_SRC      = $(wildcard $(RANDOM_DIR)/*.c)
 LOG_SRC         = $(wildcard $(LOG_DIR)/*.c)
 SYSINFO_SRC     = $(wildcard $(SYSINFO_DIR)/*.c)
 
@@ -240,6 +243,7 @@ METRICS_OBJS        = $(patsubst $(METRICS_DIR)/%.c,$(BUILD_DIR)/metrics/%.o,$(M
 PRIME_OBJS          = $(patsubst $(PRIME_DIR)/%.c,$(BUILD_DIR)/prime/%.o,$(PRIME_SRC))
 STORAGE_OBJS        = $(patsubst $(STORAGE_DIR)/%.c,$(BUILD_DIR)/storage/%.o,$(STORAGE_SRC))
 UTILS_OBJS          = $(patsubst $(UTILS_DIR)/%.c,$(BUILD_DIR)/utils/%.o,$(UTILS_SRC))
+RANDOM_OBJS         = $(patsubst $(RANDOM_DIR)/%.c,$(BUILD_DIR)/random/%.o,$(RANDOM_SRC))
 LOG_OBJS            = $(patsubst $(LOG_DIR)/%.c,$(BUILD_DIR)/log/%.o,$(LOG_SRC))
 SYSINFO_OBJS        = $(patsubst $(SYSINFO_DIR)/%.c,$(BUILD_DIR)/sysinfo/%.o,$(SYSINFO_SRC))
 
@@ -251,7 +255,7 @@ LMDB_OBJS			= $(patsubst $(LMDB_DIR)/%.c,$(BUILD_DIR)/lmdb/%.o,$(LMDB_SRC))
 LIBFORT_OBJS        = $(patsubst $(LIBFORT_DIR)/%.c,$(BUILD_DIR)/libfort/%.o,$(LIBFORT_SRC))
 
 # Common library objects needed by most executables
-DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(HASHTABLE_OBJS) \
+DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(RANDOM_OBJS) $(HASHTABLE_OBJS) \
                       $(PRIME_OBJS) $(LOG_C_OBJS) $(METRICS_OBJS) \
 					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
 					  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS) $(SYSINFO_OBJS)
@@ -546,6 +550,10 @@ $(BUILD_DIR)/storage/%.o: $(STORAGE_DIR)/%.c
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 $(BUILD_DIR)/utils/%.o: $(UTILS_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+$(BUILD_DIR)/random/%.o: $(RANDOM_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 

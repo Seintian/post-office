@@ -5,7 +5,7 @@
 #include <unistd.h>
 
 int main(void) {
-    logger_level_t level = LOG_DEBUG;
+    po_log_level_t level = LOG_DEBUG;
 
     const char *lvl = getenv("LOG_LEVEL");
     if (lvl) {

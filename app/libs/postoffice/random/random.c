@@ -2,7 +2,7 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include "utils/random.h"
+#include "random/random.h"
 
 #include <errno.h>
 #include <fcntl.h>
