@@ -50,6 +50,7 @@ void *_ls_worker_main(void *arg) {
     PO_METRIC_TIMER_CREATE("logstore.flush.ns");
     static const uint64_t _flush_bins[] = {1000,5000,10000,50000,100000,500000,1000000,5000000,10000000};
     PO_METRIC_HISTO_CREATE("logstore.flush.latency", _flush_bins, sizeof(_flush_bins)/sizeof(_flush_bins[0]));
+    atomic_store(&ls->worker_ready, 1); // signal readiness so open() can proceed
 
     for (;;) {
         ssize_t n = perf_batcher_next(ls->b, batch);

@@ -64,6 +64,7 @@ struct po_logstore {
     size_t max_key_bytes;                    // configured max key size
     size_t max_value_bytes;                  // configured max value size
     _Atomic size_t outstanding_reqs;         // diagnostic: live append requests (debug/leak guard)
+    _Atomic int worker_ready;                // at least one worker entered main loop
     // metrics (incremented atomically; cheap and optional)
     _Atomic uint64_t metric_batches_flushed;
     _Atomic uint64_t metric_records_flushed;

@@ -165,6 +165,15 @@ po_logstore_t *po_logstore_open_cfg(const po_logstore_cfg *cfg) {
             return NULL;
         }
     }
+    // Wait briefly for at least one worker to signal readiness to avoid early
+    // appends racing before the worker enters its dequeue loop (which can
+    // cause transient full ring observations under heavy startup burst).
+    struct timespec _tw = {.tv_sec = 0, .tv_nsec = 5000000}; // 5ms sleep
+    int spins = 0;
+    while (!atomic_load(&ls->worker_ready) && spins < 100) { // up to ~500ms worst case
+        nanosleep(&_tw, NULL);
+        spins++;
+    }
     if (cfg->background_fsync && ls->fsync_policy == PO_LS_FSYNC_INTERVAL &&
         ls->fsync_interval_ns) {
         ls->background_fsync = 1;
