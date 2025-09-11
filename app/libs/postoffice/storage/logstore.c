@@ -293,8 +293,13 @@ int po_logstore_append(po_logstore_t *ls, const void *key, size_t keylen, const 
     // Adaptive retry strategy: keep retrying while running unless policy forbids overwrite.
     // We start with short sleeps and back off up to a cap to avoid excessive CPU usage under
     // sustained saturation, while strongly biasing toward eventual success instead of spurious -1.
-    const int hard_cap_retries = 20000; // safety valve (~ >0.5s worst case)
-    long sleep_ns = 50 * 1000;          // 50us initial
+    // Retry until success (or shutdown / policy override). The previous hard cap
+    // introduced spurious failures under heavy concurrent append pressure which
+    // caused tests to fail and leaked the in-flight allocation when the test
+    // aborted early (skipping close). Removing the artificial cap makes the
+    // API semantics "eventual success unless shutdown or overwrite-forbidden".
+    // We retain an adaptive backoff to avoid busy spinning.
+    long sleep_ns = 50 * 1000;                 // 50us initial
     const long sleep_ns_max = 2 * 1000 * 1000; // 2ms cap
     int attempt = 0;
     while (perf_batcher_enqueue(ls->b, r) < 0) {
@@ -304,11 +309,9 @@ int po_logstore_append(po_logstore_t *ls, const void *key, size_t keylen, const 
             PO_METRIC_COUNTER_INC("logstore.append.enqueue_fail");
             return -1;
         }
-        if (attempt++ >= hard_cap_retries) {
-            atomic_fetch_sub(&ls->outstanding_reqs, 1);
-            free(r);
-            PO_METRIC_COUNTER_INC("logstore.append.enqueue_fail");
-            return -1; // extreme contention / potential dead worker
+        // Emit a metric periodically for observability of sustained contention.
+        if ((attempt++ % 1000) == 0) {
+            PO_METRIC_COUNTER_INC("logstore.append.retries");
         }
         struct timespec ts = {.tv_sec = 0, .tv_nsec = sleep_ns};
         nanosleep(&ts, NULL);

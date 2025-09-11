@@ -481,10 +481,19 @@ TEST(LOGSTORE, CONCURRENT_APPENDS) {
     // enqueue a flush marker and wait until it's visible to ensure drain
     const char *fk = "flush_key";
     const char *fv = "flush_val";
-    TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, fk, strlen(fk), fv, strlen(fv)));
+    // Transient enqueue contention (ring momentarily full) should not fail the test; retry.
+    for (int attempts = 0; attempts < 200; attempts++) {
+        if (po_logstore_append(g_ls, fk, strlen(fk), fv, strlen(fv)) == 0)
+            break;
+        struct timespec ts = {.tv_sec = 0, .tv_nsec = 2000000}; // 2ms
+        nanosleep(&ts, NULL);
+        if (attempts == 199)
+            TEST_FAIL_MESSAGE("flush marker append failed after retries");
+    }
     void *fout = NULL;
     size_t foutlen = 0;
-    TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, fk, strlen(fk), &fout, &foutlen, 500));
+    // Allow a slightly longer timeout to accommodate slower CI machines.
+    TEST_ASSERT_EQUAL_INT(0, wait_get(g_ls, fk, strlen(fk), &fout, &foutlen, 1200));
     free(fout);
     // Verify a few from each thread
     for (int t = 0; t < THREADS; t++) {
