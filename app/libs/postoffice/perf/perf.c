@@ -91,6 +91,7 @@ static void dispatch_event(const perf_event_t *e) {
             atomic_init(&ctr->value, 0);
             po_hashtable_put(ctx.counters, strdup(e->name), ctr);
         }
+
         atomic_fetch_add(&ctr->value, e->arg);
         break;
     }
@@ -98,36 +99,45 @@ static void dispatch_event(const perf_event_t *e) {
         struct po_perf_timer *tmr = NULL;
         if (e->name)
             tmr = po_hashtable_get(ctx.timers, e->name);
+
         if (tmr)
             clock_gettime(CLOCK_MONOTONIC, &tmr->start);
+
         break;
     }
     case EV_TIMER_STOP: {
         struct po_perf_timer *tmr = NULL;
         if (e->name)
             tmr = po_hashtable_get(ctx.timers, e->name);
+
         if (!tmr)
             break;
+
         struct timespec end;
         clock_gettime(CLOCK_MONOTONIC, &end);
-        uint64_t start_ns =
-            (uint64_t)tmr->start.tv_sec * 1000000000U + (uint64_t)tmr->start.tv_nsec;
+
+        uint64_t start_ns = (uint64_t)tmr->start.tv_sec * 1000000000U
+            + (uint64_t)tmr->start.tv_nsec;
         uint64_t end_ns = (uint64_t)end.tv_sec * 1000000000U + (uint64_t)end.tv_nsec;
         atomic_fetch_add(&tmr->total_ns, end_ns - start_ns);
+
         break;
     }
     case EV_HISTOGRAM_RECORD: {
         struct po_perf_histogram *hg = NULL;
         if (e->name)
             hg = po_hashtable_get(ctx.histograms, e->name);
+
         if (!hg)
             break;
+
         for (size_t i = 0; i < hg->nbins; i++) {
             if (e->arg <= hg->bins[i]) {
                 atomic_fetch_add(&hg->counts[i], 1);
                 return;
             }
         }
+
         atomic_fetch_add(&hg->counts[hg->nbins - 1], 1);
         break;
     }
@@ -139,18 +149,22 @@ static void dispatch_event(const perf_event_t *e) {
 static void *perf_worker(void *_) {
     (void)_;
     void *batch[64];
+
     while (1) {
         ssize_t n = perf_batcher_next(ctx.ev_batcher, batch);
         if (n < 0)
             break;
+
         for (ssize_t i = 0; i < n; i++) {
             perf_event_t *e = batch[i];
             if (e->type == EV_SHUTDOWN)
                 return NULL;
+
             dispatch_event(e);
             perf_zcpool_release(ctx.fmt_pool, e);
         }
     }
+
     return NULL;
 }
 
@@ -158,6 +172,7 @@ static size_t next_pow2(size_t x) {
     size_t p = 1;
     while (p < x)
         p <<= 1;
+
     return p;
 }
 
@@ -169,44 +184,60 @@ int po_perf_init(size_t expected_counters, size_t expected_timers, size_t expect
         errno = PERF_EALREADY;
         return -1;
     }
+
     memset(&ctx, 0, sizeof(ctx));
     ctx.counters = po_hashtable_create_sized(compare_strings, hash_string, expected_counters);
     if (!ctx.counters)
         goto fail;
+
     ctx.timers = po_hashtable_create_sized(compare_strings, hash_string, expected_timers);
     if (!ctx.timers)
         goto fail;
+
     ctx.histograms = po_hashtable_create_sized(compare_strings, hash_string, expected_histograms);
     if (!ctx.histograms)
         goto fail;
-    ctx.event_q = perf_ringbuf_create(
-        next_pow2((expected_counters + expected_timers + expected_histograms) * 2));
+
+    ctx.event_q = perf_ringbuf_create(next_pow2(
+        (expected_counters + expected_timers + expected_histograms) * 2
+    ));
     if (!ctx.event_q)
         goto fail;
+
     ctx.ev_batcher = perf_batcher_create(ctx.event_q, 64);
     if (!ctx.ev_batcher)
         goto fail;
+
     ctx.fmt_pool = perf_zcpool_create(256, sizeof(perf_event_t));
     if (!ctx.fmt_pool)
         goto fail;
+
     if (pthread_create(&ctx.worker_tid, NULL, perf_worker, NULL) != 0)
         goto fail;
+
     ctx.initialized = 1;
     return 0;
+
 fail: {
     int last_errno = errno;
     if (ctx.fmt_pool)
         perf_zcpool_destroy(&ctx.fmt_pool);
+
     if (ctx.ev_batcher)
         perf_batcher_destroy(&ctx.ev_batcher);
+
     if (ctx.event_q)
         perf_ringbuf_destroy(&ctx.event_q);
+
     if (ctx.counters)
         po_hashtable_destroy(&ctx.counters);
+
     if (ctx.timers)
         po_hashtable_destroy(&ctx.timers);
+
     if (ctx.histograms)
         po_hashtable_destroy(&ctx.histograms);
+
     memset(&ctx, 0, sizeof(ctx));
     errno = last_errno;
     return -1;
@@ -228,8 +259,10 @@ void po_perf_shutdown(FILE *out) {
 
     if (ctx.ev_batcher)
         perf_batcher_destroy(&ctx.ev_batcher);
+
     if (ctx.event_q)
         perf_ringbuf_destroy(&ctx.event_q);
+
     if (ctx.fmt_pool)
         perf_zcpool_destroy(&ctx.fmt_pool);
 
@@ -239,6 +272,7 @@ void po_perf_shutdown(FILE *out) {
         free(po_hashtable_iter_value(it));
     }
     free(it);
+
     if (ctx.counters)
         po_hashtable_destroy(&ctx.counters);
 
@@ -248,6 +282,7 @@ void po_perf_shutdown(FILE *out) {
         free(po_hashtable_iter_value(it));
     }
     free(it);
+
     if (ctx.timers)
         po_hashtable_destroy(&ctx.timers);
 
@@ -271,6 +306,7 @@ int po_perf_counter_create(const char *name) {
         errno = PERF_ENOTINIT;
         return -1;
     }
+
     perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
     e->type = EV_COUNTER_ADD;
     e->name = name;
@@ -279,16 +315,17 @@ int po_perf_counter_create(const char *name) {
         errno = PERF_EBUSY;
         return -1;
     }
+
     return 0;
 }
 void po_perf_counter_inc(const char *name) {
     if (!ctx.initialized)
         return;
+
     perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
-    if (!e) {
-        errno = ENOMEM;
+    if (!e)
         return;
-    }
+
     e->type = EV_COUNTER_ADD;
     e->name = name;
     e->arg = 1;
@@ -297,11 +334,11 @@ void po_perf_counter_inc(const char *name) {
 void po_perf_counter_add(const char *name, uint64_t delta) {
     if (!ctx.initialized)
         return;
+
     perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
-    if (!e) {
-        errno = ENOMEM;
+    if (!e)
         return;
-    }
+
     e->type = EV_COUNTER_ADD;
     e->name = name;
     e->arg = delta;
@@ -313,40 +350,45 @@ int po_perf_timer_create(const char *name) {
         errno = PERF_ENOTINIT;
         return -1;
     }
+
     struct po_perf_timer *t = po_hashtable_get(ctx.timers, name);
     if (!t) {
         t = calloc(1, sizeof(*t));
         if (!t)
             return -1;
+
         atomic_init(&t->total_ns, 0);
         po_hashtable_put(ctx.timers, strdup(name), t);
     }
+
     return 0;
 }
+
 int po_perf_timer_start(const char *name) {
     if (!ctx.initialized) {
         errno = PERF_ENOTINIT;
         return -1;
     }
+
     perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
-    if (!e) {
-        errno = ENOMEM;
+    if (!e)
         return -1;
-    }
+
     e->type = EV_TIMER_START;
     e->name = name;
     return perf_batcher_enqueue(ctx.ev_batcher, e) == 0 ? 0 : -1;
 }
+
 int po_perf_timer_stop(const char *name) {
     if (!ctx.initialized) {
         errno = PERF_ENOTINIT;
         return -1;
     }
+
     perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
-    if (!e) {
-        errno = ENOMEM;
+    if (!e) 
         return -1;
-    }
+
     e->type = EV_TIMER_STOP;
     e->name = name;
     return perf_batcher_enqueue(ctx.ev_batcher, e) == 0 ? 0 : -1;
@@ -357,29 +399,35 @@ int po_perf_histogram_create(const char *name, const uint64_t *bins, size_t nbin
         errno = EINVAL;
         return -1;
     }
+
     if (!ctx.initialized) {
         errno = PERF_ENOTINIT;
         return -1;
     }
+
     if (po_hashtable_contains_key(ctx.histograms, name)) {
         errno = EEXIST;
         return -1;
     }
+
     po_perf_histogram_t *h = malloc(sizeof(*h));
     if (!h)
         return -1;
+
     h->nbins = nbins;
     h->bins = malloc(nbins * sizeof(*h->bins));
     if (!h->bins) {
         free(h);
         return -1;
     }
+
     h->counts = calloc(nbins, sizeof(*h->counts));
     if (!h->counts) {
         free(h->bins);
         free(h);
         return -1;
     }
+
     memcpy(h->bins, bins, nbins * sizeof(*h->bins));
     po_hashtable_put(ctx.histograms, strdup(name), h);
     return 0;
@@ -389,14 +437,17 @@ int po_perf_histogram_record(const char *h, uint64_t value) {
         errno = PERF_ENOTINIT;
         return -1;
     }
+
     perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
     if (!e)
         return -1;
+
     e->type = EV_HISTOGRAM_RECORD;
     e->name = h;
     e->arg = value;
     if (perf_batcher_enqueue(ctx.ev_batcher, e) < 0)
         return -1;
+
     return 0;
 }
 
@@ -409,6 +460,7 @@ int po_perf_report(FILE *out) {
                 (unsigned long)atomic_load(
                     &((struct po_perf_counter *)po_hashtable_iter_value(it))->value));
     }
+
     free(it);
     fprintf(out, "-- Timers (ns) --\n");
     it = po_hashtable_iterator(ctx.timers);
@@ -417,6 +469,7 @@ int po_perf_report(FILE *out) {
                 (unsigned long)atomic_load(
                     &((struct po_perf_timer *)po_hashtable_iter_value(it))->total_ns));
     }
+
     free(it);
     fprintf(out, "-- Histograms --\n");
     it = po_hashtable_iterator(ctx.histograms);
@@ -428,6 +481,41 @@ int po_perf_report(FILE *out) {
                     (unsigned long)atomic_load(&h->counts[i]));
         }
     }
+
     free(it);
     return 0;
+}
+
+// Test/support API: best-effort synchronous flush of pending perf events.
+// Spins briefly until the event ring appears empty or a timeout elapses.
+// This does not guarantee histogram timer ordering beyond normal semantics
+// but is sufficient for tests wanting to observe counter increments.
+int po_perf_flush(void) {
+    if (!ctx.initialized)
+        return -1;
+
+    const int max_spins = 1000; // ~ up to ~50ms worst case with backoff
+    struct timespec ts = {.tv_sec = 0, .tv_nsec = 50 * 1000}; // 50us
+    int stable = 0;
+    size_t last = (size_t)-1;
+
+    for (int i = 0; i < max_spins; ++i) {
+        size_t cnt = perf_ringbuf_count(ctx.event_q);
+        if (cnt == 0) {
+            if (stable++ > 2)
+                return 0; // observed empty multiple consecutive times
+        }
+        else
+            stable = 0;
+
+        if (cnt == last && cnt == 0)
+            return 0;
+
+        last = cnt;
+        nanosleep(&ts, NULL);
+        if (ts.tv_nsec < 2 * 1000 * 1000)
+            ts.tv_nsec += 50 * 1000; // gentle backoff up to 2ms
+    }
+
+    return perf_ringbuf_count(ctx.event_q) == 0 ? 0 : -1;
 }

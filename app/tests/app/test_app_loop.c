@@ -135,10 +135,11 @@ TEST(APP, MAIN_LOOP_END_TO_END) {
     TEST_ASSERT_NOT_NULL(strstr((const char *)out, "len="));
     free(out);
 
-    // Perf report should contain our counter
+    // Ensure queued perf events processed before reporting
+    TEST_ASSERT_EQUAL_INT(0, po_perf_flush());
     char rep[1024];
     CAPTURE_REPORT(rep, sizeof(rep), po_perf_report);
-    TEST_ASSERT_NOT_NULL(strstr(rep, "processed: 1"));
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(rep, "processed: 1"), rep);
 
     // Cleanup fds
     close(sv[0]);
@@ -161,7 +162,12 @@ TEST(APP, MAIN_LOOP_END_TO_END) {
 // Local helpers for hash structures (file scope so they can be referenced in test).
 static int str_compare(const void *a, const void *b) { return strcmp((const char *)a, (const char *)b); }
 static unsigned long str_hash(const void *p) {
-    const unsigned char *s = (const unsigned char *)p; unsigned long h = 5381; int c; while ((c = *s++)) h = ((h << 5) + h) + (unsigned long)c; return h;
+    const unsigned char *s = (const unsigned char *)p;
+    unsigned long h = 5381;
+    int c;
+    while ((c = *s++))
+        h = ((h << 5) + h) + (unsigned long)c;
+    return h;
 }
 
 TEST(APP, METRICS_AND_PUBLIC_APIS_SMOKE) {

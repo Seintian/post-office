@@ -29,7 +29,7 @@ poller_t *poller_create(void) {
         return NULL;
     }
 
-    poller_t *p = (poller_t *)calloc(1, sizeof(*p));
+    poller_t *p = calloc(1, sizeof(*p));
     if (!p) {
         close(epfd);
         return NULL;

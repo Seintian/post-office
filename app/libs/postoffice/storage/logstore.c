@@ -87,7 +87,7 @@ po_logstore_t *po_logstore_open_cfg(const po_logstore_cfg *cfg) {
         return NULL;
     }
 
-    po_logstore_t *ls = (po_logstore_t *)calloc(1, sizeof(*ls));
+    po_logstore_t *ls = calloc(1, sizeof(*ls));
     if (!ls) {
         db_bucket_close(&idx);
         db_env_close(&env);
@@ -197,7 +197,7 @@ void po_logstore_close(po_logstore_t **pls) {
     po_logstore_t *ls = *pls;
     atomic_store(&ls->running, 0);
     // enqueue sentinel to wake worker if blocked on eventfd
-    append_req_t *sent = (append_req_t *)calloc(1, sizeof(*sent));
+    append_req_t *sent = calloc(1, sizeof(*sent));
     if (sent) {
         ls->sentinel = sent;
         (void)perf_batcher_enqueue(ls->b, sent);
@@ -212,8 +212,8 @@ void po_logstore_close(po_logstore_t **pls) {
             break;
         append_req_t *req = (append_req_t *)tmp;
         if (req && req != ls->sentinel) {
-            free(req->k);
-            free(req->v);
+            // append_req_t uses a single allocation layout
+            // [append_req_t][key bytes][value bytes]; only free top-level.
             free(req);
             atomic_fetch_sub(&ls->outstanding_reqs, 1);
         }
@@ -259,9 +259,15 @@ int po_logstore_append(po_logstore_t *ls, const void *key, size_t keylen, const 
         PO_METRIC_COUNTER_INC("logstore.append.invalid");
         return -1;
     }
+    // Reject appends after shutdown begins to avoid leaking requests that would
+    // otherwise never be processed because workers have exited.
+    if (!atomic_load(&ls->running)) {
+        PO_METRIC_COUNTER_INC("logstore.append.after_close");
+        return -1;
+    }
     // Single allocation: [append_req_t][key bytes][val bytes]
     size_t total = sizeof(append_req_t) + keylen + vallen;
-    append_req_t *r = (append_req_t *)malloc(total);
+    append_req_t *r = malloc(total);
     if (!r)
         return -1;
     r->k = (uint8_t *)r + sizeof(append_req_t);
@@ -275,18 +281,30 @@ int po_logstore_append(po_logstore_t *ls, const void *key, size_t keylen, const 
     // Instead of failing immediately (causing spurious -1 to callers under load),
     // retry for a bounded period with short sleeps. This provides gentle
     // backpressure without busy spinning.
-    const int max_retries = 200;     // ~ (200 * 50us) = 10ms worst-case wait
-    const long sleep_ns = 50 * 1000; // 50 microseconds
+    // Adaptive retry strategy: keep retrying while running unless policy forbids overwrite.
+    // We start with short sleeps and back off up to a cap to avoid excessive CPU usage under
+    // sustained saturation, while strongly biasing toward eventual success instead of spurious -1.
+    const int hard_cap_retries = 20000; // safety valve (~ >0.5s worst case)
+    long sleep_ns = 50 * 1000;          // 50us initial
+    const long sleep_ns_max = 2 * 1000 * 1000; // 2ms cap
     int attempt = 0;
     while (perf_batcher_enqueue(ls->b, r) < 0) {
-        if (ls->never_overwrite || attempt++ >= max_retries || !atomic_load(&ls->running)) {
+        if (ls->never_overwrite || !atomic_load(&ls->running)) {
             atomic_fetch_sub(&ls->outstanding_reqs, 1);
-            free(r); // single allocation
+            free(r);
             PO_METRIC_COUNTER_INC("logstore.append.enqueue_fail");
             return -1;
         }
+        if (attempt++ >= hard_cap_retries) {
+            atomic_fetch_sub(&ls->outstanding_reqs, 1);
+            free(r);
+            PO_METRIC_COUNTER_INC("logstore.append.enqueue_fail");
+            return -1; // extreme contention / potential dead worker
+        }
         struct timespec ts = {.tv_sec = 0, .tv_nsec = sleep_ns};
         nanosleep(&ts, NULL);
+        if (sleep_ns < sleep_ns_max)
+            sleep_ns = (sleep_ns * 3) / 2 + 10 * 1000; // mild growth with bias
     }
     PO_METRIC_COUNTER_INC("logstore.append.ok");
     PO_METRIC_COUNTER_ADD("logstore.append.bytes", (keylen + vallen));

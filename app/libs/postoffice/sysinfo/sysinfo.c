@@ -64,6 +64,7 @@ static int load_cpuinfo(po_sysinfo_t *info) {
 
         fclose(f);
     }
+
     if (phys <= 0)
         phys = (int)info->logical_processors;
     info->physical_cores = phys;
@@ -99,9 +100,9 @@ static int load_cpuinfo(po_sysinfo_t *info) {
 }
 
 static long parse_meminfo_value_kb_to_bytes(long kb) {
-    if (kb < 0) {
+    if (kb < 0)
         return -1;
-    }
+
     return kb * 1024L;
 }
 
@@ -130,6 +131,7 @@ static int load_memoryinfo(po_sysinfo_t *info) {
 
         fclose(f);
     }
+
     if (total_kb < 0 || free_kb < 0)
         return -1;
 

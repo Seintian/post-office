@@ -110,7 +110,7 @@ TEST(LOGGER, OVERFLOW_EMITS_ERROR) {
     long sz = ftell(fp);
     TEST_ASSERT(sz > 0);
     rewind(fp);
-    char *buf = (char *)malloc((size_t)sz + 1);
+    char *buf = malloc((size_t)sz + 1);
     TEST_ASSERT_NOT_NULL(buf);
     size_t rd = fread(buf, 1, (size_t)sz, fp);
     fclose(fp);

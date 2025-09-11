@@ -274,7 +274,7 @@ int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
         return 0;
     }
 
-    unsigned char *tmp = (unsigned char *)malloc(payload_len);
+    unsigned char *tmp = malloc(payload_len);
     if (!tmp) {
         errno = ENOMEM;
         return -1;

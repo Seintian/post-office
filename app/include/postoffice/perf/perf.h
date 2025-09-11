@@ -130,6 +130,13 @@ int po_perf_histogram_record(const char *name, uint64_t value) __nonnull((1));
  */
 int po_perf_report(FILE *out);
 
+/**
+ * Best-effort synchronous flush of queued perf events so that counters / timers
+ * become visible to po_perf_report without waiting for shutdown. Returns 0 on
+ * apparent success (queue drained) or -1 if still pending after retries.
+ */
+int po_perf_flush(void);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

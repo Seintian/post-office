@@ -13,6 +13,7 @@ static po_logstore_t *g_ls = NULL;
 int po_storage_init(const po_storage_config_t *cfg) {
     if (!cfg || !cfg->dir || !cfg->bucket)
         return -1;
+
     po_logstore_cfg lc = {
         .dir = cfg->dir,
         .bucket = cfg->bucket,
@@ -24,9 +25,10 @@ int po_storage_init(const po_storage_config_t *cfg) {
     g_ls = po_logstore_open_cfg(&lc);
     if (!g_ls)
         return -1;
-    if (cfg->attach_logger_sink) {
+
+    if (cfg->attach_logger_sink)
         (void)po_logstore_attach_logger(g_ls);
-    }
+
     return 0;
 }
 

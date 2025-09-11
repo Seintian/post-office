@@ -76,7 +76,7 @@ char *fs_read_file_to_buffer(const char *path, size_t *out_size) {
     rewind(f);
 
     size_t usize = (size_t)sz;
-    char *buf = (char *)malloc(usize + 1);
+    char *buf = malloc(usize + 1);
     if (!buf) {
         fclose(f);
         return NULL;
@@ -171,7 +171,7 @@ char *fs_path_join(const char *base, const char *leaf) {
     bool need_sep = bl > 0 && base[bl - 1] != '/';
 
     size_t total = bl + (need_sep ? 1 : 0) + ll + 1;
-    char *out = (char *)malloc(total);
+    char *out = malloc(total);
     if (!out)
         return NULL;
 

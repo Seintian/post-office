@@ -38,11 +38,24 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
     size_t aligned = (region_size + page_2mb - 1) & ~(page_2mb - 1);
 
     // Try mmap with 2 MiB huge pages
-    void *base = mmap(NULL, aligned, PROT_READ | PROT_WRITE,
-                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | (21 << MAP_HUGE_SHIFT), -1, 0);
+    void *base = mmap(
+        NULL,
+        aligned,
+        PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | (21 << MAP_HUGE_SHIFT),
+        -1,
+        0
+    );
     if (base == MAP_FAILED) {
         // fallback to normal pages
-        base = mmap(NULL, aligned, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        base = mmap(
+            NULL,
+            aligned,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS,
+            -1,
+            0
+        );
         if (base == MAP_FAILED) {
             errno = ZCP_EMMAP;
             return NULL;
@@ -75,16 +88,14 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
 }
 
 void perf_zcpool_destroy(perf_zcpool_t **p) {
-    if (!*p) {
+    if (!*p)
         return;
-    }
 
     perf_zcpool_t *pool = *p;
 
     // free ring and unmap region
-    if (pool->freeq) {
+    if (pool->freeq)
         perf_ringbuf_destroy(&pool->freeq);
-    }
 
     if (pool->base) {
         size_t region_size = pool->buf_count * pool->buf_size;
@@ -122,9 +133,8 @@ void perf_zcpool_release(perf_zcpool_t *p, void *buffer) {
     uintptr_t end = start + p->buf_count * p->buf_size;
     uintptr_t ptr = (uintptr_t)buffer;
     // only release if pointer is exactly one of our buffers
-    if (ptr < start || ptr >= end || ((ptr - start) % p->buf_size) != 0) {
+    if (ptr < start || ptr >= end || ((ptr - start) % p->buf_size) != 0)
         return;
-    }
 
     // Optionally check buffer in range [base, base+count*size)
     perf_ringbuf_enqueue(p->freeq, buffer);

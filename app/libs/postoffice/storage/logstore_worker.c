@@ -112,10 +112,10 @@ void *_ls_worker_main(void *arg) {
         }
 
         size_t iov_cnt = (size_t)live * 4u;
-        struct iovec *iov = (struct iovec *)malloc(sizeof(struct iovec) * iov_cnt);
-        uint64_t *offs = (uint64_t *)malloc(sizeof(uint64_t) * (size_t)live);
-        uint32_t *lens = (uint32_t *)malloc(sizeof(uint32_t) * (size_t)live);
-        uint32_t *kls_arr = (uint32_t *)malloc(sizeof(uint32_t) * (size_t)live);
+        struct iovec *iov = malloc(sizeof(struct iovec) * iov_cnt);
+        uint64_t *offs = malloc(sizeof(uint64_t) * (size_t)live);
+        uint32_t *lens = malloc(sizeof(uint32_t) * (size_t)live);
+        uint32_t *kls_arr = malloc(sizeof(uint32_t) * (size_t)live);
         if (po_test_logstore_fail_vector_alloc && po_test_logstore_fail_vector_alloc()) {
             // Simulate allocation failure by freeing any partial buffers and nulling pointers.
             if (iov) free(iov);

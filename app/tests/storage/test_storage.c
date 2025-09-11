@@ -432,7 +432,7 @@ TEST(LOGSTORE, BATCH_WRITE_MANY) {
 
 TEST(LOGSTORE, LARGE_VALUE) {
     size_t sz = 64 * 1024; // 64KB
-    char *val = (char *)malloc(sz);
+    char *val = malloc(sz);
     TEST_ASSERT_NOT_NULL(val);
     for (size_t i = 0; i < sz; i++)
         val[i] = (char)('a' + (i % 26));

@@ -393,7 +393,7 @@ int po_logger_add_sink_syslog(const char *ident) {
 
 int po_logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *udata) {
 
-    custom_sink_t *c = (custom_sink_t *)malloc(sizeof(*c));
+    custom_sink_t *c = malloc(sizeof(*c));
     if (!c)
         return -1;
 

@@ -41,7 +41,7 @@ static unsigned long hash_bin(const void *a) {
 }
 
 po_index_t *po_index_create(size_t expected_entries) {
-    po_index_t *idx = (po_index_t *)calloc(1, sizeof(*idx));
+    po_index_t *idx = calloc(1, sizeof(*idx));
     if (!idx)
         return NULL;
     idx->ht =
@@ -79,7 +79,7 @@ int po_index_put(po_index_t *idx, const void *key, size_t keylen, uint64_t offse
         existing->len = len;
         return 0;
     }
-    idx_entry_t *e = (idx_entry_t *)calloc(1, sizeof(*e));
+    idx_entry_t *e = calloc(1, sizeof(*e));
     if (!e)
         return -1;
     e->key = malloc(keylen);
