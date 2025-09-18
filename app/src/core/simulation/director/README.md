@@ -23,15 +23,16 @@ Design principles:
 ## 1. Current Directory Layout
 
 ```sh
-config/       # Load & validate simulation parameters
-ctrl_bridge/  # (Optional) External control & UI events bridge (was `bridge/`)
-director.c    # Entry + top-level orchestration glue
-process/      # Process lifecycle management abstractions
-runtime/      # Simulation clock + day loop + termination checks
-schedule/     # Task scheduler & resource assignment helpers
-state/        # Domain model & state store (sportelli, operators, users)
-telemetry/    # Statistics, health & metrics export plumbing
-utils/        # Low-level lock / queue / id primitives (may be pruned later)
+config/        # Load & validate simulation parameters (config.c/.h)
+ctrl_bridge/   # (Optional) External control & UI events bridge (currently placeholder or partial)
+director.c     # Entry + top-level orchestration glue
+ipc/           # IPC helper abstractions (queues, semaphores, shared memory) if populated
+process/       # Process lifecycle management abstractions
+runtime/       # Simulation clock + day loop + termination checks
+schedule/      # Task scheduler & resource assignment (scheduler.c, task_queue.c)
+state/         # Domain model & state store (state_model.*, state_store.*)
+telemetry/     # Statistics, health & metrics export plumbing (event_log_sink.*, health_monitor.*, metrics_export.*)
+utils/         # Low-level lock / queue / id primitives (atomic_queue.*, spinlock.*, backoff.*, id_allocator.*)
 ```
 
 ## 2. Mapping to Specification Sections
@@ -39,7 +40,7 @@ utils/        # Low-level lock / queue / id primitives (may be pruned later)
 | Spec Section | Requirement (Summary) | Submodule(s) (Minimal) | Submodule(s) (Complete) |
 |--------------|-----------------------|-------------------------|--------------------------|
 | 5.1 Director | Start processes, create resources, stats print per day | `director.c`, `process/`, `runtime/`, `state/`, `telemetry/` | + `ctrl_bridge/` (live control) |
-| 5.1 Stats    | Maintain totals & daily metrics | `telemetry/` | + CSV exporter (inside `telemetry/` or new `telemetry/csv_export.c`) |
+| 5.1 Stats    | Maintain totals & daily metrics | `telemetry/` | + CSV exporter (planned; not yet implemented) |
 | 5.2 Ticket Issuer | Provide tickets to users | (Implemented outside here; director coordinates via `process/` + shared queues definitions in `state/`) | Same |
 | 5.3 Sportelli | Daily assignment & resources | `state/` (sportello structs), `schedule/` (assignment task) | Same |
 | 5.4 Operator | Operator process lifecycle, pauses, reassignment | External operator process code; coordination via `state/` & events; director gating via `runtime/` | Same + advanced telemetry |
@@ -47,7 +48,7 @@ utils/        # Low-level lock / queue / id primitives (may be pruned later)
 | 5.6 Termination | timeout / explode threshold | `runtime/` (check functions), `telemetry/` (counters) | Same + more termination causes if extended |
 | 6 Complete   | Multi‑request sequences | `state/` (per-user request list) | Same |
 | 6 Complete   | Dynamic new users (N_NEW_USERS) | `ctrl_bridge/` (command) → `process/` (spawn) → `state/` update | Same |
-| 6 Complete   | CSV export of stats | (Optional) new `telemetry/csv_export.c` | Same |
+| 6 Complete   | CSV export of stats | (Planned) future `telemetry/csv_export.c` | Not yet implemented |
 
 ## 3. Submodule Responsibilities & Public Interfaces
 
@@ -157,7 +158,7 @@ typedef void (*stats_export_cb)(const struct director_stats*, void* user);
 int telemetry_register_exporter(stats_export_cb, void* user);
 ```
 
-Complete version adds CSV writer (periodic or end-of-run): `telemetry/csv_export.c`.
+Complete version would add a CSV writer (periodic or end-of-run) once implemented.
 Health monitoring (e.g., operator liveness, queue saturation) can produce warnings; keep simple for minimal.
 
 ### 3.8 `ctrl_bridge/`

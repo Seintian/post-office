@@ -169,14 +169,9 @@ All of these values are printed via `log_info()` and then appended to a CSV file
 
 The simulation uses several IPC mechanisms to enable communication between processes:
 
-### 1. Semaphores
+### 1. Synchronization Primitives
 
-Used for process synchronization, implemented with System V semaphores:
-
-- `process_sync_sem`: Synchronizes processes at simulation start
-- `worker_seats_sem`: Controls worker access to counters
-- `stats_ready_sem`: Synchronizes access to statistics
-- `service_issuance_sem`: Controls service issuance
+Used for process coordination (start barriers, resource access limits, statistics publication). Specific legacy semaphore names have been removed; current implementation abstracts these details behind initialization helpers.
 
 ### 2. Shared Memory
 
@@ -189,12 +184,9 @@ Used for sharing data between processes:
 - `state_lock`: Synchronizes access to simulation state using a `pthread rwlock`
 - `sync_barrier`: Synchronizes all processes to start a new day altogether using a `pthread barrier`
 
-### 3. Message Queues
+### 3. Message Passing Channels
 
-Used for request handling:
-
-- `ticket_issuer_queue`: Communication between users and ticket issuer
-- `service_wait_queues`: Communication between users and workers for each service
+Used for request handling between users, ticket issuer, and workers. Legacy explicit queue variable names were pruned; the design retains logical channels (issuer requests, per‑service wait queues) without codifying concrete identifiers here.
 
 ## Implementation Details
 

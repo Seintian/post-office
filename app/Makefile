@@ -44,6 +44,9 @@ STORAGE_DIR            = $(POSTOFFICE_LIBS_DIR)/storage
 UTILS_DIR              = $(POSTOFFICE_LIBS_DIR)/utils
 RANDOM_DIR             = $(POSTOFFICE_LIBS_DIR)/random
 TUI_LIB_DIR            = $(POSTOFFICE_LIBS_DIR)/tui
+# Alias used by source discovery rules (was previously undefined and caused
+# accidental recursion over the whole tree when used with find)
+TUI_DIR                = $(TUI_LIB_DIR)
 LOG_DIR                = $(POSTOFFICE_LIBS_DIR)/log
 SYSINFO_DIR            = $(POSTOFFICE_LIBS_DIR)/sysinfo
 
@@ -76,11 +79,8 @@ LIBS_I     = -I$(POSTOFFICE_LIBS_DIR) -I$(THIRDPARTY_LIBS_DIR)
 CORE_I     = -I$(CORE_SRC_DIR)/main -I$(CORE_SRC_DIR)/simulation
 SRC_I      = -I$(SRC_DIR)
 
-TUI_DIR            = $(TUI_LIB_DIR)
 APP_MAIN_TUI_DIR   = $(CORE_SRC_DIR)/main/tui
-TUI_I              = -I$(TUI_DIR)
-APP_MAIN_TUI_I     = -I$(APP_MAIN_TUI_DIR)
-ALL_I              = $(INCLUDES_I) $(LIBS_I) $(CORE_I) $(SRC_I) $(TUI_I) $(APP_MAIN_TUI_I)
+ALL_I              = $(INCLUDES_I) $(LIBS_I) $(CORE_I) $(SRC_I)
 
 #! set to `true` to enable debug flags
 DEV = true
@@ -478,47 +478,47 @@ $(TEST_MAIN_EXEC): $(TEST_MAIN_OBJS) | $(BIN_DIR)
 # Rule for main application objects
 $(BUILD_DIR)/main/%.o: $(MAIN_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
 # Rule for director application objects
 $(BUILD_DIR)/director/%.o: $(DIRECTOR_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
-
-# Rule for ticket_issuer application objects
-$(BUILD_DIR)/ticket_issuer/%.o: $(TICKET_ISSUER_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
-
-# Rule for users_manager application objects
-$(BUILD_DIR)/users_manager/%.o: $(USERS_MANAGER_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
-
-# Rule for worker application objects
-$(BUILD_DIR)/worker/%.o: $(WORKER_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
-
-# Rule for user application objects
-$(BUILD_DIR)/user/%.o: $(USER_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
-
-# Rule for shared TUI library objects
-$(BUILD_DIR)/tui/%.o: $(TUI_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
-
-# Rule for app main TUI objects
-$(BUILD_DIR)/app_tui/%.o: $(APP_MAIN_TUI_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
 # Rule for director control bridge objects
 $(BUILD_DIR)/director/ctrl_bridge/%.o: $(DIRECTOR_BRIDGE_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
+
+# Rule for ticket_issuer application objects
+$(BUILD_DIR)/ticket_issuer/%.o: $(TICKET_ISSUER_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
+
+# Rule for users_manager application objects
+$(BUILD_DIR)/users_manager/%.o: $(USERS_MANAGER_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
+
+# Rule for worker application objects
+$(BUILD_DIR)/worker/%.o: $(WORKER_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
+
+# Rule for user application objects
+$(BUILD_DIR)/user/%.o: $(USER_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
+
+# Rule for shared TUI library objects
+$(BUILD_DIR)/tui/%.o: $(TUI_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(ALL_I) -c $< -o $@
+
+# Rule for app main TUI objects
+$(BUILD_DIR)/app_tui/%.o: $(APP_MAIN_TUI_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(ALL_I) -c $< -o $@
 
 # Rule for our internal libraries
 $(BUILD_DIR)/hashtable/%.o: $(HASHTABLE_DIR)/%.c

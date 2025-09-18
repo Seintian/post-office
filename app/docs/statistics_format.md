@@ -8,28 +8,28 @@ This document describes the format and structure of statistics collected during 
 
 The simulation maintains statistics primarily through two key structures:
 
-### `service_stats_t` (Per-Service Statistics)
+### Per‑Service Statistics Record
 
-Each service type tracks the following metrics:
+Each service type maintains a record with counters for:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `nof_serviced_users` | `atomic_uint` | Number of users who received this service |
-| `nof_issued_services` | `atomic_uint` | Number of successfully issued services (multiple services can be requested per user) |
-| `nof_not_issued_services` | `atomic_uint` | Number of requested services that could not be issued |
-| `waiting_time` | `atomic_uint` | Total accumulated waiting time for all users of this service |
-| `issuing_service_time` | `atomic_uint` | Total time spent issuing this service across all requests |
+| Metric | Description |
+|--------|-------------|
+| Serviced Users | Number of users who successfully completed the service |
+| Issued Services | Total number of service issuances (a user may request multiple times) |
+| Dropped/Not Issued Services | Requests that could not be fulfilled (queue exit / capacity) |
+| Cumulative Waiting Time | Sum of waiting durations (ns) across all requests (fulfilled + dropped) |
+| Cumulative Service Time | Sum of active service handling durations (ns) for fulfilled requests |
 
-### `sim_stats_t` (Global Statistics)
+### Global Aggregation Structure
 
-The global statistics container includes:
+The global aggregation holds:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `stats_by_service` | `service_stats_t[NOF_SERVICES + 1]` | Array of statistics for each service type (+ global total stats) |
-| `nof_active_operators` | `atomic_uint` | Number of active worker operators during the simulation |
-| `nof_operators_pauses` | `atomic_uint` | Total number of pauses taken by operators |
-| `nof_users_awaiting` | `atomic_uint` | Current count of users still waiting in any service queue |
+| Element | Description |
+|---------|-------------|
+| Per‑Service Array | Collection of the per‑service records plus one synthetic global aggregate |
+| Active Operators (Today) | Count of operators who performed at least one issuance during the current day |
+| Operator Pauses (Total) | Total pauses taken (day or simulation cumulative depending on snapshot) |
+| Users Awaiting | Current number of users present in any waiting queue at snapshot time |
 
 ## Service Types
 
@@ -49,26 +49,26 @@ The simulation tracks statistics for the following service types (defined in `se
 Statistical data is collected in real-time during the simulation and is stored in shared memory accessible by multiple processes. The following mechanisms ensure data integrity:
 
 - All statistic fields use atomic operations (`atomic_uint`) to prevent race conditions
-- A dedicated semaphore (`stats_ready_sem`) synchronizes access to statistics between processes
+- A dedicated synchronization primitive coordinates safe access to statistics between processes (implementation detail intentionally unnamed here)
 - The Director process initializes all statistics to zero at simulation start
 
 ## Handling of Statistics
 
-The Director process manages the statistics, which are stored in shared memory. Other processes can access these statistics after acquiring the appropriate semaphore lock (`stats_ready_sem`).
-Appends all metrics to 2 CSV files via the `save_on_csv()` function for post-run analysis.
+The Director process manages the statistics, which are stored in shared memory. Other processes will access these statistics through a synchronization mechanism (name and type may evolve; legacy specific semaphore names were removed).
+Previously documented CSV persistence via a `save_on_csv()` helper is not present in the current codebase. Statistics are accumulated in shared memory structures; CSV or external export is a planned extension point (see director telemetry module roadmap).
 
 ## Derived Metrics
 
 From the collected statistics, the following metrics can be derived:
 
-- **Average Waiting Time**: `waiting_time / (nof_issued_services + nof_not_issued_services)`
-- **Average Service Time**: `issuing_service_time / nof_issued_services`
-- **Service Success Rate**: `nof_issued_services / (nof_issued_services + nof_not_issued_services)`
+- **Average Waiting Time**: cumulative waiting time ÷ (issued + dropped requests)
+- **Average Service Time**: cumulative service time ÷ issued requests
+- **Service Success Rate**: issued ÷ (issued + dropped)
 - **Operator Efficiency**: Ratio of active operator time to total simulation time
 
 ## Simulation State
 
-The simulation state (`sim_state_t`) contains additional information related to the overall status of the simulation:
+The simulation state container includes additional information related to the overall status of the simulation:
 
 | State | Description |
 |-------|-------------|

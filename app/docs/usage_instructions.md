@@ -178,15 +178,15 @@ The menu is navigated using keyboard inputs: press the up and down arrow keys to
 
 ## Crash Handling
 
-On fatal signals (e.g., `SIGSEGV`, `SIGABRT`), the application:
+On fatal signals (e.g., `SIGSEGV`, `SIGABRT`), the application (planned / partial implementation):
 
-- Writes a memory map snapshot to [`PROJECT_MEMSEGS_SNAPSHOTS_DIR`](../include/shared/project_macros.h#L91)
-- Captures a backtrace up to 15 frames ([`MAX_BACKTRACE_SIZE`](../include/shared/crash_handling.h#L34))
-- Dumps the CPU registers' contents (architectures supported: `x86-64`, `aarch64`)
-- Generates a human-readable crash report under [`PROJECT_CRASH_REPORTS_DIR`](../include/shared/project_macros.h#L88)
-- Exits re-raising that fatal signal
+- Writes a memory map snapshot to a configured snapshots directory
+- Captures a backtrace up to a fixed maximum depth
+- Dumps CPU registers for supported architectures (`x86-64`, `aarch64`)
+- Generates a human-readable crash report under a crash reports directory
+- Re-raises the fatal signal after logging
 
-**NOTE**: if the current platform isn't actually supported by the application, a warning message will be written into the crash report. It _should_ compile anyway.
+Exact macro names and header paths are subject to change; references to `include/shared/*` in earlier docs were removed because those headers do not exist in the current tree.
 
 \anchor logging-system
 

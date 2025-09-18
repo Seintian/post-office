@@ -1,7 +1,16 @@
 /** @defgroup libraries Post Office Libraries */
 /** @defgroup executables Simulation Processes */
-/** @defgroup utils Utilities */
-/** @defgroup net Networking */
-/** @defgroup storage Storage */
+/** @defgroup logger Logger */
 /** @defgroup perf Performance */
+/** @defgroup metrics Metrics */
+/** @defgroup hashtable Hashtable */
+/** @defgroup hashset Hashset */
+/** @defgroup index In-Memory Log Index */
+/** @defgroup logstore Log Structured KV Store */
+/** @defgroup db_lmdb LMDB Wrapper */
+/** @defgroup storage Storage */
+/** @defgroup net Networking */
 /** @defgroup sysinfo System Information */
+/** @defgroup prime Prime Utilities */
+/** @defgroup utils Utilities */
+/** @defgroup tui Text User Interface */
