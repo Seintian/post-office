@@ -203,12 +203,8 @@ void po_config_free(po_config_t **cfg) {
     *cfg = NULL;
 }
 
-int po_config_get_str(
-    const po_config_t *cfg,
-    const char *section,
-    const char *key,
-    const char **out_value
-) {
+int po_config_get_str(const po_config_t *cfg, const char *section, const char *key,
+                      const char **out_value) {
     char *full_key = get_full_key(section, key);
     if (!full_key)
         return -1;
@@ -224,12 +220,8 @@ int po_config_get_str(
     return 0;
 }
 
-int po_config_get_int(
-    const po_config_t *cfg,
-    const char *section,
-    const char *key,
-    int *out_value
-) {
+int po_config_get_int(const po_config_t *cfg, const char *section, const char *key,
+                      int *out_value) {
     const char *v;
     if (po_config_get_str(cfg, section, key, &v) != 0)
         return -1;
@@ -249,12 +241,8 @@ int po_config_get_int(
     return 0;
 }
 
-int po_config_get_long(
-    const po_config_t *cfg,
-    const char *section,
-    const char *key,
-    long *out_value
-) {
+int po_config_get_long(const po_config_t *cfg, const char *section, const char *key,
+                       long *out_value) {
     const char *v;
     if (po_config_get_str(cfg, section, key, &v) != 0)
         return -1;
@@ -270,12 +258,8 @@ int po_config_get_long(
     return 0;
 }
 
-int po_config_get_bool(
-    const po_config_t *cfg,
-    const char *section,
-    const char *key,
-    bool *out_value
-) {
+int po_config_get_bool(const po_config_t *cfg, const char *section, const char *key,
+                       bool *out_value) {
     const char *v;
     if (po_config_get_str(cfg, section, key, &v) != 0)
         return -1;
