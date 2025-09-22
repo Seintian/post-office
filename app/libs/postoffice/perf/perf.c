@@ -116,8 +116,8 @@ static void dispatch_event(const perf_event_t *e) {
         struct timespec end;
         clock_gettime(CLOCK_MONOTONIC, &end);
 
-        uint64_t start_ns = (uint64_t)tmr->start.tv_sec * 1000000000U
-            + (uint64_t)tmr->start.tv_nsec;
+        uint64_t start_ns =
+            (uint64_t)tmr->start.tv_sec * 1000000000U + (uint64_t)tmr->start.tv_nsec;
         uint64_t end_ns = (uint64_t)end.tv_sec * 1000000000U + (uint64_t)end.tv_nsec;
         atomic_fetch_add(&tmr->total_ns, end_ns - start_ns);
 
@@ -198,9 +198,8 @@ int po_perf_init(size_t expected_counters, size_t expected_timers, size_t expect
     if (!ctx.histograms)
         goto fail;
 
-    ctx.event_q = perf_ringbuf_create(next_pow2(
-        (expected_counters + expected_timers + expected_histograms) * 2
-    ));
+    ctx.event_q = perf_ringbuf_create(
+        next_pow2((expected_counters + expected_timers + expected_histograms) * 2));
     if (!ctx.event_q)
         goto fail;
 
@@ -386,7 +385,7 @@ int po_perf_timer_stop(const char *name) {
     }
 
     perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
-    if (!e) 
+    if (!e)
         return -1;
 
     e->type = EV_TIMER_STOP;
@@ -504,8 +503,7 @@ int po_perf_flush(void) {
         if (cnt == 0) {
             if (stable++ > 2)
                 return 0; // observed empty multiple consecutive times
-        }
-        else
+        } else
             stable = 0;
 
         if (cnt == last && cnt == 0)

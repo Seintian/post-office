@@ -38,24 +38,11 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
     size_t aligned = (region_size + page_2mb - 1) & ~(page_2mb - 1);
 
     // Try mmap with 2 MiB huge pages
-    void *base = mmap(
-        NULL,
-        aligned,
-        PROT_READ | PROT_WRITE,
-        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | (21 << MAP_HUGE_SHIFT),
-        -1,
-        0
-    );
+    void *base = mmap(NULL, aligned, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | (21 << MAP_HUGE_SHIFT), -1, 0);
     if (base == MAP_FAILED) {
         // fallback to normal pages
-        base = mmap(
-            NULL,
-            aligned,
-            PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_ANONYMOUS,
-            -1,
-            0
-        );
+        base = mmap(NULL, aligned, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (base == MAP_FAILED) {
             errno = ZCP_EMMAP;
             return NULL;
