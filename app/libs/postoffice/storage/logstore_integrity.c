@@ -46,10 +46,9 @@ static int _integrity_cb(const void *k, size_t klen, const void *v, size_t vlen,
         return 0;
     }
 
-    if (pread(s->ls->fd, &kl_real, sizeof(kl_real), (off_t)off) !=
-        (ssize_t)sizeof(kl_real) ||
+    if (pread(s->ls->fd, &kl_real, sizeof(kl_real), (off_t)off) != (ssize_t)sizeof(kl_real) ||
         pread(s->ls->fd, &vl_real, sizeof(vl_real), (off_t)(off + sizeof(uint32_t))) !=
-        (ssize_t)sizeof(vl_real)) {
+            (ssize_t)sizeof(vl_real)) {
         s->st->errors++;
         return 0;
     }
@@ -64,7 +63,7 @@ static int _integrity_cb(const void *k, size_t klen, const void *v, size_t vlen,
 
             s->st->pruned++;
         }
-    
+
         return 0;
     }
 
@@ -88,8 +87,7 @@ static int _integrity_cb(const void *k, size_t klen, const void *v, size_t vlen,
         return 0;
     }
 
-    if (pread(s->ls->fd, kbuf, kl_real, (off_t)(off + sizeof(uint32_t) * 2)) !=
-        (ssize_t)kl_real) {
+    if (pread(s->ls->fd, kbuf, kl_real, (off_t)(off + sizeof(uint32_t) * 2)) != (ssize_t)kl_real) {
         free(kbuf);
         s->st->errors++;
         return 0;
@@ -115,11 +113,8 @@ static int _integrity_cb(const void *k, size_t klen, const void *v, size_t vlen,
     return 0;
 }
 
-int _ls_integrity_scan(
-    po_logstore_t *ls,
-    int prune_nonexistent,
-    po_logstore_integrity_stats *out_stats
-) {
+int _ls_integrity_scan(po_logstore_t *ls, int prune_nonexistent,
+                       po_logstore_integrity_stats *out_stats) {
     if (!ls)
         return -1;
 

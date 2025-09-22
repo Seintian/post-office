@@ -11,8 +11,8 @@
 
 #include "storage/logstore.h"
 
-#include "storage/logstore_internal.h"
 #include "metrics/metrics.h"
+#include "storage/logstore_internal.h"
 
 // Standard headers needed for open/close & API functions
 #include <errno.h>

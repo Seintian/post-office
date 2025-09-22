@@ -48,8 +48,10 @@ void *_ls_worker_main(void *arg) {
         return NULL;
 
     PO_METRIC_TIMER_CREATE("logstore.flush.ns");
-    static const uint64_t _flush_bins[] = {1000,5000,10000,50000,100000,500000,1000000,5000000,10000000};
-    PO_METRIC_HISTO_CREATE("logstore.flush.latency", _flush_bins, sizeof(_flush_bins)/sizeof(_flush_bins[0]));
+    static const uint64_t _flush_bins[] = {1000,   5000,    10000,   50000,   100000,
+                                           500000, 1000000, 5000000, 10000000};
+    PO_METRIC_HISTO_CREATE("logstore.flush.latency", _flush_bins,
+                           sizeof(_flush_bins) / sizeof(_flush_bins[0]));
     atomic_store(&ls->worker_ready, 1); // signal readiness so open() can proceed
 
     for (;;) {
@@ -66,10 +68,10 @@ void *_ls_worker_main(void *arg) {
                 break;
             continue; // spurious wake
         }
-    PO_METRIC_COUNTER_INC("logstore.flush.batch_count");
-    PO_METRIC_COUNTER_ADD("logstore.flush.batch_records", n);
-    PO_METRIC_TIMER_START("logstore.flush.ns");
-    PO_METRIC_TICK(_flush_start);
+        PO_METRIC_COUNTER_INC("logstore.flush.batch_count");
+        PO_METRIC_COUNTER_ADD("logstore.flush.batch_records", n);
+        PO_METRIC_TIMER_START("logstore.flush.ns");
+        PO_METRIC_TICK(_flush_start);
         if (n == 1) {
             append_req_t *only = (append_req_t *)batch[0];
             if (only && only->k == NULL && only->v == NULL) {
@@ -119,11 +121,18 @@ void *_ls_worker_main(void *arg) {
         uint32_t *kls_arr = malloc(sizeof(uint32_t) * (size_t)live);
         if (po_test_logstore_fail_vector_alloc && po_test_logstore_fail_vector_alloc()) {
             // Simulate allocation failure by freeing any partial buffers and nulling pointers.
-            if (iov) free(iov);
-            if (offs) free(offs);
-            if (lens) free(lens);
-            if (kls_arr) free(kls_arr);
-            iov = NULL; offs = NULL; lens = NULL; kls_arr = NULL;
+            if (iov)
+                free(iov);
+            if (offs)
+                free(offs);
+            if (lens)
+                free(lens);
+            if (kls_arr)
+                free(kls_arr);
+            iov = NULL;
+            offs = NULL;
+            lens = NULL;
+            kls_arr = NULL;
         }
         if (!iov || !offs || !lens || !kls_arr) {
             // Allocation failure for vectorized flush path: free any partial allocations
@@ -136,7 +145,10 @@ void *_ls_worker_main(void *arg) {
                 free(lens);
             if (kls_arr)
                 free(kls_arr);
-            iov = NULL; offs = NULL; lens = NULL; kls_arr = NULL;
+            iov = NULL;
+            offs = NULL;
+            lens = NULL;
+            kls_arr = NULL;
 
             for (ssize_t i = 0; i < n; ++i) {
                 append_req_t *req = (append_req_t *)batch[i];
@@ -254,11 +266,11 @@ void *_ls_worker_main(void *arg) {
         }
         atomic_fetch_add(&ls->metric_records_flushed, (uint64_t)live);
         atomic_fetch_add(&ls->metric_batches_flushed, 1);
-    PO_METRIC_COUNTER_ADD("logstore.flush.records", live);
-    PO_METRIC_COUNTER_INC("logstore.flush.batch_count");
-    PO_METRIC_TIMER_STOP("logstore.flush.ns");
-    uint64_t elapsed = PO_METRIC_ELAPSED_NS(_flush_start);
-    PO_METRIC_HISTO_RECORD("logstore.flush.latency", elapsed);
+        PO_METRIC_COUNTER_ADD("logstore.flush.records", live);
+        PO_METRIC_COUNTER_INC("logstore.flush.batch_count");
+        PO_METRIC_TIMER_STOP("logstore.flush.ns");
+        uint64_t elapsed = PO_METRIC_ELAPSED_NS(_flush_start);
+        PO_METRIC_HISTO_RECORD("logstore.flush.latency", elapsed);
         if (sentinel_seen && ls->sentinel) {
             free(ls->sentinel);
             ls->sentinel = NULL;
