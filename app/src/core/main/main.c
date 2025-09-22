@@ -1,5 +1,6 @@
 #include <postoffice/log/logger.h>
-#include <postoffice/metrics/metrics.h> // metrics init
+#include <postoffice/metrics/metrics.h>
+#include <postoffice/tui/ui.h>
 #include <postoffice/utils/argv.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -21,9 +22,8 @@ int main(int argc, char **argv) {
 
     // Initialize logger according to CLI
     po_logger_config_t cfg = {
-        .level = (args.loglevel >= 0 && args.loglevel <= 5)
-            ? (po_log_level_t)args.loglevel
-            : LOG_INFO,
+        .level =
+            (args.loglevel >= 0 && args.loglevel <= 5) ? (po_log_level_t)args.loglevel : LOG_INFO,
         .ring_capacity = 1u << 14, // 16384 entries
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
@@ -45,6 +45,35 @@ int main(int argc, char **argv) {
 
     // Example metric usage at startup
     PO_METRIC_COUNTER_INC("app.start");
+
+    // Optional: TUI smoke demo
+    if (args.tui_demo) {
+        po_tui_app *app = NULL;
+        po_tui_config tcfg = {
+            .width_override = 40, .height_override = 6, .flags = PO_TUI_FLAG_DISABLE_TERM};
+        if (po_tui_init(&app, &tcfg) == 0) {
+            po_tui_add_label(app, 2, 1, "Post Office TUI Demo");
+            po_tui_add_label(app, 2, 3, "Hello, world!");
+            po_tui_render(app);
+            char buf[4096];
+            size_t written = 0;
+            if (po_tui_snapshot(app, buf, sizeof(buf), &written) == 0) {
+                // Print a visible header and the snapshot
+                fwrite("\n=== TUI DEMO SNAPSHOT ===\n", 1, 26, stdout);
+                fwrite(buf, 1, written, stdout);
+                fwrite("\n=========================\n", 1, 27, stdout);
+                fflush(stdout);
+            }
+            po_tui_shutdown(app);
+        } else {
+            fprintf(stderr, "TUI demo: initialization failed\n");
+        }
+        // Clean shutdown and exit
+        po_logger_shutdown();
+        po_metrics_shutdown();
+        po_args_destroy(&args);
+        return 0;
+    }
 
     // TODO: wire configuration file and launch application subsystems
 

@@ -12,6 +12,7 @@ void po_args_init(po_args_t *args) {
     args->loglevel = 0;
     args->syslog = false;
     args->syslog_ident = NULL;
+    args->tui_demo = false;
 }
 
 void po_args_print_usage(int fd, const char *prog_name) {
@@ -22,7 +23,8 @@ void po_args_print_usage(int fd, const char *prog_name) {
             "  -c, --config FILE     Path to configuration file\n"
             "  -l, --loglevel LEVEL  Set log level (TRACE|DEBUG|INFO|WARN|ERROR|FATAL or 0..5)\n"
             "      --syslog          Enable syslog logging sink\n"
-            "      --syslog-ident S  Set syslog ident (default: 'postoffice')\n");
+            "      --syslog-ident S  Set syslog ident (default: 'postoffice')\n"
+            "      --tui-demo        Run a minimal TUI smoke demo and exit\n");
 }
 
 void po_args_destroy(po_args_t *args) {
@@ -33,13 +35,11 @@ void po_args_destroy(po_args_t *args) {
 }
 
 int po_args_parse(po_args_t *args, int argc, char **argv, int fd) {
-    static struct option long_opts[] = {{"help", no_argument, NULL, 'h'},
-                                        {"version", no_argument, NULL, 'v'},
-                                        {"loglevel", required_argument, NULL, 'l'},
-                                        {"config", required_argument, NULL, 'c'},
-                                        {"syslog", no_argument, NULL, 1},
-                                        {"syslog-ident", required_argument, NULL, 2},
-                                        {NULL, 0, NULL, 0}};
+    static struct option long_opts[] = {
+        {"help", no_argument, NULL, 'h'},           {"version", no_argument, NULL, 'v'},
+        {"loglevel", required_argument, NULL, 'l'}, {"config", required_argument, NULL, 'c'},
+        {"syslog", no_argument, NULL, 1},           {"syslog-ident", required_argument, NULL, 2},
+        {"tui-demo", no_argument, NULL, 3},         {NULL, 0, NULL, 0}};
 
     int opt;
     int opt_index = 0;
@@ -93,6 +93,10 @@ int po_args_parse(po_args_t *args, int argc, char **argv, int fd) {
         case 2: // --syslog-ident
             free(args->syslog_ident);
             args->syslog_ident = strdup(optarg);
+            break;
+
+        case 3: // --tui-demo
+            args->tui_demo = true;
             break;
 
         case '?':
