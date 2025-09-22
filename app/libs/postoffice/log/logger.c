@@ -7,7 +7,6 @@
 #endif
 
 #include "log/logger.h"
-#include "metrics/metrics.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -22,6 +21,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "metrics/metrics.h"
 #include "perf/batcher.h"
 #include "perf/ringbuf.h"
 #include "utils/errors.h"
@@ -73,14 +73,9 @@ static log_record_t *g_pool = NULL;
 static size_t g_pool_n = 0;
 static log_record_t g_sentinel; // shutdown marker (never in freelist)
 
-static const char *const level_metrics[] = {
-    "logger.level.trace",
-    "logger.level.debug",
-    "logger.level.info",
-    "logger.level.warn",
-    "logger.level.error",
-    "logger.level.fatal"
-};
+static const char *const level_metrics[] = {"logger.level.trace", "logger.level.debug",
+                                            "logger.level.info",  "logger.level.warn",
+                                            "logger.level.error", "logger.level.fatal"};
 
 // --- Helpers ---
 static inline uint64_t get_tid(void) {
@@ -101,11 +96,8 @@ static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
     strftime(tsbuf, sizeof(tsbuf), "%Y-%m-%d %H:%M:%S", &tm);
 
     long usec = r->ts.tv_nsec / 1000L; // microseconds
-    snprintf(
-        out, outsz,
-        "%s.%06ld %lu %-5s %s:%d %s() - %s\n",
-        tsbuf, usec, r->tid, lvlstr[r->level], r->file, r->line, r->func, r->msg
-    );
+    snprintf(out, outsz, "%s.%06ld %lu %-5s %s:%d %s() - %s\n", tsbuf, usec, r->tid,
+             lvlstr[r->level], r->file, r->line, r->func, r->msg);
 }
 
 static inline int syslog_priority_for_level(uint8_t lvl) {
@@ -142,11 +134,8 @@ static void write_record(const log_record_t *r) {
         fputs(line, g_fp);
 
     if ((g_sinks_mask & LOGGER_SINK_SYSLOG) && g_syslog_open)
-        syslog(
-            syslog_priority_for_level(r->level),
-            "%s:%d %s() - %s",
-            r->file, r->line, r->func, r->msg
-        );
+        syslog(syslog_priority_for_level(r->level), "%s:%d %s() - %s", r->file, r->line, r->func,
+               r->msg);
 
     for (custom_sink_t *c = g_custom_sinks; c; c = c->next)
         c->fn(line, c->ud);
@@ -409,8 +398,7 @@ static void enqueue_record(log_record_t *rec) {
             PO_METRIC_COUNTER_INC("logger.enqueue");
             return;
         }
-    }
-    else if (perf_ringbuf_enqueue(g_ring, rec) == 0) {
+    } else if (perf_ringbuf_enqueue(g_ring, rec) == 0) {
         PO_METRIC_COUNTER_INC("logger.enqueue");
         return;
     }
@@ -431,8 +419,7 @@ static void enqueue_record(log_record_t *rec) {
     if (g_batcher) {
         if (perf_batcher_enqueue(g_batcher, rec) == 0)
             PO_METRIC_COUNTER_INC("logger.enqueue");
-    }
-    else if (perf_ringbuf_enqueue(g_ring, rec) == 0)
+    } else if (perf_ringbuf_enqueue(g_ring, rec) == 0)
         PO_METRIC_COUNTER_INC("logger.enqueue");
 }
 
@@ -440,11 +427,8 @@ static inline int should_emit_overflow_notice(unsigned long v) {
     return (v != 0ul) && ((v & (v - 1ul)) == 0ul);
 }
 
-static inline void fill_overflow_notice(
-    log_record_t *rec,
-    unsigned long dropped,
-    unsigned long overwritten
-) {
+static inline void fill_overflow_notice(log_record_t *rec, unsigned long dropped,
+                                        unsigned long overwritten) {
     clock_gettime(CLOCK_REALTIME, &rec->ts);
     rec->tid = get_tid();
     rec->level = (uint8_t)LOG_ERROR;
@@ -452,21 +436,13 @@ static inline void fill_overflow_notice(
     rec->file[0] = '\0';
     strncpy(rec->func, "logger", sizeof(rec->func) - 1);
     rec->func[sizeof(rec->func) - 1] = '\0';
-    snprintf(
-        rec->msg, sizeof(rec->msg),
-        "logger overflow: dropped_new=%lu overwritten_old=%lu (policy=%s)",
-        dropped, overwritten, g_policy == LOGGER_DROP_NEW ? "DROP_NEW" : "OVERWRITE_OLDEST"
-    );
+    snprintf(rec->msg, sizeof(rec->msg),
+             "logger overflow: dropped_new=%lu overwritten_old=%lu (policy=%s)", dropped,
+             overwritten, g_policy == LOGGER_DROP_NEW ? "DROP_NEW" : "OVERWRITE_OLDEST");
 }
 
-void po_logger_logv(
-    po_log_level_t level,
-    const char *file,
-    int line,
-    const char *func,
-    const char *fmt,
-    va_list ap
-) {
+void po_logger_logv(po_log_level_t level, const char *file, int line, const char *func,
+                    const char *fmt, va_list ap) {
     if (!g_ring)
         return; // not initialized yet
 
@@ -474,16 +450,14 @@ void po_logger_logv(
     if (perf_ringbuf_dequeue(g_free, &ptr) != 0) {
         PO_METRIC_COUNTER_INC("logger.no_free_record");
 
-        unsigned long dropped = atomic_fetch_add_explicit(
-            &g_dropped_new, 1, memory_order_relaxed
-        ) + 1ul;
+        unsigned long dropped =
+            atomic_fetch_add_explicit(&g_dropped_new, 1, memory_order_relaxed) + 1ul;
         if (should_emit_overflow_notice(dropped)) {
             PO_METRIC_COUNTER_INC("logger.overflow.notice");
 
             log_record_t w2;
-            unsigned long overwritten = atomic_load_explicit(
-                &g_overwritten_old, memory_order_relaxed
-            );
+            unsigned long overwritten =
+                atomic_load_explicit(&g_overwritten_old, memory_order_relaxed);
             fill_overflow_notice(&w2, dropped, overwritten);
             write_record(&w2);
         }
@@ -503,8 +477,7 @@ void po_logger_logv(
         memcpy(r->file, file + (n >= sizeof(r->file) ? n - (sizeof(r->file) - 1) : 0),
                n >= sizeof(r->file) ? sizeof(r->file) - 1 : n);
         r->file[sizeof(r->file) - 1] = '\0';
-    }
-    else
+    } else
         r->file[0] = '\0';
 
     if (func) {
@@ -533,8 +506,7 @@ void po_logger_logv(
                 write_record(w);
                 recycle_record(w);
             }
-        }
-        else {
+        } else {
             log_record_t w2;
             fill_overflow_notice(&w2, dropped, overwritten);
             write_record(&w2);
@@ -542,14 +514,8 @@ void po_logger_logv(
     }
 }
 
-void po_logger_log(
-    po_log_level_t level,
-    const char *file,
-    int line,
-    const char *func,
-    const char *fmt,
-    ...
-) {
+void po_logger_log(po_log_level_t level, const char *file, int line, const char *func,
+                   const char *fmt, ...) {
     if ((level < (po_log_level_t)LOGGER_COMPILE_LEVEL) ||
         (level < (po_log_level_t)_logger_runtime_level))
         return;

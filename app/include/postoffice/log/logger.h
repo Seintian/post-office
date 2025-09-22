@@ -116,8 +116,9 @@ typedef struct po_logger_config {
     size_t ring_capacity; /**< Capacity of the internal ring buffer (prefer power-of-two). */
     unsigned consumers;   /**< Number of consumer threads draining the queue. */
     po_logger_overflow_policy_t policy; /**< Overflow behavior when queue is full. */
-    size_t cacheline_bytes; /**< Optional hardware cacheline size hint for internal ring buffers.
-                                 If 0, a default of 64 is used. Must be a power of two if provided. */
+    size_t
+        cacheline_bytes; /**< Optional hardware cacheline size hint for internal ring buffers.
+                              If 0, a default of 64 is used. Must be a power of two if provided. */
 } po_logger_config_t;
 
 // Initialization and control
@@ -196,7 +197,8 @@ int po_logger_add_sink_syslog(const char *ident);
  * @param udata User pointer passed to callback
  * @return 0 on success, -1 on error
  */
-int po_logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *udata) __nonnull((1));
+int po_logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *udata)
+    __nonnull((1));
 
 // Fast-path check
 /**
