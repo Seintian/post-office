@@ -24,20 +24,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct po_tui_app po_tui_app; /* opaque */
+/* Opaque types are declared in types.h */
 
 typedef struct po_tui_config {
-	int width_override;   /* <=0 => detect / default */
-	int height_override;  /* <=0 => detect / default */
-	unsigned flags;       /* reserved for future (e.g., disable_term) */
+    int width_override;  /* <=0 => detect / default */
+    int height_override; /* <=0 => detect / default */
+    unsigned flags;      /* reserved for future (e.g., disable_term) */
 } po_tui_config;
 
 enum {
-	PO_TUI_FLAG_DISABLE_TERM = 0x1u /* force off-screen buffer only */
+    PO_TUI_FLAG_DISABLE_TERM = 0x1u /* force off-screen buffer only */
 };
 
 /**
@@ -81,6 +83,18 @@ int po_tui_render(po_tui_app *app);
  * @return 0 on success, -1 on failure
  */
 int po_tui_snapshot(const po_tui_app *app, char *out, size_t out_size, size_t *written);
+
+/**
+ * Root composition: set/get the root widget tree.
+ */
+int po_tui_set_root(po_tui_app *app, po_tui_widget *root);
+po_tui_widget *po_tui_get_root(po_tui_app *app);
+
+/**
+ * Event loop helpers (optional): single-step tick and render, if app wants.
+ */
+int po_tui_tick(po_tui_app *app, double frame_budget_ms);
+int po_tui_present(po_tui_app *app);
 
 #ifdef __cplusplus
 }

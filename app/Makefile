@@ -75,7 +75,7 @@ EXPLODE_INI_PATH       = $(CONFIG_DIR)/explode.ini
 # *** Compiler flags *** #
 
 INCLUDES_I = -I$(INCLUDE_DIR) -I$(POSTOFFICE_INCLUDE_DIR) -I$(THIRDPARTY_INCLUDE_DIR)
-LIBS_I     = -I$(POSTOFFICE_LIBS_DIR) -I$(THIRDPARTY_LIBS_DIR)
+LIBS_I     = -I$(POSTOFFICE_LIBS_DIR) -I$(POSTOFFICE_LIBS_DIR)/tui -I$(THIRDPARTY_LIBS_DIR)
 CORE_I     = -I$(CORE_SRC_DIR)/main -I$(CORE_SRC_DIR)/simulation
 SRC_I      = -I$(SRC_DIR)
 
@@ -122,7 +122,7 @@ else
 endif
 
 # Linker flags
-LDFLAGS = -ldl -lrt -lpthread -flto=auto -Wl,--gc-sections \
+LDFLAGS = -ldl -lrt -lpthread -lncurses -flto=auto -Wl,--gc-sections \
 -fPIE -pie -Wl,-z,relro,-z,now -rdynamic
 PROFILER = # strace -e trace=all -o strace.log
 

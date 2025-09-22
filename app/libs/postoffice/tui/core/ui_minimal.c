@@ -3,12 +3,12 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include "tui/ui.h"
-
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "tui/ui.h"
 
 // Opaque structures
 struct po_tui_label {
@@ -78,7 +78,8 @@ void po_tui_shutdown(po_tui_app *app) {
     if (!app)
         return;
 
-    for (size_t i = 0; i < app->labels_count; ++i) free(app->labels[i].text);
+    for (size_t i = 0; i < app->labels_count; ++i)
+        free(app->labels[i].text);
     free(app->labels);
     free(app->buffer);
     free(app);
@@ -143,7 +144,7 @@ int po_tui_snapshot(const po_tui_app *app, char *out, size_t out_size, size_t *w
     for (int row = 0; row < app->height; ++row) {
         size_t line_len = (size_t)app->width;
         if (produced + line_len + 1 >= out_size) { // reserve space for NUL
-            line_len = out_size - produced - 2; // -1 newline -1 NUL
+            line_len = out_size - produced - 2;    // -1 newline -1 NUL
             if ((ssize_t)line_len < 0)
                 line_len = 0;
         }
