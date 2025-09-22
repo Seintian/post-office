@@ -1,9 +1,9 @@
 // tests/net/test_socket.c
+#include <errno.h>
 #include <fcntl.h>
 #include <netinet/tcp.h>
+#include <string.h>
 #include <sys/socket.h>
-#include <errno.h>
- #include <string.h>
 
 #include "net/socket.h" // provides PO_SOCKET_WOULDBLOCK sentinel
 #include "unity/unity_fixture.h"

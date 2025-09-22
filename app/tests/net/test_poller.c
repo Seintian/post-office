@@ -90,7 +90,7 @@ TEST(POLLER, TIMED_WAIT_WAKE_BEFORE_TIMEOUT) {
     // Trigger wake before calling timed wait to simulate asynchronous wake
     TEST_ASSERT_EQUAL_INT(0, poller_wake(p));
     int n = poller_timed_wait(p, ev, 4, 200, &timed_out);
-    TEST_ASSERT_EQUAL_INT(0, n); // wake only (no external events)
+    TEST_ASSERT_EQUAL_INT(0, n);  // wake only (no external events)
     TEST_ASSERT_FALSE(timed_out); // should not be reported as a timeout
     poller_destroy(p);
 }

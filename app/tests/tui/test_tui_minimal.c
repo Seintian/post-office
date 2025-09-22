@@ -1,11 +1,14 @@
-#include "unity/unity_fixture.h"
-#include "tui/ui.h"
 #include <string.h>
+
+#include "tui/ui.h"
+#include "unity/unity_fixture.h"
 
 TEST_GROUP(TUI);
 
-TEST_SETUP(TUI) { }
-TEST_TEAR_DOWN(TUI) { }
+TEST_SETUP(TUI) {
+}
+TEST_TEAR_DOWN(TUI) {
+}
 
 TEST(TUI, INIT_AND_SNAPSHOT_EMPTY) {
     po_tui_app *app = NULL;
@@ -24,7 +27,7 @@ TEST(TUI, INIT_AND_SNAPSHOT_EMPTY) {
 }
 
 TEST(TUI, ADD_LABEL_AND_SNAPSHOT) {
-    po_tui_config cfg = { .width_override = 20, .height_override = 5 };
+    po_tui_config cfg = {.width_override = 20, .height_override = 5};
     po_tui_app *app = NULL;
     TEST_ASSERT_EQUAL_INT(0, po_tui_init(&app, &cfg));
     TEST_ASSERT_GREATER_OR_EQUAL(0, po_tui_add_label(app, 2, 1, "Hello"));

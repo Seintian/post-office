@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "unity/unity_fixture.h"
 #include "random/random.h"
+#include "unity/unity_fixture.h"
 
 TEST_GROUP(RANDOM);
 

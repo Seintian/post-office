@@ -148,19 +148,21 @@ TEST(APP, MAIN_LOOP_END_TO_END) {
 
 // Additional integration: exercise metrics facade, random, hashset/hashtable, argv, sysinfo,
 // storage high-level API and logger sink attachment.
-#include "metrics/metrics.h"
-#include "random/random.h"
-#include "utils/argv.h"
-#include "utils/files.h"
-#include "utils/errors.h"
-#include "sysinfo/sysinfo.h"
 #include "hashset/hashset.h"
 #include "hashtable/hashtable.h"
-#include "storage/storage.h"
 #include "log/logger.h"
+#include "metrics/metrics.h"
+#include "random/random.h"
+#include "storage/storage.h"
+#include "sysinfo/sysinfo.h"
+#include "utils/argv.h"
+#include "utils/errors.h"
+#include "utils/files.h"
 
 // Local helpers for hash structures (file scope so they can be referenced in test).
-static int str_compare(const void *a, const void *b) { return strcmp((const char *)a, (const char *)b); }
+static int str_compare(const void *a, const void *b) {
+    return strcmp((const char *)a, (const char *)b);
+}
 static unsigned long str_hash(const void *p) {
     const unsigned char *s = (const unsigned char *)p;
     unsigned long h = 5381;
@@ -187,7 +189,7 @@ TEST(APP, METRICS_AND_PUBLIC_APIS_SMOKE) {
     // Random utilities (use public po_rand_* API)
     uint32_t r1 = (uint32_t)po_rand_u32();
     uint32_t r2 = (uint32_t)po_rand_range_i64(1, 100); // inclusive range
-    TEST_ASSERT_NOT_EQUAL(r1, r2); // probabilistic but fine for smoke
+    TEST_ASSERT_NOT_EQUAL(r1, r2);                     // probabilistic but fine for smoke
 
     // Hashset usage (create with compare + hash)
     po_hashset_t *hs = po_hashset_create(str_compare, str_hash);
@@ -208,19 +210,32 @@ TEST(APP, METRICS_AND_PUBLIC_APIS_SMOKE) {
     TEST_ASSERT_GREATER_OR_EQUAL_INT(1, info.physical_cores);
 
     // argv parsing (simulate program with log level + syslog enabled)
-    po_args_t args; po_args_init(&args);
-    char *argvv[] = { (char*)"test", (char*)"--loglevel", (char*)"2", (char*)"--syslog" };
+    po_args_t args;
+    po_args_init(&args);
+    char *argvv[] = {(char *)"test", (char *)"--loglevel", (char *)"2", (char *)"--syslog"};
     TEST_ASSERT_EQUAL_INT(0, po_args_parse(&args, 4, argvv, fileno(stdout)));
     TEST_ASSERT_TRUE(args.syslog);
     po_args_destroy(&args);
 
     // Logger + storage high-level API (attach sink)
-    po_logger_config_t lcfg = { .level = LOG_INFO, .ring_capacity = 256, .consumers = 1, .policy = LOGGER_OVERWRITE_OLDEST, .cacheline_bytes = 64 };
+    po_logger_config_t lcfg = {.level = LOG_INFO,
+                               .ring_capacity = 256,
+                               .consumers = 1,
+                               .policy = LOGGER_OVERWRITE_OLDEST,
+                               .cacheline_bytes = 64};
     TEST_ASSERT_EQUAL_INT(0, po_logger_init(&lcfg));
-    char tdir[] = "/tmp/po_storageXXXXXX"; TEST_ASSERT_NOT_NULL(mkdtemp(tdir));
-    po_storage_config_t scfg = { .dir = tdir, .bucket = "idx", .map_size = 1<<20, .ring_capacity = 64, .batch_size = 8, .fsync_policy = PO_LS_FSYNC_NONE, .attach_logger_sink = false };
+    char tdir[] = "/tmp/po_storageXXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(tdir));
+    po_storage_config_t scfg = {.dir = tdir,
+                                .bucket = "idx",
+                                .map_size = 1 << 20,
+                                .ring_capacity = 64,
+                                .batch_size = 8,
+                                .fsync_policy = PO_LS_FSYNC_NONE,
+                                .attach_logger_sink = false};
     TEST_ASSERT_EQUAL_INT(0, po_storage_init(&scfg));
-    // simple key/value via logstore public API (if available) skipped; ensure logstore instance exists
+    // simple key/value via logstore public API (if available) skipped; ensure logstore instance
+    // exists
     TEST_ASSERT_NOT_NULL(po_storage_logstore());
     po_storage_shutdown();
     po_logger_shutdown();
