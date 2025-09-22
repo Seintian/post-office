@@ -4,19 +4,15 @@
  */
 
 #include "net/protocol.h"
-#include "metrics/metrics.h"
 
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <string.h>
 
-int protocol_encode(
-    uint8_t msg_type,
-    uint8_t flags,
-    const void *payload,
-    uint32_t payload_len,
-    po_header_t *out_hdr
-) {
+#include "metrics/metrics.h"
+
+int protocol_encode(uint8_t msg_type, uint8_t flags, const void *payload, uint32_t payload_len,
+                    po_header_t *out_hdr) {
     if (!out_hdr)
         return -1;
 
@@ -32,12 +28,8 @@ int protocol_encode(
     return 0;
 }
 
-int protocol_decode(
-    const po_header_t *net_hdr,
-    void *payload_buf,
-    uint32_t payload_buf_size,
-    uint32_t *payload_len_out
-) {
+int protocol_decode(const po_header_t *net_hdr, void *payload_buf, uint32_t payload_buf_size,
+                    uint32_t *payload_len_out) {
     if (!net_hdr)
         return -1;
 

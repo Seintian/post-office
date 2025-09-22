@@ -9,10 +9,10 @@
 #ifndef _POLLER_H
 #define _POLLER_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <sys/cdefs.h>
 #include <sys/epoll.h>
-#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -96,11 +96,10 @@ int poller_wake(const poller_t *poller) __nonnull((1));
  * @return number of events (>0), 0 on wake/timeout (check *timed_out), -1 on error.
  */
 int poller_timed_wait(const poller_t *poller, struct epoll_event *events, int max_events,
-                      int total_timeout_ms, bool *timed_out) __nonnull((1,2));
+                      int total_timeout_ms, bool *timed_out) __nonnull((1, 2));
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
 
 #endif // _POLLER_H

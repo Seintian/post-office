@@ -4,10 +4,10 @@
  */
 
 #include "net/net.h"
-#include "metrics/metrics.h"
 
 #include <errno.h>
 
+#include "metrics/metrics.h"
 #include "net/framing.h"
 #include "net/protocol.h"
 #include "perf/zerocopy.h"
@@ -83,13 +83,8 @@ void net_zcp_release_rx(void *buf) {
     }
 }
 
-int net_send_message(
-    int fd,
-    uint8_t msg_type,
-    uint8_t flags,
-    const uint8_t *payload,
-    uint32_t payload_len
-) {
+int net_send_message(int fd, uint8_t msg_type, uint8_t flags, const uint8_t *payload,
+                     uint32_t payload_len) {
     PO_METRIC_COUNTER_INC("net.send");
     PO_METRIC_COUNTER_ADD("net.send.bytes", payload_len);
 
@@ -103,13 +98,8 @@ int net_send_message(
     return rc;
 }
 
-int net_send_message_zcp(
-    int fd,
-    uint8_t msg_type,
-    uint8_t flags,
-    void *payload_buf,
-    uint32_t payload_len
-) {
+int net_send_message_zcp(int fd, uint8_t msg_type, uint8_t flags, void *payload_buf,
+                         uint32_t payload_len) {
     PO_METRIC_COUNTER_INC("net.send.zcp");
     PO_METRIC_COUNTER_ADD("net.send.zcp.bytes", payload_len);
 
@@ -128,19 +118,14 @@ int net_recv_message(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
     if (rc == 0) {
         PO_METRIC_COUNTER_INC("net.recv");
         PO_METRIC_COUNTER_ADD("net.recv.bytes", header_out->payload_len);
-    }
-    else if (rc != -2)
+    } else if (rc != -2)
         PO_METRIC_COUNTER_INC("net.recv.fail");
 
     return rc;
 }
 
-int net_recv_message_zcp(
-    int fd,
-    po_header_t *header_out,
-    void **payload_out,
-    uint32_t *payload_len_out
-) {
+int net_recv_message_zcp(int fd, po_header_t *header_out, void **payload_out,
+                         uint32_t *payload_len_out) {
     void *buf = NULL;
     uint32_t buf_cap = 0;
     if (g_rx_pool) {
@@ -158,7 +143,7 @@ int net_recv_message_zcp(
             *payload_out = buf;
             return 0;
         }
-    
+
         perf_zcpool_release(g_rx_pool, buf);
         PO_METRIC_COUNTER_INC("net.recv.zcp.fail");
     }
@@ -171,8 +156,7 @@ int net_recv_message_zcp(
 
         *payload_len_out = header_out->payload_len;
         *payload_out = NULL;
-    }
-    else if (rc != -2)
+    } else if (rc != -2)
         PO_METRIC_COUNTER_INC("net.recv.fail");
 
     return rc;

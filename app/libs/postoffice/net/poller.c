@@ -4,14 +4,15 @@
  */
 
 #include "net/poller.h"
-#include "metrics/metrics.h"
 
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/eventfd.h>
 #include <time.h>
+#include <unistd.h>
+
+#include "metrics/metrics.h"
 
 #ifndef CLOCK_REALTIME
 #define CLOCK_REALTIME ((clockid_t)0)
@@ -170,13 +171,8 @@ int poller_wake(const poller_t *p) {
     return 0;
 }
 
-int poller_timed_wait(
-    const poller_t *p,
-    struct epoll_event *events,
-    int max_events,
-    int total_timeout_ms,
-    bool *timed_out
-) {
+int poller_timed_wait(const poller_t *p, struct epoll_event *events, int max_events,
+                      int total_timeout_ms, bool *timed_out) {
     if (timed_out)
         *timed_out = false;
 
@@ -200,8 +196,8 @@ int poller_timed_wait(
         return -1;
 
     if (n == 0 && timed_out) {
-        long elapsed_ms = (end.tv_sec - start.tv_sec) * 1000L
-            + (end.tv_nsec - start.tv_nsec) / 1000000L;
+        long elapsed_ms =
+            (end.tv_sec - start.tv_sec) * 1000L + (end.tv_nsec - start.tv_nsec) / 1000000L;
         if (elapsed_ms >= total_timeout_ms)
             *timed_out = true; // true timeout
     }

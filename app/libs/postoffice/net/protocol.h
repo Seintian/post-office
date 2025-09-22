@@ -87,18 +87,10 @@ enum {
  * @param flags Message flags bitmask.
  * @param payload_len Payload length in host byte order.
  */
-static inline void protocol_init_header(
-    po_header_t *header,
-    uint8_t msg_type,
-    uint8_t flags,
-    uint32_t payload_len
-) __attribute__((nonnull(1)));
-static inline void protocol_init_header(
-    po_header_t *header,
-    uint8_t msg_type,
-    uint8_t flags,
-    uint32_t payload_len
-) {
+static inline void protocol_init_header(po_header_t *header, uint8_t msg_type, uint8_t flags,
+                                        uint32_t payload_len) __attribute__((nonnull(1)));
+static inline void protocol_init_header(po_header_t *header, uint8_t msg_type, uint8_t flags,
+                                        uint32_t payload_len) {
     header->version = htons((uint16_t)PROTOCOL_VERSION);
     header->msg_type = msg_type;
     header->flags = flags;
@@ -149,13 +141,8 @@ uint32_t protocol_message_size(const po_header_t *header) __attribute__((nonnull
  * @param out_hdr Destination header pointer (host order fields on return).
  * @return 0 on success, -1 on error.
  */
-int protocol_encode(
-    uint8_t msg_type,
-    uint8_t flags,
-    const void *payload,
-    uint32_t payload_len,
-    po_header_t *out_hdr
-);
+int protocol_encode(uint8_t msg_type, uint8_t flags, const void *payload, uint32_t payload_len,
+                    po_header_t *out_hdr);
 
 /**
  * @brief Validate a received header (network order) and report payload length.
@@ -175,12 +162,8 @@ int protocol_encode(
  * @param payload_len_out Optional out parameter for payload length (host order).
  * @return 0 on success, -1 on error.
  */
-int protocol_decode(
-    const po_header_t *net_hdr,
-    void *payload_buf,
-    uint32_t payload_buf_size,
-    uint32_t *payload_len_out
-);
+int protocol_decode(const po_header_t *net_hdr, void *payload_buf, uint32_t payload_buf_size,
+                    uint32_t *payload_len_out);
 
 #ifdef __cplusplus
 }

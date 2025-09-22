@@ -197,11 +197,8 @@ int po_socket_accept(int listen_fd, char *out_addr_buf, size_t addr_buf_len) {
     if (out_addr_buf && addr_buf_len) {
         char host[NI_MAXHOST];
         char serv[NI_MAXSERV];
-        if (getnameinfo(
-            (struct sockaddr *)&ss, slen,
-            host, sizeof(host), serv, sizeof(serv),
-            NI_NUMERICHOST | NI_NUMERICSERV
-        ) == 0)
+        if (getnameinfo((struct sockaddr *)&ss, slen, host, sizeof(host), serv, sizeof(serv),
+                        NI_NUMERICHOST | NI_NUMERICSERV) == 0)
             snprintf(out_addr_buf, addr_buf_len, "%s:%s", host, serv);
 
         else if (addr_buf_len)
@@ -224,8 +221,7 @@ int po_socket_listen_unix(const char *path, int backlog) {
     if (path[0] == '\0') {
         // abstract namespace (Linux): first byte remains 0
         memcpy(sun.sun_path, path, len);
-    }
-    else {
+    } else {
         // filesystem path: unlink if exists
         if (len >= sizeof(sun.sun_path)) {
             close(fd);

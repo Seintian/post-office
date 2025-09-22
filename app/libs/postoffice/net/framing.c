@@ -8,7 +8,6 @@
 #endif
 
 #include "net/framing.h"
-#include "metrics/metrics.h" // metrics
 
 #include <errno.h>
 #include <stdlib.h>
@@ -16,6 +15,7 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include "metrics/metrics.h" // metrics
 #include "perf/zerocopy.h"
 
 // Configurable maximum payload length
@@ -233,7 +233,8 @@ int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
     uint32_t len_be = 0;
     int rc = read_full(fd, &len_be, sizeof(len_be));
     if (rc != 0) {
-        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read.len.fail");
+        if (rc == -1)
+            PO_METRIC_COUNTER_INC("framing.read.len.fail");
         return rc;
     }
 
@@ -247,7 +248,8 @@ int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
     po_header_t net_hdr;
     rc = read_full(fd, &net_hdr, sizeof(net_hdr));
     if (rc != 0) {
-        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read.hdr.fail");
+        if (rc == -1)
+            PO_METRIC_COUNTER_INC("framing.read.hdr.fail");
         return rc;
     }
 
@@ -283,7 +285,8 @@ int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
     rc = read_full(fd, tmp, payload_len);
     free(tmp);
     if (rc != 0) {
-        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read.payload.fail");
+        if (rc == -1)
+            PO_METRIC_COUNTER_INC("framing.read.payload.fail");
         return rc;
     }
     PO_METRIC_COUNTER_INC("framing.read.msg");
@@ -297,7 +300,8 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
     uint32_t len_be = 0;
     int rc = read_full(fd, &len_be, sizeof(len_be));
     if (rc != 0) {
-        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_into.len.fail");
+        if (rc == -1)
+            PO_METRIC_COUNTER_INC("framing.read_into.len.fail");
         return rc;
     }
 
@@ -310,7 +314,8 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
     po_header_t net_hdr;
     rc = read_full(fd, &net_hdr, sizeof(net_hdr));
     if (rc != 0) {
-        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_into.hdr.fail");
+        if (rc == -1)
+            PO_METRIC_COUNTER_INC("framing.read_into.hdr.fail");
         return rc;
     }
 
@@ -328,7 +333,8 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
         return -1;
     }
     if (payload_len == 0) {
-        if (payload_len_out) *payload_len_out = 0;
+        if (payload_len_out)
+            *payload_len_out = 0;
         PO_METRIC_COUNTER_INC("framing.read_into.msg");
         return 0;
     }
@@ -340,7 +346,8 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
 
     rc = read_full(fd, payload_buf, payload_len);
     if (rc != 0) {
-        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_into.payload.fail");
+        if (rc == -1)
+            PO_METRIC_COUNTER_INC("framing.read_into.payload.fail");
         return rc;
     }
 
