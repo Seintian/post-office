@@ -7,8 +7,8 @@ This document provides detailed instructions on how to use the simulation projec
 - [Overview](#overview)
 - [Building the Project](#building-the-project)
 - [Running Modes](#running-modes)
-  - [Full Application](#1-full-application)
-  - [Simulation Only](#2-simulation-only)
+  - [Full Application](#full-application)
+  - [Simulation Only](#simulation-only)
 - [Command-Line Options](#command-line-options)
 - [Configuration Files](#configuration-files)
 - [Interactive Features](#interactive-features)
@@ -72,7 +72,7 @@ The application can be run in two different modes:
 
 \anchor full-application
 
-### 1. Full Application
+### Full Application
 
 The Main process is the full application and can be run with:
 
@@ -113,7 +113,7 @@ The Main process provides all the application's functionality, including:
 
 \anchor simulation-only
 
-### 2. Simulation Only
+### Simulation Only
 
 To run only the simulation component (the Director process) directly, bypassing the Main process:
 
@@ -202,6 +202,8 @@ The application uses a centralized logging system with the following levels:
 - `FATAL`: Critical errors
 
 Logs are written to the `logs/` directory; some are also displayed in the terminal.
+
+\anchor syslog-integration
 
 ### Syslog Integration
 
