@@ -4,6 +4,10 @@
 [![Maintainability](https://qlty.sh/gh/Seintian/projects/post-office/maintainability.svg)](https://qlty.sh/gh/Seintian/projects/post-office)
 [![Code Coverage](https://qlty.sh/gh/Seintian/projects/post-office/coverage.svg)](https://qlty.sh/gh/Seintian/projects/post-office)
 
+## Architecture Overview
+
+For a deep architectural description (process model, subsystems, data flows, storage design, performance/metrics, error handling, extensibility guidelines, and glossary) see the dedicated [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Network Protocol
 
 ```c
