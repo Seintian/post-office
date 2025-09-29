@@ -1,10 +1,64 @@
 /**
  * @file hashtable.h
- * @brief Declares the HashTable API.
- * @ingroup libraries
+ * @ingroup hashtable
+ * @brief Open-addressed hash table (key -> value) with linear probing, dynamic
+ *        resizing, and optional iteration helpers.
  *
- * @see hashtable.c
- * @see prime.h
+ * Design Overview
+ * ---------------
+ *  - Collision Resolution: Linear probing (open addressing). Probe sequence:
+ *        `h, (h+1) % capacity, (h+2) % capacity, ...` until empty / tombstone
+ *        / key match.
+ *  - Resizing: Capacity expands to the next prime when load factor exceeds an
+ *    internal high watermark (e.g. ~0.70). It may shrink when the load factor
+ *    falls below a low watermark to reclaim memory (hysteresis prevents rapid
+ *    oscillation). Exact thresholds are internal implementation details.
+ *  - Hash Function: User supplied; high-quality dispersion is essential to
+ *    maintain expected O(1) average operation time and reduce primary cluster
+ *    formation. Poor hash quality degrades toward O(n).
+ *  - Equality: User supplied compare function (0 => equal) defines key
+ *    equivalence, enabling opaque pointer keys or custom structs.
+ *  - Memory: Table stores raw key + value pointers; does NOT copy or free the
+ *    pointed-to data. Callers manage lifetimes.
+ *
+ * Big-O (Expected / Amortized)
+ * ---------------------------
+ *  - put / get / contains / remove: O(1) expected, O(n) worst-case.
+ *  - resize: O(n) when it occurs, amortized across many operations.
+ *
+ * Iteration Semantics
+ * -------------------
+ *  - Iterator traverses current occupied slots (keys present at iterator
+ *    creation plus any that remain reachable). Mutating the table (put/remove)
+ *    during iteration may invalidate the iterator (unless implementation
+ *    explicitly documents safety; assume NOT safe by default).
+ *  - Order is unspecified and may change after rehash.
+ *
+ * Concurrency
+ * -----------
+ * Not thread-safe. External synchronization required for concurrent access.
+ *
+ * Error Handling
+ * --------------
+ *  - Creation returns NULL on allocation failure (errno typically ENOMEM).
+ *  - put returns -1 on allocation / resize failure.
+ *  - remove returns 0 if key absent.
+ *
+ * Value Replacement
+ * -----------------
+ *  - put updates existing key's value in-place (returns 0 in that case).
+ *  - replace updates only if key exists (returns 1 on success, 0 otherwise).
+ *
+ * Debug / Testing Aids
+ * --------------------
+ *  - load_factor queries current occupancy ratio.
+ *  - keyset / values allocate snapshots of keys / values for enumeration or
+ *    test assertions.
+ *
+ * @see prime.h (capacity growth sequence helper)
+ * @see hashset.h For the set-only variant sharing probing / resizing logic.
+ * @see po_hashtable_put
+ * @see po_hashtable_remove
  */
 
 #ifndef PO_HASHTABLE_H
@@ -28,39 +82,22 @@ typedef struct po_hashtable_iter po_hashtable_iter_t;
 // *** API *** // NOTE: canonical po_hashtable_* names
 
 /**
- * @brief creates a new HashTable
- *
- * Initializes a new hash table with the given comparison and hash functions and a default initial
- * capacity.
- *
- * @param[in] compare The comparison function for keys:
- *                    should return 0 if keys are equal, non-zero otherwise
- * @param[in] hash_func The hash function for keys:
- *                      should return a unique hash (unsigned long) for each key
- * @return Pointer to the newly created hash table on success, or `NULL` on failure
- *
- * @note The default initial capacity is 17.
- * @note The caller is responsible for freeing the hash table.
+ * @brief Create a new hash table with default prime capacity (e.g. 17).
+ * @param compare Equality predicate (0 => equal).
+ * @param hash_func Hash function mapping key -> unsigned long.
+ * @return New table handle or NULL on allocation failure (errno set).
  */
 po_hashtable_t *po_hashtable_create(int (*compare)(const void *, const void *),
                                     unsigned long (*hash_func)(const void *))
     __nonnull((1, 2)) __attribute_malloc__;
 
 /**
- * @brief creates a new HashTable with a specified base capacity
- *
- * Initializes a new hash table with the given comparison,
- * hash functions and a specified base capacity.
- *
- * @param[in] compare The comparison function for keys:
- *                    should return 0 if keys are equal, non-zero otherwise
- * @param[in] hash_func The hash function for keys:
- *                      should return a unique hash (unsigned long) for each key
- * @param[in] base_capacity The base capacity for the new hash table
- * @return Pointer to the newly created hash table on success, or `NULL` on failure
- *
- * @note The caller is responsible for freeing the hash table.
- * @note The base capacity should be a prime number.
+ * @brief Create a table with explicit base capacity.
+ * @param compare Equality predicate.
+ * @param hash_func Hash function.
+ * @param base_capacity Suggested starting capacity (prime recommended). Implementation may round
+ *        to next prime.
+ * @return New table or NULL on allocation failure.
  */
 po_hashtable_t *po_hashtable_create_sized(int (*compare)(const void *, const void *),
                                           unsigned long (*hash_func)(const void *),
@@ -70,236 +107,120 @@ po_hashtable_t *po_hashtable_create_sized(int (*compare)(const void *, const voi
 // *** Basic hash table operations *** //
 
 /**
- * @brief puts a key-value pair into the hash table
+ * @brief Insert or update (key,value).
  *
- * Inserts a key-value pair into the hash table. If the key already exists, the value is updated.
- * If the load factor exceeds the threshold, the table is resized.
- *
- * ```
- * table -> capacity = next_prime(table -> capacity * 2)
- * ```
- *
- * @param[in] table The hash table to insert into
- * @param[in] key The key to insert
- * @param[in] value The value to insert
- * @return 1 if a new key-value pair was inserted, 0 if the key already existed and the value was
- * updated, -1 on failure
+ * Triggers resize when post-insert load factor would exceed high watermark.
+ * @param table Table handle.
+ * @param key Key pointer.
+ * @param value Value pointer.
+ * @return 1 inserted new pair; 0 updated existing; -1 on allocation / internal error.
  */
 int po_hashtable_put(po_hashtable_t *table, void *key, void *value) __nonnull((1, 2));
 
 /**
- * @brief gets the value for a given key
- *
- * Retrieves the value for a given key from the hash table. If the key does not exist, returns NULL.
- *
- * @param[in] table The hash table to retrieve from
- * @param[in] key The key to retrieve
- * @return void * corresponding to the value for the given key, NULL if the key does not exist or
- * the table is NULL
+ * @brief Lookup value for key.
+ * @param table Table handle.
+ * @param key Key pointer.
+ * @return Value pointer or NULL if absent.
  */
 void *po_hashtable_get(const po_hashtable_t *table, const void *key) __nonnull((1, 2));
 
 /**
- * @brief checks if a key exists in the hash table
- *
- * Checks if a key exists in the hash table.
- * Returns 1 if the key exists, 0 otherwise.
- *
- * @param[in] table The hash table to check
- * @param[in] key The key to check for
- * @return integer 1 if the key exists, 0 if it does not
+ * @brief Membership test.
+ * @return 1 present; 0 absent.
  */
 int po_hashtable_contains_key(const po_hashtable_t *table, const void *key) __nonnull((1, 2));
 
 /**
- * @brief removes a key-value pair from the hash table
- *
- * Removes a key-value pair from the hash table.
- * If the load factor falls below the threshold, the table is resized.
- *
- * ```
- * table -> capacity = next_prime(table -> capacity / 2)
- * ```
- *
- * @param[in] table The hash table to remove from
- * @param[in] key The key to remove
- * @return 1 on success, 0 if the key does not exist
+ * @brief Remove key (if present); may trigger shrink at low watermark.
+ * @return 1 removed; 0 not found.
  */
 int po_hashtable_remove(po_hashtable_t *table, const void *key) __nonnull((1, 2));
 
-/**
- * @brief gets the current size of the hash table
- *
- * Returns the current number of key-value pairs in the hash table.
- *
- * @param[in] table The hash table to get the size of
- * @return integer representing the size of the hash table, or -1 on failure
- */
+/** @brief Number of stored key-value pairs. */
 size_t po_hashtable_size(const po_hashtable_t *table) __nonnull((1));
 
-/**
- * @brief gets the current capacity of the hash table
- *
- * Returns the current capacity of the hash table (number of buckets).
- *
- * @param[in] table The hash table to get the capacity of
- * @return integer representing the capacity of the hash table, or -1 on failure
- */
+/** @brief Current bucket capacity. */
 size_t po_hashtable_capacity(const po_hashtable_t *table) __nonnull((1));
 
 /**
- * @brief gets an array of all keys in the hash table
- *
- * Returns an array of all keys in the hash table.
- *
- * @param[in] table The hash table to get the keys from
- * @return void ** corresponding to an array of keys in the hash table,
- *         or `NULL` on failure
- *
- * @note The caller is responsible for freeing the array of keys.
- * @note The array is NOT NULL-terminated. Use size() to determine length.
+ * @brief Snapshot all keys into a newly allocated array (caller frees array).
+ * Array length equals ::po_hashtable_size(); not NULL-terminated.
  */
 void **po_hashtable_keyset(const po_hashtable_t *table) __nonnull((1)) __attribute_malloc__;
 
 /**
- * @brief frees the hash table
- *
- * Frees the hash table and all associated memory. Does not free the keys or values themselves.
- *
- * @param[in] table The hash table to free
+ * @brief Destroy table (keys/values not freed) and NULL handle.
  */
 void po_hashtable_destroy(po_hashtable_t **table) __nonnull((1));
 
 // *** Extended hash table operations *** //
 
 /**
- * @brief Initialize an iterator for the given hashtable.
+ * @brief Allocate an iterator positioned at the first occupied slot.
  *
- * Call this to get an iterator at the start. Then repeatedly call
- * hashtable_iter_next() until it returns false.
- *
- * @note The user is responsible for freeing the iterator after use.
+ * Not safe against concurrent structural modification (put/remove) of @p ht.
  */
 po_hashtable_iter_t *po_hashtable_iterator(const po_hashtable_t *ht);
 
 /**
- * @brief Advance the iterator to the next entry.
- *
- * @param it  Pointer to the iterator.
- * @return true if an entry is available (node/key/value valid),
- *         false when iteration is done.
+ * @brief Advance iterator to next occupied slot.
+ * @return true if a new element is available; false if end reached.
  */
 bool po_hashtable_iter_next(po_hashtable_iter_t *it);
 
-/**
- * @brief Return the key at the iterator's current position.
- */
+/** @brief Current key (undefined if last next() returned false). */
 void *po_hashtable_iter_key(const po_hashtable_iter_t *it);
 
-/**
- * @brief Return the value at the iterator's current position.
- */
+/** @brief Current value (undefined if last next() returned false). */
 void *po_hashtable_iter_value(const po_hashtable_iter_t *it);
 
 /**
- * @brief gets the current load factor of the hash table
- *
- * Returns the current load factor of the hash table (size / capacity).
- *
- * @param[in] table The hash table to get the load factor of
- * @return float representing the load factor of the hash table, or -1 on failure
+ * @brief Current load factor (size / capacity).
  */
 float po_hashtable_load_factor(const po_hashtable_t *table) __nonnull((1));
 
 /**
- * @brief replaces the value for a given key
- *
- * Replaces the value for a given key in the hash table.
- *
- * @param[in] table The hash table to replace in
- * @param[in] key The key to replace
- * @param[in] new_value The new value to insert
- * @return 1 on success, 0 if the key does not exist
+ * @brief Replace existing key's value without inserting if absent.
+ * @return 1 replaced; 0 key not found.
  */
 int po_hashtable_replace(const po_hashtable_t *table, const void *key, void *new_value)
     __nonnull((1, 2));
 
 /**
- * @brief clears all elements from the hash table
- *
- * Clears all elements from the hash table, freeing all associated memory.
- * Does not free the keys or values themselves.
- * Does not free the bucket array itself, either.
- *
- * @param[in] table The hash table to clear
- * @return 1 on success, 0 if the table is already empty
+ * @brief Remove all key-value pairs (capacity may remain; keys/values untouched).
+ * @return 1 cleared; 0 already empty.
  */
 int po_hashtable_clear(po_hashtable_t *table) __nonnull((1));
 
 /**
- * @brief maps a function over all key-value pairs in the hash table
- *
- * The function should take two generic pointers (key, value).
- *
- * @param[in] table The hash table to map over
- * @param[in] func The function to map: should take two generic pointers (key, value)
- *
- * @note The order of the key-value pairs is not guaranteed.
- * @note The function should not free the key or value pointers.
+ * @brief Apply @p func to each (key,value) in unspecified order.
+ * Function must not mutate the table structurally (put/remove) or free keys/values.
  */
 void po_hashtable_map(const po_hashtable_t *table, void (*func)(void *key, void *value))
     __nonnull((1, 2));
 
 /**
- * @brief gets an array of all values in the hash table
- *
- * Returns an array of all values in the hash table.
- * The array is allocated on the heap and must be freed by the caller.
- *
- * @param[in] table The hash table to get the values from
- * @return The array of values in the hash table, or `NULL` on failure
- *
- * @note The caller is responsible for freeing the array of values.
- * @note The array is NOT NULL-terminated. Use size() to determine length.
+ * @brief Snapshot all values into a newly allocated array (caller frees).
+ * Array length equals ::po_hashtable_size(); not NULL-terminated.
  */
 void **po_hashtable_values(const po_hashtable_t *table) __nonnull((1)) __attribute_malloc__;
 
 /**
- * @brief checks if two hash tables are equal
- *
- * Checks if two hash tables are equal.
- * Returns 1 if the hash tables are equal, 0 otherwise.
- *
- * @param[in] table1 The first hash table to compare
- * @param[in] table2 The second hash table to compare
- * @param[in] compare The comparison function for values:
- *                    should return 0 if values are equal, non-zero otherwise
- * @return 1 if the hash tables are equal, 0 if they are not, or -1 on failure
+ * @brief Compare two tables for key set + value equality (by provided value compare).
+ * @return 1 equal; 0 not equal; -1 on internal error.
  */
 int po_hashtable_equals(const po_hashtable_t *table1, const po_hashtable_t *table2,
                         int (*compare)(const void *, const void *)) __nonnull((1, 2, 3));
 
 /**
- * @brief copies a hash table
- *
- * Copies a hash table, creating a new hash table with the same keys and values.
- * All keys and values are copied by reference, not by value.
- *
- * @param[in] table The original hash table to copy
- * @return Pointer to the new hash table - copy, or `NULL` on failure
- *
- * @note The caller is responsible for freeing the new hash table.
+ * @brief Shallow copy (keys/values pointer-copied) of @p table.
+ * @return New table or NULL on failure.
  */
 po_hashtable_t *po_hashtable_copy(const po_hashtable_t *table) __nonnull((1)) __attribute_malloc__;
 
 /**
- * @brief merges two hash tables
- *
- * Merges two hash tables, copying all key-value pairs from the source table to the destination
- * table. If a key already exists in the destination table, the value is replaced.
- *
- * @param[in] dest The destination hash table
- * @param[in] source The source hash table
+ * @brief Merge source into dest (replacing values for existing keys).
  */
 void po_hashtable_merge(po_hashtable_t *dest, const po_hashtable_t *source) __nonnull((1, 2));
 

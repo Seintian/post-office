@@ -3,17 +3,52 @@
 
 /**
  * @file hashset.h
- * @brief Declares the HashSet API for storing unique keys.
- * @ingroup libraries
+ * @ingroup hashset
+ * @brief Open-addressed (linear probing) hash set for storing unique keys.
  *
- * A HashSet stores only keys and ensures uniqueness. It uses open addressing
- * with linear probing (in implementation) and resizes when load factor thresholds
- * are crossed. Keys are compared via a user-supplied compare function and hashed
- * by a user-supplied hash function.
+ * Design Overview
+ * ---------------
+ *  - Collision Resolution: Linear probing (open addressing). Probe sequence:
+ *        `h, (h+1) % capacity, (h+2) % capacity, ...` until empty / tombstone / match.
+ *  - Resizing: Capacity grows to the next prime when load factor exceeds an
+ *    internal upper threshold (e.g. ~0.70). Optional downsize may occur when
+ *    deletions lower load factor below a lower threshold (implementation
+ *    dependent; not guaranteed if hysteresis is used to avoid thrash).
+ *  - Hash Quality: User-provided @p hash_func should distribute well; poor
+ *    distribution increases clustering and degrades performance.
+ *  - Key Uniqueness: User-provided @p compare defines equality (0 => equal).
  *
- * @note The caller is responsible for managing key memory (insertion expects
- *       ownership transfer or persistent storage of keys).
- * @note The default initial capacity is 17 (a prime number).
+ * Big-O Characteristics (expected, under a good hash):
+ *  - Insert / Contains / Remove: Amortized O(1); worst-case O(n) in a fully
+ *    clustered table.
+ *  - Resize: O(n) (rehashes all occupied slots) but amortized over many ops.
+ *
+ * Memory / Ownership
+ * ------------------
+ *  - The set stores raw key pointers; it does NOT copy nor free user keys.
+ *  - Callers must ensure the lifetime of inserted keys spans their presence in
+ *    the set. Removing or destroying the set leaves keys untouched.
+ *
+ * Error Handling
+ * --------------
+ *  - Creation returns NULL on allocation failure (errno=ENOMEM typically).
+ *  - Insert returns -1 on allocation failure during resize or internal error.
+ *  - All functions require non-NULL handle (unless otherwise stated) and may
+ *    invoke undefined behavior if used incorrectly (defensive checks minimal
+ *    for performance).
+ *
+ * Iteration
+ * ---------
+ * This API does not currently expose an iterator; callers wanting a snapshot
+ * may use ::po_hashset_keys() which allocates an array of current keys.
+ *
+ * @note Default initial capacity is a prime (17) to reduce clustering early.
+ * @note Load factor definition: size / capacity.
+ *
+ * @see hashtable.h For associative key->value variant built on similar probing
+ *                  semantics.
+ * @see po_hashset_add
+ * @see po_hashset_remove
  */
 
 #include <stdlib.h>
@@ -27,23 +62,24 @@ extern "C" {
 typedef struct po_hashset po_hashset_t;
 
 /**
- * @brief Create a new HashSet with default capacity.
+ * @brief Create a new hash set with default prime capacity.
  *
- * @param[in] compare   Function to compare keys: returns 0 if equal.
- * @param[in] hash_func Function to hash keys: returns unsigned long hash.
- * @return Pointer to the new set, or NULL on failure.
+ * @param compare   Equality predicate (returns 0 for equality).
+ * @param hash_func Hash function mapping key -> unsigned long hash.
+ * @return New set handle or NULL on allocation failure (errno set).
  */
 po_hashset_t *po_hashset_create(int (*compare)(const void *, const void *),
                                 unsigned long (*hash_func)(const void *)) __attribute_malloc__
     __nonnull((1, 2));
 
 /**
- * @brief Create a new HashSet with specified initial capacity.
+ * @brief Create a hash set with explicit initial capacity.
  *
- * @param[in] compare        Function to compare keys.
- * @param[in] hash_func      Function to hash keys.
- * @param[in] initial_capacity Prime number initial capacity.
- * @return Pointer to the new set, or NULL on failure.
+ * @param compare          Equality predicate.
+ * @param hash_func        Hash function.
+ * @param initial_capacity Suggested starting capacity (prime recommended). If not prime the
+ *                          implementation may round up to the next prime.
+ * @return New set handle or NULL on allocation failure.
  */
 po_hashset_t *po_hashset_create_sized(int (*compare)(const void *, const void *),
                                       unsigned long (*hash_func)(const void *),
@@ -51,90 +87,79 @@ po_hashset_t *po_hashset_create_sized(int (*compare)(const void *, const void *)
     __nonnull((1, 2));
 
 /**
- * @brief Insert a key into the set.
+ * @brief Insert a key (no-op if already present).
  *
- * If the key already exists, no action is taken.
- * Resizes the set if load factor exceeds threshold.
+ * May trigger resize if post-insert load factor would exceed the configured
+ * growth threshold. Key pointer is stored verbatim – caller retains allocation
+ * responsibility.
  *
- * @param[in] set  The set to add to.
- * @param[in] key  The key to insert.
- * @return 1 if inserted, 0 if already present, -1 on error.
+ * @param set Set handle.
+ * @param key Key pointer.
+ * @return 1 inserted; 0 already existed; -1 on allocation / internal error.
  */
 int po_hashset_add(po_hashset_t *set, void *key) __nonnull((1, 2));
 
 /**
- * @brief Remove a key from the set.
+ * @brief Remove a key (if present).
  *
- * @param[in] set  The set to remove from.
- * @param[in] key  The key to remove.
- * @return 1 if removed, 0 if not found.
+ * Uses a tombstone strategy to preserve probe chains. Optional shrink may
+ * occur after removal if load factor falls below a lower threshold.
+ *
+ * @param set Set handle.
+ * @param key Key to remove.
+ * @return 1 removed; 0 not found.
  */
 int po_hashset_remove(po_hashset_t *set, const void *key) __nonnull((1, 2));
 
 /**
- * @brief Check if a key exists in the set.
- *
- * @param[in] set  The set to check.
- * @param[in] key  The key to find.
- * @return 1 if present, 0 otherwise.
+ * @brief Test membership.
+ * @param set Set handle.
+ * @param key Key to search for.
+ * @return 1 present; 0 absent.
  */
 int po_hashset_contains(const po_hashset_t *set, const void *key) __nonnull((1, 2));
 
 /**
- * @brief Get the number of keys in the set.
- *
- * @param[in] set The set to query.
- * @return Number of keys, or 0 if set is NULL.
+ * @brief Current number of stored keys.
+ * @param set Set handle.
+ * @return Count (>=0).
  */
 size_t po_hashset_size(const po_hashset_t *set) __nonnull((1));
 
 /**
- * @brief Get the current capacity (bucket count) of the set.
- *
- * @param[in] set The set to query.
- * @return Current capacity, or 0 on error.
+ * @brief Current bucket capacity.
+ * @param set Set handle.
+ * @return Capacity (number of slots).
  */
 size_t po_hashset_capacity(const po_hashset_t *set) __nonnull((1));
 
 /**
- * @brief Get all keys in the set.
+ * @brief Snapshot the current key pointers into a newly allocated array.
  *
- * Returns an array of key pointers. The caller must free the array
- * but not the keys themselves.
+ * Caller frees the returned array (keys are not copied nor owned by the set).
+ * @note The array length equals ::po_hashset_size(); it is NOT NULL-terminated.
  *
- * @param[in] set The set to extract keys from.
- * @return Array of keys, or NULL on error.
- *
- * @note The array is NOT NULL-terminated. Use size() to determine length.
+ * @param set Set handle.
+ * @return Pointer to array or NULL on allocation failure.
  */
 void **po_hashset_keys(const po_hashset_t *set) __attribute_malloc__ __nonnull((1));
 
 /**
- * @brief Clear all keys from the set.
- *
- * After clearing, size() == 0 but capacity remains unchanged.
- * Does NOT free keys.
- *
- * @param[in] set The set to clear.
+ * @brief Remove all keys (capacity unchanged, keys not freed).
+ * @param set Set handle.
  */
 void po_hashset_clear(po_hashset_t *set) __nonnull((1));
 
 /**
- * @brief Free the HashSet.
- *
- * Frees internal structures. Does NOT free keys.
- *
- * @param[in] set The set to free.
+ * @brief Destroy the set and free internal storage (not keys).
+ * @param set Address of set handle; pointer is nulled on return.
  */
 void po_hashset_destroy(po_hashset_t **set) __nonnull((1));
 
 /**
- * @brief Get the current load factor of the set.
- *
- * Load factor = size / capacity. Returns 0 if set is NULL.
- *
- * @param[in] set The set to query.
- * @return Current load factor, or 0 on error.
+ * @brief Current load factor (size / capacity).
+ * @param set Set handle.
+ * @return Load factor as float.
  */
 float po_hashset_load_factor(const po_hashset_t *set) __nonnull((1));
 
