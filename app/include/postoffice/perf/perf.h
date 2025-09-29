@@ -1,5 +1,30 @@
+/**
+ * @file perf.h
+ * @ingroup perf
+ * @brief Low-level performance instrumentation primitives (counters, timers,
+ *        histograms) with asynchronous aggregation and optional reporting.
+ *
+ * Architecture
+ * -----------
+ *  - Non-blocking (fire-and-forget) updates queue events internally allowing
+ *    producers on hot paths to avoid contention.
+ *  - Background worker drains events updating internal aggregates.
+ *  - Reporting functions snapshot current aggregates synchronously.
+ *
+ * Threading
+ * ---------
+ * Public API functions are thread-safe. Initialization must occur once prior
+ * to concurrent usage. Shutdown joins worker and flushes remaining events.
+ *
+ * Error Handling
+ * --------------
+ * Creation operations return -1 with errno set (ENOMEM, EINVAL) on failure.
+ * Increment / record operations are void or best-effort (silently drop if
+ * initialization incomplete).
+ *
+ * @see metrics.h Header-only macro facade for lightweight usage.
+ */
 #ifndef _PO_PERF_H
-/** \ingroup perf */
 #define _PO_PERF_H
 
 #ifdef __cplusplus
