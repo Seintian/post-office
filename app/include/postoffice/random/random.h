@@ -1,7 +1,20 @@
 /**
  * @file random.h
- * @brief Small random utilities (seed, integers, doubles, shuffling).
  * @ingroup utils
+ * @brief Small random utilities (seed, integers, doubles, shuffling).
+ *
+ * Features
+ * --------
+ *  - Deterministic seeding via ::po_rand_seed for reproducible tests.
+ *  - Automatic high-entropy seeding fallback ::po_rand_seed_auto.
+ *  - Convenience uniform generation for 32/64-bit integers, double in [0,1),
+ *    bounded integer ranges (inclusive), and Fisher-Yates array shuffle.
+ *
+ * Thread-Safety
+ * -------------
+ * Implementation uses a single internal PRNG state (not thread-safe). Callers
+ * requiring thread-local streams should layer their own state objects or guard
+ * usage with a mutex.
  */
 
 #ifndef POSTOFFICE_UTILS_RANDOM_H

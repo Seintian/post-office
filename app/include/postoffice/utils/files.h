@@ -16,9 +16,16 @@ extern "C" {
  * @file files.h
  * @brief A collection of general-purpose filesystem utilities.
  *
- * This module provides a robust and convenient interface for common filesystem
- * operations, such as checking file properties, reading/writing files, and
- * managing directories. All functions are prefixed with `fs_`.
+ * This module provides convenient wrappers for common filesystem operations
+ * (existence/type checks, reading/writing entire files, directory creation,
+ * and path joining). All functions are prefixed with `fs_`.
+ *
+ * Error reporting:
+ *  - Boolean-returning functions set `errno` on failure where system calls are used.
+ *  - Allocation helpers return NULL and may set `errno = ENOMEM`.
+ *
+ * @see fs_read_file_to_buffer
+ * @see fs_write_buffer_to_file
  */
 
 /**
@@ -62,7 +69,7 @@ bool fs_is_socket(const char *path);
  * contents plus a null terminator. The caller is responsible for freeing this
  * buffer with `free()`.
  *
- * @param[in] path The path to the file to read.
+ * @param[in] path The path to the file to read (must not be NULL).
  * @param[out] out_size A pointer to a size_t variable where the size of the
  * file content (excluding the null terminator) will be stored.
  * @return A pointer to the allocated buffer on success, or `NULL` on failure
@@ -77,7 +84,7 @@ char *fs_read_file_to_buffer(const char *path, size_t *out_size);
  * This function will create the file if it doesn't exist or overwrite it
  * if it does.
  *
- * @param[in] path The path to the file to write.
+ * @param[in] path The path to the file to write (must not be NULL).
  * @param[in] buffer A pointer to the data to write.
  * @param[in] size The number of bytes to write from the buffer.
  * @return `true` on success, `false` on failure. `errno` is set accordingly.
@@ -103,8 +110,8 @@ bool fs_create_directory_recursive(const char *path, mode_t mode);
  * freeing this string with `free()`. Handles cases where the base path may or
  * may not have a trailing slash.
  *
- * @param[in] base The base path (e.g., "/var/log").
- * @param[in] leaf The component to append (e.g., "myapp.log").
+ * @param[in] base The base path (e.g., "/var/log"). Must not be NULL.
+ * @param[in] leaf The component to append (e.g., "myapp.log"). Must not be NULL.
  * @return A pointer to the newly allocated full path string, or `NULL` on
  * a memory allocation failure.
  */

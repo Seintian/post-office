@@ -1,13 +1,22 @@
 /**
  * @file prime.h
- * @brief Functions for prime number operations.
- * @ingroup libraries
+ * @ingroup prime
+ * @brief Prime number helpers for sizing hash-based data structures.
  *
- * This file contains the declarations for functions that check if a number is prime,
- * and find the next prime number after a given number.
- * Primarily used for hash tables.
+ * Provides simple predicates to test primality and compute the next prime >= n.
+ * Used by hash table / set implementations to select capacities that reduce
+ * clustering under linear probing.
+ *
+ * Complexity
+ * ----------
+ *  - is_prime: O(sqrt(n)) trial division.
+ *  - next_prime: Iteratively applies is_prime until a prime is found.
+ *
+ * For large dynamic tables this cost is amortized across infrequent resize
+ * events.
  *
  * @see hashtable.h
+ * @see hashset.h
  */
 
 // NOTE: Added C++ linkage guards for compatibility.
