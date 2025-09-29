@@ -5,7 +5,7 @@
  * @file logger.h
  * @brief High-throughput, thread-safe asynchronous logger for PostOffice.
  *
- * @defgroup logger Logging subsystem
+ * @addtogroup logger
  * @brief Asynchronous, lock-free logging API and configuration.
  *
  * This module provides a non-blocking logging API using a lock-free MPMC
@@ -17,7 +17,7 @@
  * - Preallocated record pool with a lock-free freelist to avoid malloc/free in hot paths
  * Design goals:
  * - Non-blocking hot path for producers via a lock-free MPMC ring buffer
- *   (see @ref perf_ringbuf_t).
+ *   (see po_perf_ringbuf_t in the perf module).
  * - Dedicated consumer thread(s) drain the ring and write to configured sinks
  *   (console, file, syslog). Number of consumers is configurable at init.
  * - No dynamic allocations in the hot path; log records are fixed-size and
@@ -50,7 +50,7 @@
  *     LOG_INFO("service started pid=%d", (int)getpid());
  *     LOG_DEBUG("debug value=%d", 42); // printed only if level <= DEBUG
  *
- *     logger_shutdown();
+ *     po_logger_shutdown();
  *     return 0;
  * }
  * @endcode
@@ -67,7 +67,7 @@ extern "C" {
 #endif
 
 /**
- * @enum logger_level
+ * @enum po_logger_level
  * @brief Logging severity levels (ascending order of severity)
  */
 // --- Levels (ordered ascending) ---
@@ -81,7 +81,7 @@ typedef enum po_logger_level {
 } po_log_level_t;
 
 /**
- * @enum logger_overflow_policy
+ * @enum po_logger_overflow_policy
  * @brief Behavior applied when the pending-record queue is full.
  */
 // Overflow policy when the ring is full.
@@ -104,11 +104,11 @@ typedef enum po_logger_overflow_policy {
 #define LOGGER_MSG_MAX 512u // bytes for formatted message (truncated)
 
 /**
- * @struct logger_config
+ * @struct po_logger_config
  * @brief Initialization parameters for the logger.
  *
- * The logger owns any resources it opens during @ref logger_init and releases
- * them during @ref logger_shutdown.
+ * The logger owns any resources it opens during @ref po_logger_init and releases
+ * them during @ref po_logger_shutdown.
  */
 // Public config
 typedef struct po_logger_config {
@@ -129,7 +129,7 @@ typedef struct po_logger_config {
  * @return 0 on success, -1 on error (errno may be set).
  *
  * Notes:
- * - Spawns @ref logger_config.consumers background worker threads.
+ * - Spawns consumers background worker threads (see po_logger_config::consumers).
  * - Allocates a pre-sized record pool; no allocations occur on the hot path.
  */
 int po_logger_init(const po_logger_config_t *cfg) __nonnull((1));
@@ -139,7 +139,7 @@ int po_logger_init(const po_logger_config_t *cfg) __nonnull((1));
  *
  * Blocks until all worker threads terminate and any remaining queued messages
  * are flushed to configured sinks. Safe to call once after a successful
- * @ref logger_init.
+ * @ref po_logger_init.
  */
 void po_logger_shutdown(void);
 
