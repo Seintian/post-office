@@ -1,6 +1,9 @@
 /**
  * @file hashtable.c
- * @brief Implementation of a generic hashtable data structure.
+ * @brief Implementation of the PostOffice hashtable.
+ *
+ * Internal helper types and static functions in this file are not part of the
+ * public API; see hashtable/hashtable.h for exported declarations.
  */
 
 #include "hashtable/hashtable.h"
@@ -37,7 +40,7 @@
  * @struct hashtable_node
  * @brief Node structure to represent an entry in the hashtable.
  */
-typedef struct hashtable_node {
+typedef struct __attribute__((packed)) hashtable_node {
     /** @brief Pointer to the key. */
     void *key;
 
@@ -46,13 +49,13 @@ typedef struct hashtable_node {
 
     /** @brief Pointer to the next node in case of collisions. */
     struct hashtable_node *next;
-} __attribute__((packed)) hashtable_node_t;
+} hashtable_node_t;
 
 /**
  * @struct hashtable
  * @brief Structure to represent the hashtable.
  */
-struct po_hashtable {
+struct __attribute__((packed)) po_hashtable {
     /** @brief Array of pointers to hash nodes (buckets). */
     hashtable_node_t **buckets;
 
@@ -67,7 +70,7 @@ struct po_hashtable {
 
     /** @brief Function pointer for hashing keys. */
     size_t (*hash_func)(const void *);
-} __attribute__((packed));
+};
 
 struct po_hashtable_iter {
     const po_hashtable_t *table; ///< Pointer to the hashtable being iterated.
