@@ -31,6 +31,7 @@ poller_t *poller_create(void) {
     p->epfd = epoll_create1(EPOLL_CLOEXEC);
     if (p->epfd < 0) {
         PO_METRIC_COUNTER_INC("poller.create.fail");
+        free(p);
         return NULL;
     }
     p->efd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);

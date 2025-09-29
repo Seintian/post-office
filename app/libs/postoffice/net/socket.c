@@ -101,7 +101,8 @@ int po_socket_listen(const char *address, const char *port, int backlog) {
 
     int listen_fd = -1;
     for (struct addrinfo *ai = res; ai; ai = ai->ai_next) {
-        listen_fd = socket(ai->ai_family, ai->ai_socktype | SOCK_NONBLOCK | SOCK_CLOEXEC, ai->ai_protocol);
+        listen_fd =
+            socket(ai->ai_family, ai->ai_socktype | SOCK_NONBLOCK | SOCK_CLOEXEC, ai->ai_protocol);
         if (listen_fd < 0)
             continue;
 
@@ -122,7 +123,7 @@ int po_socket_listen(const char *address, const char *port, int backlog) {
 
     freeaddrinfo(res);
 
-    if (listen(listen_fd, backlog) < 0) {
+    if (listen_fd >= 0 && listen(listen_fd, backlog) < 0) {
         close(listen_fd);
         listen_fd = -1;
     }

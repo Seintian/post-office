@@ -40,8 +40,8 @@ extern "C" {
 typedef enum po_logger_level {
     LOG_TRACE = 0, /**< Detailed debug information */
     LOG_DEBUG = 1, /**< Debug-level messages */
-    LOG_INFO  = 2, /**< Informational messages */
-    LOG_WARN  = 3, /**< Warning conditions */
+    LOG_INFO = 2,  /**< Informational messages */
+    LOG_WARN = 3,  /**< Warning conditions */
     LOG_ERROR = 4, /**< Error conditions */
     LOG_FATAL = 5  /**< Fatal conditions that prevent further operation */
 } po_log_level_t;
@@ -57,8 +57,8 @@ typedef enum po_logger_overflow_policy {
 
 /** Sink types that can be configured */
 #define LOGGER_SINK_CONSOLE (1u << 0) /**< Log to console (stderr by default) */
-#define LOGGER_SINK_FILE    (1u << 1) /**< Log to file */
-#define LOGGER_SINK_SYSLOG  (1u << 2) /**< Log to syslog */
+#define LOGGER_SINK_FILE (1u << 1)    /**< Log to file */
+#define LOGGER_SINK_SYSLOG (1u << 2)  /**< Log to syslog */
 
 /** Compile-time default level (can be overridden with -DLOGGER_COMPILE_LEVEL=N) */
 #ifndef LOGGER_COMPILE_LEVEL
@@ -76,11 +76,11 @@ typedef enum po_logger_overflow_policy {
  * them during @ref po_logger_shutdown.
  */
 typedef struct po_logger_config {
-    po_log_level_t level;           /**< Minimum runtime level (messages below are discarded) */
-    size_t ring_capacity;           /**< Capacity of the internal ring buffer (power-of-two recommended) */
-    unsigned consumers;              /**< Number of consumer threads (0 = auto-detect) */
+    po_log_level_t level; /**< Minimum runtime level (messages below are discarded) */
+    size_t ring_capacity; /**< Capacity of the internal ring buffer (power-of-two recommended) */
+    unsigned consumers;   /**< Number of consumer threads (0 = auto-detect) */
     po_logger_overflow_policy_t policy; /**< Behavior when queue is full */
-    size_t cacheline_bytes;         /**< Cache line size (0 = use default) */
+    size_t cacheline_bytes;             /**< Cache line size (0 = use default) */
 } po_logger_config_t;
 
 /**
@@ -152,16 +152,15 @@ int po_logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *u
 // Fast-path check to determine if a message at the given level would be logged.
 static inline bool logger_would_log(po_log_level_t level) {
     extern volatile po_log_level_t _logger_runtime_level; // defined in logger.c
-    return (level >= (po_log_level_t)LOGGER_COMPILE_LEVEL) &&
-           (level >= _logger_runtime_level);
+    return (level >= (po_log_level_t)LOGGER_COMPILE_LEVEL) && (level >= _logger_runtime_level);
 }
 
 // Core logging macro used by the convenience macros below.
-#define LOG_AT(lvl, fmt, ...)                                                         \
-    do {                                                                             \
-        if (logger_would_log(lvl)) {                                                 \
-            po_logger_log((lvl), __FILE__, __LINE__, __func__, (fmt), ##__VA_ARGS__); \
-        }                                                                            \
+#define LOG_AT(lvl, fmt, ...)                                                                      \
+    do {                                                                                           \
+        if (logger_would_log(lvl)) {                                                               \
+            po_logger_log((lvl), __FILE__, __LINE__, __func__, (fmt), ##__VA_ARGS__);              \
+        }                                                                                          \
     } while (0)
 
 /** @def LOG_TRACE(fmt, ...)
@@ -204,11 +203,10 @@ static inline bool logger_would_log(po_log_level_t level) {
  *  @param fmt Format string (printf-style).
  *  @param ... Arguments for the format string.
  */
-#define LOG_FATAL(fmt, ...)                                                         \
-    do {                                                                           \
-        LOG_AT(LOG_FATAL, fmt, ##__VA_ARGS__);                                     \
-        abort();                                                                   \
-    } while (0)
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <sys/cdefs.h>
 
 /**
  * @brief Log a message with the specified level and location information.
@@ -224,7 +222,7 @@ static inline bool logger_would_log(po_log_level_t level) {
  * @param ... Arguments for the format string.
  */
 void po_logger_log(po_log_level_t level, const char *file, int line, const char *func,
-                  const char *fmt, ...) __attribute__((format(printf, 5, 6)));
+                   const char *fmt, ...) __attribute__((format(printf, 5, 6)));
 
 /**
  * @brief Log a message with the specified level, location, and va_list.
@@ -239,7 +237,7 @@ void po_logger_log(po_log_level_t level, const char *file, int line, const char 
  * @param ap Variable argument list.
  */
 void po_logger_logv(po_log_level_t level, const char *file, int line, const char *func,
-                   const char *fmt, va_list ap);
+                    const char *fmt, va_list ap);
 
 #ifdef __cplusplus
 }

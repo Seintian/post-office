@@ -60,7 +60,6 @@ dkms.conf
 .history/
 compile_commands.json
 .cache/
-.markdownlint.*
 
 # Utilities
 # !*.sh

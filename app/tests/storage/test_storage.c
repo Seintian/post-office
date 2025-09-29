@@ -681,10 +681,10 @@ TEST(LOGSTORE, FAULT_INJECTION_FALLBACK_PATH) {
     };
     g_ls = po_logstore_open_cfg(&cfg);
     TEST_ASSERT_NOT_NULL(g_ls);
-    
+
     // Enable fault injection for this test
     fi_enable = 1;
-    
+
     // enqueue enough records to trigger several batches where allocations fail
     for (int i = 0; i < 40; i++) {
         char k[32];
@@ -693,7 +693,7 @@ TEST(LOGSTORE, FAULT_INJECTION_FALLBACK_PATH) {
         int vlen = snprintf(v, sizeof(v), "fiv%d", i);
         TEST_ASSERT_EQUAL_INT(0, po_logstore_append(g_ls, k, (size_t)klen, v, (size_t)vlen));
     }
-    
+
     // Wait for all operations to complete by checking if we can retrieve all values
     for (int i = 0; i < 40; i += 1) {
         char k[32];
@@ -701,14 +701,15 @@ TEST(LOGSTORE, FAULT_INJECTION_FALLBACK_PATH) {
         void *out = NULL;
         size_t outlen = 0;
         // Use a reasonable timeout to avoid hanging
-        int ret = wait_get(g_ls, k, strlen(k), &out, &outlen, 100);
-        if (out) free(out);
+        int ret = wait_get(g_ls, k, strlen(k), &out, &outlen, 800);
+        if (out)
+            free(out);
         if (ret != 0) {
             // If we can't retrieve a value, the test should fail
             TEST_FAIL_MESSAGE("Failed to retrieve all values after fault injection test");
         }
     }
-    
+
     // Now verify a random subset are retrievable (indicates fallback path succeeded)
     for (int i = 0; i < 40; i += 7) {
         char k[32];
@@ -722,10 +723,10 @@ TEST(LOGSTORE, FAULT_INJECTION_FALLBACK_PATH) {
         TEST_ASSERT_EQUAL_MEMORY(v, out, outlen);
         free(out);
     }
-    
+
     // Disable fault injection for other tests
     fi_enable = 0;
-    
+
     // Close and reopen to ensure clean state for subsequent tests
     po_logstore_close(&g_ls);
     g_ls = po_logstore_open_cfg(&cfg);

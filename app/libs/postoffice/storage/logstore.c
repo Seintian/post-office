@@ -9,23 +9,23 @@
 // Standard headers needed for open/close & API functions
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h>     // For INT64_MAX
+#include <limits.h> // For INT64_MAX
 #include <pthread.h>
 #include <stdatomic.h>
-#include <stdint.h>     // For UINT64_MAX, INT64_MAX
+#include <stdint.h> // For UINT64_MAX, INT64_MAX
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>  // For off_t
+#include <sys/stat.h>  // For open()
+#include <sys/types.h> // For off_t
+#include <time.h>      // For time-related functions
 #include <unistd.h>
-#include <sys/stat.h>   // For open()
-#include <time.h>       // For time-related functions
 
 // Project headers
-#include "storage/logstore.h"
-#include "metrics/metrics.h"
-#include "storage/logstore_internal.h"
 #include "log/logger.h"
+#include "metrics/metrics.h"
+#include "storage/logstore.h"
+#include "storage/logstore_internal.h"
 
 // Configuration defaults (tunable via po_logstore_cfg)
 #ifndef LS_MAX_KEY_DEFAULT
@@ -360,19 +360,19 @@ int po_logstore_get(po_logstore_t *ls, const void *key, size_t keylen, void **ou
     uint32_t kl = hdr[0];
     uint32_t vl = hdr[1];
     // Check for reasonable key and value lengths
-    if (kl > 16 * 1024 * 1024 || vl != len)
+    if (kl > LS_HARD_KEY_MAX || vl > LS_HARD_VALUE_MAX || vl != len)
         return -1;
-        
+
     // Check for potential overflow in offset calculation
     const uint64_t offset = off + sizeof(kl) + sizeof(vl) + kl;
     // Check if offset would exceed maximum possible off_t value
     if (offset > (uint64_t)INT64_MAX)
         return -1;
-        
+
     void *buf = malloc(vl);
     if (!buf)
         return -1;
-        
+
     // Safe cast since we've already checked against INT64_MAX
     off_t val_off = (off_t)offset;
     ssize_t bytes_read = pread(ls->fd, buf, vl, val_off);
