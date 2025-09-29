@@ -24,37 +24,33 @@ struct poller {
 };
 
 poller_t *poller_create(void) {
-    int epfd = epoll_create1(EPOLL_CLOEXEC);
-    if (epfd < 0) {
+    poller_t *p = calloc(1, sizeof(*p));
+    if (!p)
+        return NULL;
+
+    p->epfd = epoll_create1(EPOLL_CLOEXEC);
+    if (p->epfd < 0) {
         PO_METRIC_COUNTER_INC("poller.create.fail");
         return NULL;
     }
-
-    poller_t *p = calloc(1, sizeof(*p));
-    if (!p) {
-        close(epfd);
-        return NULL;
-    }
-
-    p->epfd = epfd;
     p->efd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     if (p->efd < 0) {
         PO_METRIC_COUNTER_INC("poller.create.fail");
+        close(p->epfd);
         free(p);
-        close(epfd);
         return NULL;
     }
 
-    struct epoll_event evwake;
-    memset(&evwake, 0, sizeof(evwake));
-    evwake.events = EPOLLIN;
-    evwake.data.fd = p->efd;
-    if (epoll_ctl(p->epfd, EPOLL_CTL_ADD, p->efd, &evwake) < 0) {
+    struct epoll_event ev = {
+        .events = EPOLLIN,
+        .data.fd = p->efd
+    };
+    if (epoll_ctl(p->epfd, EPOLL_CTL_ADD, p->efd, &ev) < 0) {
         PO_METRIC_COUNTER_INC("poller.create.fail");
 
         close(p->efd);
+        close(p->epfd);
         free(p);
-        close(epfd);
         return NULL;
     }
 
@@ -66,15 +62,17 @@ void poller_destroy(poller_t *p) {
     if (p->efd >= 0)
         close(p->efd);
 
-    close(p->epfd);
+    if (p->epfd >= 0)
+        close(p->epfd);
+
     free(p);
 }
 
 int poller_add(const poller_t *p, int fd, uint32_t events) {
-    struct epoll_event ev;
-    memset(&ev, 0, sizeof(ev));
-    ev.events = events;
-    ev.data.fd = fd;
+    struct epoll_event ev = {
+        .events = events,
+        .data.fd = fd
+    };
 
     if (epoll_ctl(p->epfd, EPOLL_CTL_ADD, fd, &ev) < 0) {
         PO_METRIC_COUNTER_INC("poller.add.fail");
@@ -86,10 +84,10 @@ int poller_add(const poller_t *p, int fd, uint32_t events) {
 }
 
 int poller_mod(const poller_t *p, int fd, uint32_t events) {
-    struct epoll_event ev;
-    memset(&ev, 0, sizeof(ev));
-    ev.events = events;
-    ev.data.fd = fd;
+    struct epoll_event ev = {
+        .events = events,
+        .data.fd = fd
+    };
 
     if (epoll_ctl(p->epfd, EPOLL_CTL_MOD, fd, &ev) < 0) {
         PO_METRIC_COUNTER_INC("poller.mod.fail");
@@ -105,6 +103,7 @@ int poller_remove(const poller_t *p, int fd) {
         PO_METRIC_COUNTER_INC("poller.del.fail");
         return -1;
     }
+
     PO_METRIC_COUNTER_INC("poller.del");
     return 0;
 }

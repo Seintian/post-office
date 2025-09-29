@@ -25,9 +25,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "lmdb/lmdb.h"
-#include "utils/errors.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif

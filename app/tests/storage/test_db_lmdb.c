@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "storage/db_lmdb.h"
+#include "utils/errors.h"
 #include "unity/unity_fixture.h"
 
 static const char *TEMPLATE = "/tmp/dbtestXXXXXX";

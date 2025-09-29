@@ -129,7 +129,8 @@ int perf_batcher_flush(po_perf_batcher_t *b, int fd) {
             // Partial write - adjust the frame pointer
             char *base = iov[j].iov_base;
             base += consumed;
-            *(uint32_t *)base = len - (uint32_t)consumed; // update remaining size
+            uint32_t remaining = len - (uint32_t)consumed;
+            memcpy(base, &remaining, sizeof(remaining));
             break;
         }
     }

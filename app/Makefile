@@ -103,7 +103,8 @@ WARNING_FLAGS = -Wall -Wextra -Werror -Wvla -Wshadow -Wconversion -Wformat=2 \
 -Wformat-security -Wformat-nonliteral
 
 # Debugging and sanitizer flags (only for debug builds)
-DEBUGGING_FLAGS = --coverage -O1 -fsanitize=address,alignment,shift,null,object-size,undefined,float-divide-by-zero,signed-integer-overflow
+DEBUGGING_FLAGS = --coverage -O1
+SANITIZERS_FLAGS = -fsanitize=address,alignment,shift,null,object-size,undefined,float-divide-by-zero,signed-integer-overflow
 
 # Production flags
 PRODUCTION_FLAGS = -O3 -DNDEBUG
@@ -122,7 +123,7 @@ else
 endif
 
 # Linker flags
-LDFLAGS = -ldl -lrt -lpthread -lncurses -flto=auto -Wl,--gc-sections \
+LDFLAGS = -ldl -lrt -lpthread -lncursesw -flto=auto -Wl,--gc-sections \
 -fPIE -pie -Wl,-z,relro,-z,now -rdynamic
 PROFILER = # strace -e trace=all -o strace.log
 
@@ -297,7 +298,7 @@ ALL_TARGETS = $(addprefix $(BIN_DIR)/, $(PROCESSES))
 SIMULATION_TARGETS = $(filter-out $(MAIN_EXEC), $(ALL_TARGETS))
 
 # Rules
-.PHONY: start simulation all _simulation-only dev test _compile_commands doc clean-doc _clean-build _clean-logs _clean-crash-reports clean help clean-coverage
+.PHONY: start simulation all _simulation-only dev test compile_commands doc clean-doc _clean-build _clean-logs _clean-crash-reports clean help clean-coverage
 
 # Default target: start the application automatically
 start:
@@ -367,10 +368,14 @@ reset-env:
 # Compile only simulation executables
 _simulation-only: $(SIMULATION_TARGETS)
 
+compile_commands: clean
+	@echo "> Makefile: Generating LSPs' compile_commands.json..."
+	@bear -- $(MAKE) -j all
+
 # Build for development
 dev: clean
 	@echo "> Makefile: Building for development..."
-	@$(MAKE) _compile_commands
+	@$(MAKE) compile_commands
 	@echo "> Makefile: Running tests..."
 	@$(MAKE) test
 	@echo "> Makefile: Ready for development!"
@@ -379,11 +384,6 @@ dev: clean
 test: $(TEST_MAIN_EXEC)
 	@echo "> Makefile: Running tests..."
 	@$(TEST_MAIN_EXEC) $(TEST_MAIN_ARGS)
-
-# Rule for generating compile_commands.json
-_compile_commands: clean
-	@echo "> Makefile: Generating compile_commands.json..."
-	bear -- $(MAKE) all -j
 
 # Rule for generating Doxygen documentation
 doc:
@@ -451,22 +451,22 @@ help:
 
 # Create executables
 $(MAIN_EXEC): $(MAIN_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
 $(DIRECTOR_EXEC): $(DIRECTOR_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
 $(TICKET_ISSUER_EXEC): $(TICKET_ISSUER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
 $(USERS_MANAGER_EXEC): $(USERS_MANAGER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
 $(WORKER_EXEC): $(WORKER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
 $(USER_EXEC): $(USER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
 
 $(TEST_MAIN_EXEC): $(TEST_MAIN_OBJS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^

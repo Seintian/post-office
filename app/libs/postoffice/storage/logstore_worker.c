@@ -32,12 +32,15 @@
 // Optional test hook: a test may provide this symbol to force vector allocation
 // failure in the worker to exercise fallback path. When not defined, linker's
 // weak resolution leaves it NULL and normal behavior proceeds.
-__attribute__((weak)) int po_test_logstore_fail_vector_alloc(void);
+__attribute__((weak)) int po_test_logstore_fail_vector_alloc(int dummy) { 
+    (void)dummy; 
+    return 0; 
+}
 
 uint64_t _ls_now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+    return (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
 }
 
 // Worker thread: drains batched append requests and persists them.
@@ -119,7 +122,9 @@ void *_ls_worker_main(void *arg) {
         uint64_t *offs = malloc(sizeof(uint64_t) * (size_t)live);
         uint32_t *lens = malloc(sizeof(uint32_t) * (size_t)live);
         uint32_t *kls_arr = malloc(sizeof(uint32_t) * (size_t)live);
-        if (po_test_logstore_fail_vector_alloc && po_test_logstore_fail_vector_alloc()) {
+        
+        // Check if the test hook requests a failure
+        if (po_test_logstore_fail_vector_alloc(0)) {
             // Simulate allocation failure by freeing any partial buffers and nulling pointers.
             if (iov)
                 free(iov);

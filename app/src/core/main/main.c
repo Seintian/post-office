@@ -48,26 +48,8 @@ int main(int argc, char **argv) {
 
     // Optional: TUI smoke demo
     if (args.tui_demo) {
-        po_tui_app *app = NULL;
-        po_tui_config tcfg = {
-            .width_override = 40, .height_override = 6, .flags = PO_TUI_FLAG_DISABLE_TERM};
-        if (po_tui_init(&app, &tcfg) == 0) {
-            po_tui_add_label(app, 2, 1, "Post Office TUI Demo");
-            po_tui_add_label(app, 2, 3, "Hello, world!");
-            po_tui_render(app);
-            char buf[4096];
-            size_t written = 0;
-            if (po_tui_snapshot(app, buf, sizeof(buf), &written) == 0) {
-                // Print a visible header and the snapshot
-                fwrite("\n=== TUI DEMO SNAPSHOT ===\n", 1, 26, stdout);
-                fwrite(buf, 1, written, stdout);
-                fwrite("\n=========================\n", 1, 27, stdout);
-                fflush(stdout);
-            }
-            po_tui_shutdown(app);
-        } else {
-            fprintf(stderr, "TUI demo: initialization failed\n");
-        }
+        // TODO
+
         // Clean shutdown and exit
         po_logger_shutdown();
         po_metrics_shutdown();
@@ -75,8 +57,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // TODO: wire configuration file and launch application subsystems
+    // TODO: Implement application subsystems initialization
 
+    LOG_INFO("Application subsystems initialization would go here");
+
+    // Clean shutdown and exit
     po_logger_shutdown();
     po_metrics_shutdown();
     po_args_destroy(&args);

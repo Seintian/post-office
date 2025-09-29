@@ -101,31 +101,33 @@ int po_socket_listen(const char *address, const char *port, int backlog) {
 
     int listen_fd = -1;
     for (struct addrinfo *ai = res; ai; ai = ai->ai_next) {
-        int fd =
-            socket(ai->ai_family, ai->ai_socktype | SOCK_NONBLOCK | SOCK_CLOEXEC, ai->ai_protocol);
-        if (fd < 0)
+        listen_fd = socket(ai->ai_family, ai->ai_socktype | SOCK_NONBLOCK | SOCK_CLOEXEC, ai->ai_protocol);
+        if (listen_fd < 0)
             continue;
 
         int one = 1;
-        // Best-effort: try to enable SO_REUSEADDR, but don't fail if it errors.
-        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) < 0) {
-            // ignore
+        if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) < 0) {
+            close(listen_fd);
+            listen_fd = -1;
+            continue;
         }
 
-        if (bind(fd, ai->ai_addr, ai->ai_addrlen) == 0 && listen(fd, backlog) == 0) {
-            listen_fd = fd;
-            // do not break; exit loop by setting ai = NULL below to avoid nested breaks
-            ai = NULL; // ensure we exit
-                       // close remaining? We'll exit after loop
-        } else
-            close(fd);
-
-        if (listen_fd != -1)
+        if (bind(listen_fd, ai->ai_addr, ai->ai_addrlen) == 0 && listen(listen_fd, backlog) == 0) {
             break;
+        }
+
+        close(listen_fd);
+        listen_fd = -1;
     }
 
     freeaddrinfo(res);
-    return listen_fd; // -1 if none worked
+
+    if (listen(listen_fd, backlog) < 0) {
+        close(listen_fd);
+        listen_fd = -1;
+    }
+
+    return listen_fd; // -1 if something didn't work
 }
 
 int po_socket_connect(const char *address, const char *port) {

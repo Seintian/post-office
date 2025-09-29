@@ -3,6 +3,8 @@
 #endif
 
 #include "db_lmdb.h"
+#include "lmdb/lmdb.h"
+#include "utils/errors.h"
 
 #include <errno.h>
 #include <stdio.h>

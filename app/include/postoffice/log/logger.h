@@ -1,6 +1,3 @@
-#ifndef PO_LOG_LOGGER_H
-#define PO_LOG_LOGGER_H
-
 /**
  * @file logger.h
  * @brief High-throughput, thread-safe asynchronous logger for PostOffice.
@@ -12,49 +9,19 @@
  * ring buffer and a background consumer thread to drain records to the
  * configured sinks (console, file, syslog).
  *
- * @{
+ * Key features:
  * - Lock-free ring buffer for pending records (work queue)
  * - Preallocated record pool with a lock-free freelist to avoid malloc/free in hot paths
- * Design goals:
  * - Non-blocking hot path for producers via a lock-free MPMC ring buffer
- *   (see po_perf_ringbuf_t in the perf module).
- * - Dedicated consumer thread(s) drain the ring and write to configured sinks
- *   (console, file, syslog). Number of consumers is configurable at init.
- * - No dynamic allocations in the hot path; log records are fixed-size and
- *   messages longer than the capacity are truncated.
- * - Cheap fast-path macros (LOG_TRACE..LOG_FATAL) that avoid formatting when
- *   the current compile-time/runtime log level disables the call.
+ * - Dedicated consumer thread(s) for writing to sinks
+ * - No dynamic allocations in the hot path
+ * - Configurable log levels and overflow policies
  *
- * Reliability vs performance trade-offs:
- * - When the ring is full, writers never block. By default the newest message
- *   overwrites the oldest not-yet-processed one to keep the system making
- *   forward progress ("drop oldest on overflow"). This avoids head-of-line
- *   blocking at the cost of potentially losing very old messages under bursty
- *   loads. See logger_overflow_policy.
- *
- * Usage example:
- * @code
- * #include <postoffice/log/logger.h>
- *
- * int main(void) {
- *     po_logger_config_t cfg = {
- *         .level = LOG_INFO,
- *         .ring_capacity = 1u << 14, // 16384 records
- *         .consumers = 1,
- *         .policy = LOGGER_OVERWRITE_OLDEST,
- *     };
- *     if (po_logger_init(&cfg) != 0) return 1;
- *     po_logger_add_sink_console(true);            // stderr, color
- *     po_logger_add_sink_file("/tmp/po.log", true); // append
- *
- *     LOG_INFO("service started pid=%d", (int)getpid());
- *     LOG_DEBUG("debug value=%d", 42); // printed only if level <= DEBUG
- *
- *     po_logger_shutdown();
- *     return 0;
- * }
- * @endcode
+ * @{
  */
+
+#ifndef PO_LOG_LOGGER_H
+#define PO_LOG_LOGGER_H
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -70,38 +37,36 @@ extern "C" {
  * @enum po_logger_level
  * @brief Logging severity levels (ascending order of severity)
  */
-// --- Levels (ordered ascending) ---
 typedef enum po_logger_level {
-    LOG_TRACE = 0,
-    LOG_DEBUG = 1,
-    LOG_INFO = 2,
-    LOG_WARN = 3,
-    LOG_ERROR = 4,
-    LOG_FATAL = 5
+    LOG_TRACE = 0, /**< Detailed debug information */
+    LOG_DEBUG = 1, /**< Debug-level messages */
+    LOG_INFO  = 2, /**< Informational messages */
+    LOG_WARN  = 3, /**< Warning conditions */
+    LOG_ERROR = 4, /**< Error conditions */
+    LOG_FATAL = 5  /**< Fatal conditions that prevent further operation */
 } po_log_level_t;
 
 /**
  * @enum po_logger_overflow_policy
  * @brief Behavior applied when the pending-record queue is full.
  */
-// Overflow policy when the ring is full.
 typedef enum po_logger_overflow_policy {
-    LOGGER_DROP_NEW = 0,        // drop the incoming message (cheap)
-    LOGGER_OVERWRITE_OLDEST = 1 // advance head (drop oldest), then write
+    LOGGER_DROP_NEW = 0,        /**< Drop the incoming message (cheap) */
+    LOGGER_OVERWRITE_OLDEST = 1 /**< Advance head (drop oldest), then write */
 } po_logger_overflow_policy_t;
 
-// Sinks mask
-#define LOGGER_SINK_CONSOLE (1u << 0)
-#define LOGGER_SINK_FILE (1u << 1)
-#define LOGGER_SINK_SYSLOG (1u << 2)
+/** Sink types that can be configured */
+#define LOGGER_SINK_CONSOLE (1u << 0) /**< Log to console (stderr by default) */
+#define LOGGER_SINK_FILE    (1u << 1) /**< Log to file */
+#define LOGGER_SINK_SYSLOG  (1u << 2) /**< Log to syslog */
 
-// Compile-time default level (can be overridden with -DLOGGER_COMPILE_LEVEL=N)
+/** Compile-time default level (can be overridden with -DLOGGER_COMPILE_LEVEL=N) */
 #ifndef LOGGER_COMPILE_LEVEL
 #define LOGGER_COMPILE_LEVEL LOG_TRACE
 #endif
 
-// Log record constants
-#define LOGGER_MSG_MAX 512u // bytes for formatted message (truncated)
+/** Maximum length of a formatted log message (truncated if longer) */
+#define LOGGER_MSG_MAX 512u
 
 /**
  * @struct po_logger_config
@@ -110,27 +75,19 @@ typedef enum po_logger_overflow_policy {
  * The logger owns any resources it opens during @ref po_logger_init and releases
  * them during @ref po_logger_shutdown.
  */
-// Public config
 typedef struct po_logger_config {
-    po_log_level_t level; /**< Minimum runtime level (messages below are discarded fast-path). */
-    size_t ring_capacity; /**< Capacity of the internal ring buffer (prefer power-of-two). */
-    unsigned consumers;   /**< Number of consumer threads draining the queue. */
-    po_logger_overflow_policy_t policy; /**< Overflow behavior when queue is full. */
-    size_t
-        cacheline_bytes; /**< Optional hardware cacheline size hint for internal ring buffers.
-                              If 0, a default of 64 is used. Must be a power of two if provided. */
+    po_log_level_t level;           /**< Minimum runtime level (messages below are discarded) */
+    size_t ring_capacity;           /**< Capacity of the internal ring buffer (power-of-two recommended) */
+    unsigned consumers;              /**< Number of consumer threads (0 = auto-detect) */
+    po_logger_overflow_policy_t policy; /**< Behavior when queue is full */
+    size_t cacheline_bytes;         /**< Cache line size (0 = use default) */
 } po_logger_config_t;
 
-// Initialization and control
 /**
- * @brief Initialize the asynchronous logger.
+ * @brief Initialize the logger with the given configuration.
  *
  * @param cfg Configuration parameters (must not be NULL).
- * @return 0 on success, -1 on error (errno may be set).
- *
- * Notes:
- * - Spawns consumers background worker threads (see po_logger_config::consumers).
- * - Allocates a pre-sized record pool; no allocations occur on the hot path.
+ * @return 0 on success, -1 on error (errno set).
  */
 int po_logger_init(const po_logger_config_t *cfg) __nonnull((1));
 
@@ -144,136 +101,150 @@ int po_logger_init(const po_logger_config_t *cfg) __nonnull((1));
 void po_logger_shutdown(void);
 
 /**
- * @brief Set the minimum runtime logging level.
+ * @brief Set the runtime logging level.
  *
- * @param level New minimum level.
- * @return 0 on success; -1 if the logger is not initialized.
+ * @param level Minimum level to log (messages below this level are dropped).
+ * @return 0 on success, -1 if the level is invalid.
  */
 int po_logger_set_level(po_log_level_t level);
 
 /**
- * @brief Get the current minimum runtime logging level.
- * @return Current level; if uninitialized, returns the compilation default.
+ * @brief Get the current runtime logging level.
+ *
+ * @return The current logging level.
  */
 po_log_level_t po_logger_get_level(void);
 
-// Sinks
 /**
- * @brief Enable console sink output.
+ * @brief Add console output as a log sink.
  *
- * @param use_stderr When true, write to stderr; otherwise stdout.
- * @return 0 on success; -1 on error.
+ * @param use_stderr If true, use stderr; otherwise use stdout.
+ * @return 0 on success, -1 on error.
  */
 int po_logger_add_sink_console(bool use_stderr);
 
 /**
- * @brief Enable file sink output.
+ * @brief Add file output as a log sink.
  *
- * Opens or creates the specified file path and appends or truncates based on
- * @p append.
- *
- * @param path   Filesystem path to the log file (must not be NULL).
- * @param append When true, append to existing file; otherwise truncate.
- * @return 0 on success; -1 on error (errno may be set).
+ * @param path Path to the log file.
+ * @param append If true, append to the file; otherwise overwrite.
+ * @return 0 on success, -1 on error.
  */
-int po_logger_add_sink_file(const char *path, bool append) __nonnull((1));
+int po_logger_add_sink_file(const char *path, bool append);
 
 /**
- * @brief Enable syslog sink output.
+ * @brief Add syslog as a log sink.
  *
- * @param ident Syslog ident string (may be NULL for default).
- * @return 0 on success; -1 if unavailable or on error.
+ * @param ident Identity string for syslog messages.
+ * @return 0 on success, -1 on error.
  */
 int po_logger_add_sink_syslog(const char *ident);
 
 /**
- * @brief Add a custom sink that receives formatted log lines.
+ * @brief Add a custom log sink.
  *
- * The callback is invoked from logger worker threads with a NUL-terminated
- * formatted line (no trailing newline trimming guaranteed). The callback
- * must be non-blocking and fast.
- *
- * @param fn   Callback function pointer
- * @param udata User pointer passed to callback
- * @return 0 on success, -1 on error
+ * @param fn Callback function to handle log messages.
+ * @param udata User data to pass to the callback.
+ * @return 0 on success, -1 on error.
  */
-int po_logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *udata)
-    __nonnull((1));
+int po_logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *udata);
 
-// Fast-path check
-/**
- * @brief Fast-path check to determine if a message at @p level would be logged.
- *
- * This macro-friendly inline avoids formatting costs when the message would be
- * filtered by compile-time or runtime level.
- *
- * @param level Candidate message level.
- * @return true if the message would be accepted by the current filters.
- */
+// Fast-path check to determine if a message at the given level would be logged.
 static inline bool logger_would_log(po_log_level_t level) {
-    extern volatile int _logger_runtime_level; // defined in logger.c
+    extern volatile po_log_level_t _logger_runtime_level; // defined in logger.c
     return (level >= (po_log_level_t)LOGGER_COMPILE_LEVEL) &&
-           (level >= (po_log_level_t)_logger_runtime_level);
+           (level >= _logger_runtime_level);
 }
 
-// Core enqueue API (avoid using directly; prefer macros)
-/**
- * @brief Core varargs-enqueue primitive.
- *
- * Prefer the LOG_* convenience macros which invoke this with call-site
- * metadata and avoid formatting costs when disabled.
- *
- * @param level Message severity level.
- * @param file  Source file path (typically __FILE__).
- * @param line  Source line number (typically __LINE__).
- * @param func  Function name (typically __func__).
- * @param fmt   printf-style format string.
- * @param ap    Varargs list.
- */
-void po_logger_logv(po_log_level_t level, const char *file, int line, const char *func,
-                    const char *fmt, va_list ap) __attribute__((format(printf, 5, 0)));
-
-/**
- * @brief Core enqueue primitive.
- *
- * @param level Message severity level.
- * @param file  Source file path (typically __FILE__).
- * @param line  Source line number (typically __LINE__).
- * @param func  Function name (typically __func__).
- * @param fmt   printf-style format followed by arguments.
- */
-void po_logger_log(po_log_level_t level, const char *file, int line, const char *func,
-                   const char *fmt, ...) __attribute__((format(printf, 5, 6)));
-
-// Convenience macros that avoid formatting when disabled
-/**
- * @def LOG_ENABLED
- * @brief Check if a level would pass filters (compile-time and runtime).
- */
-#define LOG_ENABLED(lvl) logger_would_log(lvl)
-
-/**
- * @def LOG_AT
- * @brief Log at the given level with printf-style formatting.
- */
-#define LOG_AT(lvl, fmt, ...)                                                                      \
-    do {                                                                                           \
-        if (LOG_ENABLED(lvl)) {                                                                    \
-            po_logger_log((lvl), __FILE__, __LINE__, __func__, (fmt), ##__VA_ARGS__);              \
-        }                                                                                          \
+// Core logging macro used by the convenience macros below.
+#define LOG_AT(lvl, fmt, ...)                                                         \
+    do {                                                                             \
+        if (logger_would_log(lvl)) {                                                 \
+            po_logger_log((lvl), __FILE__, __LINE__, __func__, (fmt), ##__VA_ARGS__); \
+        }                                                                            \
     } while (0)
 
+/** @def LOG_TRACE(fmt, ...)
+ *  @brief Log a message at TRACE level.
+ *  @param fmt Format string (printf-style).
+ *  @param ... Arguments for the format string.
+ */
 #define LOG_TRACE(fmt, ...) LOG_AT(LOG_TRACE, fmt, ##__VA_ARGS__)
+
+/** @def LOG_DEBUG(fmt, ...)
+ *  @brief Log a message at DEBUG level.
+ *  @param fmt Format string (printf-style).
+ *  @param ... Arguments for the format string.
+ */
 #define LOG_DEBUG(fmt, ...) LOG_AT(LOG_DEBUG, fmt, ##__VA_ARGS__)
+
+/** @def LOG_INFO(fmt, ...)
+ *  @brief Log a message at INFO level.
+ *  @param fmt Format string (printf-style).
+ *  @param ... Arguments for the format string.
+ */
 #define LOG_INFO(fmt, ...) LOG_AT(LOG_INFO, fmt, ##__VA_ARGS__)
+
+/** @def LOG_WARN(fmt, ...)
+ *  @brief Log a message at WARNING level.
+ *  @param fmt Format string (printf-style).
+ *  @param ... Arguments for the format string.
+ */
 #define LOG_WARN(fmt, ...) LOG_AT(LOG_WARN, fmt, ##__VA_ARGS__)
+
+/** @def LOG_ERROR(fmt, ...)
+ *  @brief Log a message at ERROR level.
+ *  @param fmt Format string (printf-style).
+ *  @param ... Arguments for the format string.
+ */
 #define LOG_ERROR(fmt, ...) LOG_AT(LOG_ERROR, fmt, ##__VA_ARGS__)
-#define LOG_FATAL(fmt, ...) LOG_AT(LOG_FATAL, fmt, ##__VA_ARGS__)
+
+/** @def LOG_FATAL(fmt, ...)
+ *  @brief Log a message at FATAL level and abort the program.
+ *  @param fmt Format string (printf-style).
+ *  @param ... Arguments for the format string.
+ */
+#define LOG_FATAL(fmt, ...)                                                         \
+    do {                                                                           \
+        LOG_AT(LOG_FATAL, fmt, ##__VA_ARGS__);                                     \
+        abort();                                                                   \
+    } while (0)
+
+/**
+ * @brief Log a message with the specified level and location information.
+ *
+ * This is the low-level logging function used by the LOG_* macros.
+ * Prefer using the macros instead of calling this directly.
+ *
+ * @param level Log level.
+ * @param file Source file name.
+ * @param line Source line number.
+ * @param func Function name.
+ * @param fmt Format string (printf-style).
+ * @param ... Arguments for the format string.
+ */
+void po_logger_log(po_log_level_t level, const char *file, int line, const char *func,
+                  const char *fmt, ...) __attribute__((format(printf, 5, 6)));
+
+/**
+ * @brief Log a message with the specified level, location, and va_list.
+ *
+ * This is the varargs version of po_logger_log, used by the implementation.
+ *
+ * @param level Log level.
+ * @param file Source file name.
+ * @param line Source line number.
+ * @param func Function name.
+ * @param fmt Format string (printf-style).
+ * @param ap Variable argument list.
+ */
+void po_logger_logv(po_log_level_t level, const char *file, int line, const char *func,
+                   const char *fmt, va_list ap);
 
 #ifdef __cplusplus
 }
 #endif
 
-/** @} */ // end of logger group
+#endif /* PO_LOG_LOGGER_H */
 
-#endif // PO_LOG_LOGGER_H
+/** @} */ // end of logger group

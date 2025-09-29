@@ -54,11 +54,12 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-# VSCode specific
+# IDE specific
 .vscode/
 *.code-workspace
 .history/
 compile_commands.json
+.cache/
 .markdownlint.*
 
 # Utilities

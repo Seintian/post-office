@@ -5,6 +5,8 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE 1
 #endif
+// For __nonnull attribute
+#include <sys/cdefs.h>
 
 #include "log/logger.h"
 
@@ -24,12 +26,11 @@
 #include "metrics/metrics.h"
 #include "perf/batcher.h"
 #include "perf/ringbuf.h"
-#include "utils/errors.h"
 
 #define MAX_RECORD_SIZE LOGGER_MSG_MAX * 2
 
 // Runtime level, exported for inline check in header
-volatile int _logger_runtime_level = LOG_INFO;
+volatile po_log_level_t _logger_runtime_level = LOG_INFO;
 
 // Record stored in the ring (fixed size, no heap on hot path)
 typedef struct log_record {
@@ -125,7 +126,7 @@ static void write_record(const log_record_t *r) {
     char line[MAX_RECORD_SIZE];
     record_format_line(r, line, sizeof(line));
 
-    if ((g_sinks_mask & LOGGER_SINK_CONSOLE)) {
+    if (g_sinks_mask & LOGGER_SINK_CONSOLE) {
         FILE *out = g_console_stderr ? stderr : stdout;
         fputs(line, out);
     }
@@ -424,7 +425,7 @@ static void enqueue_record(log_record_t *rec) {
 }
 
 static inline int should_emit_overflow_notice(unsigned long v) {
-    return (v != 0ul) && ((v & (v - 1ul)) == 0ul);
+    return (v != 0UL) && ((v & (v - 1UL)) == 0UL);
 }
 
 static inline void fill_overflow_notice(log_record_t *rec, unsigned long dropped,
@@ -451,7 +452,7 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
         PO_METRIC_COUNTER_INC("logger.no_free_record");
 
         unsigned long dropped =
-            atomic_fetch_add_explicit(&g_dropped_new, 1, memory_order_relaxed) + 1ul;
+            atomic_fetch_add_explicit(&g_dropped_new, 1, memory_order_relaxed) + 1UL;
         if (should_emit_overflow_notice(dropped)) {
             PO_METRIC_COUNTER_INC("logger.overflow.notice");
 
@@ -486,10 +487,14 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
     } else
         r->func[0] = '\0';
 
-    if (fmt && *fmt)
-        vsnprintf(r->msg, sizeof(r->msg), fmt, ap);
-    else
+    if (fmt && *fmt) {
+        va_list ap_copy;
+        va_copy(ap_copy, ap);
+        vsnprintf(r->msg, sizeof(r->msg), fmt, ap_copy);
+        va_end(ap_copy);
+    } else {
         r->msg[0] = '\0';
+    }
 
     enqueue_record(r);
 

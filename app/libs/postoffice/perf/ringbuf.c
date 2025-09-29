@@ -78,12 +78,18 @@ void perf_ringbuf_destroy(po_perf_ringbuf_t **prb) {
 int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item) {
     size_t head = atomic_load_explicit(rb->head, memory_order_acquire);
     size_t tail = atomic_load_explicit(rb->tail, memory_order_relaxed);
+    size_t next_tail = (tail + 1) & rb->mask;
 
     // full if writing would catch the reader
-    if (((tail + 1) & rb->mask) == (head & rb->mask))
+    if (next_tail == (head & rb->mask)) {
+        errno = EAGAIN;
         return -1;
+    }
 
     rb->slots[tail & rb->mask] = item;
+
+    // Make sure the item is written before updating the tail
+    atomic_signal_fence(memory_order_release);
     atomic_store_explicit(rb->tail, tail + 1, memory_order_release);
     return 0;
 }
@@ -99,7 +105,10 @@ int perf_ringbuf_dequeue(po_perf_ringbuf_t *rb, void **out) {
     if (out)
         *out = rb->slots[head & rb->mask];
 
+    // Make sure the item is read before updating the head
+    atomic_signal_fence(memory_order_acquire);
     atomic_store_explicit(rb->head, head + 1, memory_order_release);
+
     return 0;
 }
 

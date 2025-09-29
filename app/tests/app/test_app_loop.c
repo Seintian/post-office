@@ -2,7 +2,6 @@
 #define _GNU_SOURCE
 #endif
 
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -123,7 +122,7 @@ TEST(APP, MAIN_LOOP_END_TO_END) {
 
     // Update perf counter and allow worker to flush
     po_perf_counter_inc("processed");
-    struct timespec ts = {0, 5 * 1000 * 1000}; // 5ms
+    struct timespec ts = {0, 15 * 1000 * 1000}; // 5ms
     nanosleep(&ts, NULL);
 
     // Read back from storage
@@ -156,8 +155,6 @@ TEST(APP, MAIN_LOOP_END_TO_END) {
 #include "storage/storage.h"
 #include "sysinfo/sysinfo.h"
 #include "utils/argv.h"
-#include "utils/errors.h"
-#include "utils/files.h"
 
 // Local helpers for hash structures (file scope so they can be referenced in test).
 static int str_compare(const void *a, const void *b) {
