@@ -22,6 +22,8 @@
  * - Version field allows forward/backward compatibility.
  * - Flags are a bitmask for optional per-message semantics (compression,
  *   encryption, priority, etc.).
+ * - Separation of framing length prefix (see framing.h) from protocol header
+ *   isolates transport-level reassembly from application semantics.
  *
  * See also: RFC 791 (IPv4) for endianness conventions and POSIX socket
  * documentation for read/write semantics.
@@ -41,8 +43,8 @@ extern "C" {
 /**
  * @brief Fixed protocol version (host order numeric constant).
  *
- * This constant is the logical version. On-the-wire the field is stored
- * in network byte order (htons/ntohs conversions are performed).
+ * Bump this on backward-incompatible wire changes. For additive compatible
+ * evolution prefer feature discovery through flags or message type ranges.
  */
 #define PROTOCOL_VERSION 0x0001u
 
@@ -64,6 +66,9 @@ typedef struct {
 
 /**
  * @name Flag bits for po_header_t::flags
+ * @brief Bitmask namespace for per-message qualifiers.
+ *
+ * Additional flags should occupy higher unused bits (e.g., 0x08, 0x10...).
  * @{ */
 enum {
     PO_FLAG_NONE = 0x00u,       /**< No special flags */
@@ -129,6 +134,11 @@ uint32_t protocol_message_size(const po_header_t *header) __attribute__((nonnull
 /**
  * @brief Encode a protocol header for a payload.
  *
+ * Invariants enforced:
+ *  - payload_len may be zero (valid empty payload).
+ *  - version is always set to PROTOCOL_VERSION.
+ *  - Flags are not validated here; higher layers ensure semantic consistency.
+ *
  * Emits metrics (component.operation.metric):
  *  - protocol.encode.ok (success path)
  *  - protocol.encode.invalid (invalid arguments)
@@ -146,6 +156,9 @@ int protocol_encode(uint8_t msg_type, uint8_t flags, const void *payload, uint32
 
 /**
  * @brief Validate a received header (network order) and report payload length.
+ *
+ * Validation includes version matching and payload length sanity checks
+ * (caller may further enforce maximums alongside framing module limits).
  *
  * The function copies/converts the header internally for validation. It
  * does not copy payload bytes; callers should subsequently read/consume

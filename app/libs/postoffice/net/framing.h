@@ -14,6 +14,14 @@
  * The framing layer must handle partial reads/writes, arbitrary fragmentation
  * and coalescing performed by the kernel, and provide zero-copy semantics for
  * payload buffers via zcp_buffer_t (allocated from perf_zcpool_t).
+ *
+ * Error handling: Functions return 0 on success, -1 on error (with errno set),
+ * and -2 for peer closure (EOF). EMSGSIZE is used when declared payload exceeds
+ * configured maximum. EINVAL is used for malformed headers. ENOMEM may be
+ * returned on allocation failure when acquiring zero-copy buffers.
+ *
+ * @see protocol.h
+ * @see perf (zero-copy pool) subsystem for buffer ownership model.
  */
 
 #ifndef _FRAMING_H
@@ -54,6 +62,8 @@ int framing_init(uint32_t max_payload_bytes);
 
 /**
  * @brief Get the configured maximum payload size in bytes.
+ *
+ * Useful for validating payload lengths before attempting sends.
  */
 uint32_t framing_get_max_payload(void);
 
@@ -121,6 +131,9 @@ int framing_write_zcp(int fd, const po_header_t *header, const zcp_buffer_t *pay
 
 /**
  * @brief Read a message into a caller-provided buffer (no internal allocation).
+ *
+ * Use this variant when zero-copy buffers are unnecessary (small control
+ * messages) or when the caller wants stack/arena ownership of payload bytes.
  *
  * If the payload length exceeds payload_buf_size, the function fails with EMSGSIZE.
  * On success, header_out is filled (host order) and *payload_len_out is set.

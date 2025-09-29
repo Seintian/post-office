@@ -6,6 +6,14 @@
  * This header provides minimal socket helpers used by the PostOffice net
  * implementation. All sockets returned by these helpers are configured with
  * CLOEXEC and set to non-blocking mode by default.
+ *
+ * Conventions:
+ *  - Return -1 for hard errors (inspect errno).
+ *  - Return PO_SOCKET_WOULDBLOCK (-2) for transient EAGAIN/EWOULDBLOCK where
+ *    the operation should be retried after readiness notification.
+ *  - For connect routines, EINPROGRESS is surfaced via errno with a -1 return.
+ *
+ * @see poller.h for readiness integration.
  */
 
 #ifndef _SOCKET_H
@@ -64,6 +72,8 @@ int po_socket_connect(const char *address, const char *port) __nonnull((1, 2));
 
 /**
  * @brief Accept a new connection on a listening socket.
+ *
+ * Uses accept4 where available to atomically set CLOEXEC & non-blocking.
  *
  * The returned client socket is non-blocking and has CLOEXEC set. If
  * out_addr_buf is non-NULL it will be populated with the textual peer

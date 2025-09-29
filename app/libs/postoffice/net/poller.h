@@ -2,8 +2,16 @@
  * @file poller.h
  * @brief Event polling (epoll) abstraction interface.
  * @details Provides an epoll-based poller to monitor multiple file descriptors
- * for I/O readiness. Uses edge-triggered notifications (with EPOLLONESHOT
- * for one-shot rearm as needed).
+ * for I/O readiness. Designed for edge-triggered operation; implementations
+ * typically combine EPOLLET with EPOLLONESHOT to prevent thundering herd and
+ * require explicit rearm after each serviced readiness event.
+ *
+ * Threading model: A wake FD (eventfd) allows other threads to break a thread
+ * blocked inside `poller_wait()` / `poller_timed_wait()` gracefully.
+ *
+ * Error handling: Functions return 0 on success or -1 with errno set. Removal
+ * requests for already-removed FDs are treated as errors (ENOENT) rather than
+ * silently ignored to surface logic bugs.
  * @ingroup net
  */
 #ifndef _POLLER_H
@@ -35,6 +43,10 @@ void poller_destroy(poller_t *poller) __nonnull((1));
 
 /**
  * @brief Add a file descriptor to the poller.
+ *
+ * Recommended usage: register interest with EPOLLIN|EPOLLOUT selectively.
+ * Avoid always enabling EPOLLOUT, as it is almost always ready and can cause
+ * spurious wake-ups.
  * @param poller The poller instance.
  * @param fd File descriptor to add.
  * @param events EPOLL event flags (e.g., EPOLLIN, EPOLLOUT).
@@ -44,6 +56,8 @@ int poller_add(const poller_t *poller, int fd, uint32_t events) __nonnull((1));
 
 /**
  * @brief Modify the events for a registered file descriptor.
+ *
+ * Typically used after handling a one-shot event to rearm interest.
  * @param poller The poller instance.
  * @param fd File descriptor to modify.
  * @param events New EPOLL event flags.
@@ -61,6 +75,8 @@ int poller_remove(const poller_t *poller, int fd) __nonnull((1));
 
 /**
  * @brief Wait for events on the poller.
+ *
+ * Caller must drain readiness (read/write loops) for edge-triggered FDs.
  * @param poller The poller instance.
  * @param events Array of epoll_event to populate with ready events.
  * @param max_events Maximum number of events to retrieve.
@@ -83,6 +99,9 @@ int poller_wake(const poller_t *poller) __nonnull((1));
 
 /**
  * @brief Wait up to total_timeout_ms for events, supporting early wake.
+ *
+ * Implements a coarse timeout budget by subtracting elapsed time between
+ * internal epoll_wait calls. Suitable for integrating periodic tasks.
  *
  * Repeatedly invokes poller_wait with the remaining time. Returns as soon as
  * at least one real event is available, on timeout, or if a wake is issued.
