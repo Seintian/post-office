@@ -2,7 +2,7 @@
  @file tui_groups.dox
  @brief Doxygen documentation groups for the TUI subsystem.
 
- @defgroup tui TUI Subsystem
+ @addtogroup tui
  @brief Terminal UI framework: input, events, state, layout, rendering, theming, widgets.
 
  Subgroups:
@@ -19,14 +19,25 @@
   - @ref tui_util
 
  @defgroup tui_core Core
+ @ingroup tui
  @defgroup tui_input Input
+ @ingroup tui
  @defgroup tui_layout Layout
+ @ingroup tui
  @defgroup tui_render Rendering
+ @ingroup tui
  @defgroup tui_theme Theme
+ @ingroup tui
  @defgroup tui_style Style
+ @ingroup tui
  @defgroup tui_text Text
+ @ingroup tui
  @defgroup tui_widgets Widgets
+ @ingroup tui
  @defgroup tui_window Window
+ @ingroup tui
  @defgroup tui_accessibility Accessibility
+ @ingroup tui
  @defgroup tui_util Utilities
+ @ingroup tui
 */

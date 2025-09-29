@@ -17,8 +17,8 @@
  *   - All examples omit detailed fatal error branching for brevity but show patterns
  */
 
-/**************************** LOGGER *********************************/
-/** \defgroup logger Logger
+/*** LOGGER ***********************************************************/
+/** \addtogroup logger
  *  High-performance, lock-minimized multi-consumer logging framework supporting
  *  async batching, multiple sinks (console, file, syslog, custom), overflow
  *  policies, level filtering, and graceful shutdown with in-flight flushing.
@@ -42,15 +42,15 @@
  *   5. Call ::po_logger_shutdown() exactly once at process end or before re-init.
  *
  *  \par Minimal Example
- *  \code{.c}
+ *  \code
  *  #include "log/logger.h"
  *  int main(void) {
- *      po_logger_config_t cfg = {
- *          .level = LOG_INFO,
- *          .ring_capacity = 4096,
- *          .consumers = 1,
- *          .policy = LOGGER_DROP_NEW,
- *      };
+ *      po_logger_config_t cfg;
+ *      cfg.level = LOG_INFO;
+ *      cfg.ring_capacity = 4096;
+ *      cfg.consumers = 1;
+ *      cfg.policy = LOGGER_DROP_NEW;
+ *      cfg.cacheline_bytes = 64;
  *      if (po_logger_init(&cfg) != 0) return 1;
  *      po_logger_add_sink_console(true);              // colored stderr
  *      po_logger_add_sink_file("/tmp/app.log", false); // append mode
@@ -73,8 +73,8 @@
  *  \endcode
  */
 
-/**************************** PERF (RINGBUF / BATCHER / METRICS) *********************************/
-/** \defgroup perf Perf & Instrumentation
+/*** PERF (RINGBUF / BATCHER / METRICS) *******************************/
+/** \addtogroup perf
  *  Lock-free structures and lightweight instrumentation primitives used internally
  *  by logger & logstore and available to applications.
  *
@@ -110,8 +110,34 @@
  *  \endcode
  */
 
-/**************************** HASH TABLE *********************************/
-/** \defgroup hashtable Hashtable
+/*** METRICS FACADE ***************************************************/
+/** \addtogroup metrics
+ *  Header-only macro indirection over perf counters / timers / histograms providing
+ *  optional low-overhead instrumentation that compiles out when `PO_METRICS_DISABLED` is
+ *  defined. Use names like "component.operation.metric" for hierarchical clarity.
+ *
+ *  Initialization Order:
+ *   1. po_perf_init(...)
+ *   2. po_metrics_init()
+ *   3. Emit metrics via PO_METRIC_* macros
+ *   4. po_metrics_shutdown(); po_perf_shutdown();
+ *
+ *  Example:
+ *  \code{.c}
+ *  po_perf_init(64, 32, 16);
+ *  po_metrics_init();
+ *  PO_METRIC_COUNTER_INC("logstore.append.total");
+ *  PO_METRIC_TIMER_CREATE("flush.ns");
+ *  PO_METRIC_TIMER_START("flush.ns");
+ *  // work
+ *  PO_METRIC_TIMER_STOP("flush.ns");
+ *  po_metrics_shutdown();
+ *  po_perf_shutdown(stdout);
+ *  \endcode
+ */
+
+/*** HASH TABLE *******************************************************/
+/** \addtogroup hashtable
  *  Open addressing (or separate chaining - see implementation) generic hash table used
  *  for in-memory indexing. Accepts user supplied comparator & hash functions and stores
  *  opaque keys/values.
@@ -134,8 +160,26 @@
  *  \endcode
  */
 
-/**************************** HASH SET *********************************/
-/** \defgroup hashset Hashset
+/*** HASH SET *********************************************************/
+/** \addtogroup hashset
+/*** DATA STRUCTURES AGGREGATE ***************************************/
+/** \defgroup datastruct Data Structures
+ *  Aggregate group bundling generic in-memory containers provided by the library.
+ *  Currently includes:
+ *   - \ref hashtable : key -> value associative map with linear probing
+ *   - \ref hashset   : unique key set variant (same probing/backing concepts)
+ *
+ *  Shared Characteristics:
+ *   - Open addressing / linear probing with prime capacities
+ *   - User-supplied hash and equality functions
+ *   - Ownership: pointers stored verbatim (user manages allocation & lifetime)
+ *   - Amortized O(1) operations under good hash distribution
+ *
+ *  @see hashtable.h
+ *  @see hashset.h
+ */
+/** \addtogroup hashset
+ *  @{
  *  Set abstraction atop the hashtable implementation. Only keys are stored.
  *
  *  \par Example
@@ -146,10 +190,11 @@
  *  po_hashset_remove(hs, "alpha");
  *  po_hashset_destroy(&hs);
  *  \endcode
+ *  @}
  */
 
-/**************************** INDEX *********************************/
-/** \defgroup index In-Memory Log Index
+/*** INDEX ************************************************************/
+/** \addtogroup index
  *  Lightweight mutable mapping from binary key -> (offset,len) describing persisted
  *  records inside the logstore file. Uses hashtable underneath.
  *
@@ -170,8 +215,8 @@
  *  \endcode
  */
 
-/**************************** LOGSTORE *********************************/
-/** \defgroup logstore Log Structured KV Store
+/*** LOGSTORE *********************************************************/
+/** \addtogroup logstore
  *  Append-only binary key/value store with coalesced batched disk writes, pluggable
  *  fsync policies, optional background fsync thread, rebuild & integrity scan logic,
  *  and streaming logger sink integration.
@@ -218,8 +263,8 @@
  *  After a crash / partial tail write, open performs scan + truncation automatically.
  */
 
-/**************************** LMDB WRAPPER *********************************/
-/** \defgroup db_lmdb LMDB Wrapper
+/*** LMDB WRAPPER *****************************************************/
+/** \addtogroup db_lmdb
  *  Thin abstraction for subset operations (env open, bucket open, put/get/del, iterate)
  *  used for secondary indexing or metadata persistence.
  *
@@ -238,14 +283,14 @@
  *  \endcode
  */
 
-/**************************** STORAGE FACADE *********************************/
-/** \defgroup storage Storage Facade
+/*** STORAGE FACADE ***************************************************/
+/** \addtogroup storage
  *  High-level convenience layer bundling logstore + index + optional DB usage.
  *  (If present in headers) exposes simplified CRUD style helpers.
  */
 
-/**************************** NET *********************************/
-/** \defgroup net Networking Primitives
+/*** NET **************************************************************/
+/** \addtogroup net
  *  Low-level framed protocol helpers: framing, poller (epoll abstraction), protocol codec,
  *  sockets utilities (non-blocking set, common opts).
  *
@@ -283,8 +328,8 @@
  *   - protocol.decode.ok / protocol.decode.emsgsize_buf / protocol.decode.bytes
  */
 
-/**************************** UTILS *********************************/
-/** \defgroup utils Utilities
+/*** UTILS ************************************************************/
+/** \addtogroup utils
  *  Support helpers: argv parsing, configs (INI wrapper), random, files, errors.
  *
  *  \par CLI Args Example
@@ -305,8 +350,8 @@
  *  \endcode
  */
 
-/**************************** SYSINFO *********************************/
-/** \defgroup sysinfo System Information
+/*** SYSINFO **********************************************************/
+/** \addtogroup sysinfo
  *  Runtime collection of filesystem, hugepage, and general OS metrics (if enabled).
  *
  *  \par Example
@@ -318,8 +363,8 @@
  *  \endcode
  */
 
-/**************************** PRIME *********************************/
-/** \defgroup prime Prime Utilities
+/*** PRIME ************************************************************/
+/** \addtogroup prime
  *  Deterministic prime number helpers (is_prime, next_prime) used for sizing hash tables.
  *
  *  \par Example
@@ -328,12 +373,12 @@
  *  \endcode
  */
 
-/**************************** RANDOM *********************************/
+/*** RANDOM ***********************************************************/
 /** \ingroup utils
  *  Pseudorandom utilities (deterministic seeding, ranges, shuffle) backing tests & data tools.
  */
 
-/**************************** ERROR HANDLING *********************************/
+/*** ERROR HANDLING ***************************************************/
 /** \ingroup utils
  *  Standardized error codes & helper to stringify them (see errors module).
  */
@@ -352,28 +397,25 @@
  *      // Load config (optional)
  *      po_configs_t *cfg = cfg_path ? po_configs_load(cfg_path) : NULL;
  *
- *      // Init logger
- *      po_logger_config_t lcfg = {.level=LOG_INFO,.ring_capacity=8192,.consumers=1,.policy=LOGGER_DROP_NEW};
- *      if (po_logger_init(&lcfg)!=0) return 1;
+ *      // Init logger (simplified, avoid designated initializers to keep doxygen happy)
+ *      po_logger_config_t lcfg;
+ *      lcfg.level = LOG_INFO;
+ *      lcfg.ring_capacity = 8192;
+ *      lcfg.consumers = 1;
+ *      lcfg.policy = LOGGER_DROP_NEW;
+ *      lcfg.cacheline_bytes = 64;
+ *      if (po_logger_init(&lcfg) != 0) return 1;
  *      po_logger_add_sink_console(true);
  *
- *      // Open logstore
- *      po_logstore_config_t scfg = {
- *          .path = "./data.log", .max_key_len=1024, .max_val_len=1<<20,
- *          .ring_capacity=4096, .batch_size=128,
- *          .fsync_policy=PO_LS_FSYNC_INTERVAL, .fsync_interval_ns=50ULL*1000000ULL,
- *          .fsync_every_n=0, .workers=1
- *      };
- *      po_logstore_t *ls = po_logstore_open(&scfg);
+ *      // Open logstore (use existing API signature)
+ *      po_logstore_t *ls = po_logstore_open("./data", "default", 64ULL<<20, 4096);
  *      if(!ls){ LOG_FATAL("logstore open failed"); goto shutdown; }
  *
  *      // Write & read
- *      const char *k="demo", *v="value"; po_logstore_append(ls,k,4,v,5);
- *      uint64_t off; uint32_t vlen; if(po_logstore_lookup(ls,k,4,&off,&vlen)==0){
- *          char *buf = malloc(vlen);
- *          po_logstore_pread_value(ls, buf, vlen, off, vlen);
- *          free(buf);
- *      }
+ *      const char *k = "demo", *v = "value"; 
+ *      po_logstore_append(ls, k, 4, v, 5);
+ *      void *buf = NULL; size_t vlen = 0;
+ *      if (po_logstore_get(ls, k, 4, &buf, &vlen) == 0) { free(buf); }
  *      LOG_INFO("completed operations");
  *
  *  shutdown:
@@ -386,7 +428,7 @@
  *  \endcode
  */
 
-/** \mainpage Post Office Library
+/* Mainpage moved to mainpage.md via USE_MDFILE_AS_MAINPAGE to avoid duplicates. */
  *  \tableofcontents
  *  \section intro Overview
  *  A modular, high-throughput logging & append-only storage toolkit integrating
@@ -397,7 +439,9 @@
  *  - \ref perf
  *  - \ref hashtable
  *  - \ref hashset
+ *  - \ref datastruct
  *  - \ref index
+ *  - \ref metrics
  *  - \ref logstore
  *  - \ref db_lmdb
  *  - \ref storage
@@ -415,17 +459,17 @@
  *  Instrumentation macros (counters, timers, histograms) live under metrics/ and
  *  are exposed via a macro facade. Naming: component.operation.metric.
  *
- *  Latency measurement convenience:
- *  \code{.c}
- *  PO_METRIC_LATENCY_RECORD_BEGIN(lat_ctx);
- *  critical_operation();
- *  PO_METRIC_LATENCY_RECORD_END(lat_ctx, "logstore.flush.latency_ns");
- *  \endcode
+ *  Latency measurement convenience (pseudo-steps):
+ *   - \c PO_METRIC_LATENCY_RECORD_BEGIN(lat_ctx)
+ *   - \c critical_operation()
+ *   - \c PO_METRIC_LATENCY_RECORD_END(lat_ctx, "logstore.flush.latency_ns")
  *  This uses a monotonic clock diff and records the delta into a histogram if one
  *  exists for the metric name, otherwise falls back to a counter of total ns.
  *
- *  Histograms: Declare via appropriate registration (see metrics.h). Timers emit
- *  start/stop deltas; counters use *_INC / *_ADD helpers. All metric paths MUST be
+ *  Histograms: Declare via appropriate registration (see metrics.h).
+ *   - Timers emit start/stop deltas
+ *   - Counters use *_INC / *_ADD helpers
+ *  All metric paths MUST be
  *  concise, stable, and lowercase with dots separating component, operation, and
  *  the metric semantic.
  */

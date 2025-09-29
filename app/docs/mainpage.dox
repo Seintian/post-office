@@ -1,4 +1,4 @@
-/** \mainpage Post Office Simulation & Library Suite
+/** \page simulation_overview Post Office Simulation & Library Suite
  *  \tableofcontents
  *  \section mp_intro 1. Introduction
  *  The <b>Post Office</b> project is a modular C codebase that combines a <em>multi-process
@@ -8,7 +8,7 @@
  *  in systems design and as a collection of production-grade primitives (logger, ring buffer,
  *  append-only log store, metrics, hash table, etc.).
  *
- *  The system exposes two principal execution entry modes (see \ref usage_modes):
+ *  The system exposes two principal execution entry modes (see \ref running-modes "Running Modes"):
  *   - <b>Main Application</b>: interactive dashboard (menu) wrapping simulation lifecycle,
  *     log/statistics inspection, configuration selection.
  *   - <b>Simulation Only</b>: directly launches the Director process which forks/spawns

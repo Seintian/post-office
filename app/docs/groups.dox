@@ -1,5 +1,6 @@
 /** @defgroup libraries Post Office Libraries */
 /** @defgroup executables Simulation Processes */
+/** @defgroup director Director Process */
 /** @defgroup logger Logger */
 /** @defgroup perf Performance */
 /** @defgroup metrics Metrics */
@@ -14,3 +15,4 @@
 /** @defgroup prime Prime Utilities */
 /** @defgroup utils Utilities */
 /** @defgroup tui Text User Interface */
+/** @defgroup tui_internal TUI Internal */

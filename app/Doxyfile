@@ -22,16 +22,12 @@ PROJECT_BRIEF          = "Post Office: modular C codebase with simulation proces
 
 # The INPUT tag is used to specify the files and/or directories that contain
 # documented source files. This tag can be used to specify absolute or relative paths.
-INPUT                  = ./src ./libs ./include ./tests ./docs
+INPUT                  = ./src ./libs ./include ./docs
 
 # The EXCLUDE tag can be used to specify files and/or directories that should be excluded from the input.
 # Exclude third-party and build artifacts (keep scope under app/ only)
 EXCLUDE                = \
-	./libs/thirdparty/unity \
-	./libs/thirdparty/libfort \
-	./libs/thirdparty/inih \
-	./libs/thirdparty/lmdb \
-	./libs/thirdparty/log_c \
+	./libs/thirdparty \
 	./include/thirdparty \
 	./build \
 	./bin \
@@ -79,10 +75,9 @@ REFERENCED_BY_RELATION = YES
 REFERENCES_RELATION    = YES
 VERBATIM_HEADERS       = YES
 FULL_PATH_NAMES        = NO
-SHOW_DIRECTORIES       = YES
 SHOW_FILES             = YES
 ALPHABETICAL_INDEX     = YES
-GENERATE_INDEX         = YES
+## GENERATE_INDEX was removed in newer doxygen versions; keep alphabetical index only
 
 #---------------------------------------------------------------------------
 # Configuration options related to the output formats
@@ -118,11 +113,9 @@ DOT_IMAGE_FORMAT       = svg
 INTERACTIVE_SVG        = YES
 DOT_GRAPH_MAX_NODES    = 100
 MAX_DOT_GRAPH_DEPTH    = 0
-CLASS_DIAGRAMS         = YES
 DIRECTORY_GRAPH        = YES
 INCLUDED_BY_GRAPH      = YES
 INCLUDE_GRAPH          = YES
-DOT_TRANSPARENT        = YES
 
 #---------------------------------------------------------------------------
 # End of Doxyfile
