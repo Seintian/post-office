@@ -1,6 +1,30 @@
 /**
  * @file index.h
- * @brief In-memory key→(offset,length) index for the log store.
+ * @ingroup logstore
+ * @brief In-memory key→(offset,length) index supporting append-only log lookups.
+ *
+ * Purpose
+ * -------
+ * Maintains only the latest mapping for a binary key to `(file_offset,value_length)`
+ * inside the append-only log data file. Older versions for a key are implicitly
+ * shadowed; no historical retention or MVCC semantics are provided.
+ *
+ * Characteristics
+ * --------------
+ *  - In-memory only (rebuilt from log scan if needed at startup).
+ *  - O(1) expected operations using an internal hash table (open addressed).
+ *  - Keys/values (offset,len) pairs stored by value; key bytes are copied so
+ *    caller buffers may be transient.
+ *  - Not thread-safe; external synchronization required if accessed from
+ *    multiple threads concurrently (logstore coordinates access internally).
+ *
+ * Error Handling
+ * --------------
+ *  - put returns 0 on success, -1 on allocation failure (errno=ENOMEM).
+ *  - get returns 0 on success, -1 if key absent (errno=ENOENT).
+ *  - remove returns 0 on success, -1 if key absent (errno=ENOENT).
+ *
+ * @see logstore.h For higher-level append/get operations that delegate here.
  */
 
 #ifndef POSTOFFICE_STORAGE_INDEX_H

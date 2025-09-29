@@ -1,3 +1,24 @@
+/**
+ * @file db_lmdb.h
+ * @ingroup logstore
+ * @brief Thin wrapper over LMDB providing simplified environment / bucket
+ *        lifecycle and basic CRUD iteration utilities.
+ *
+ * Design Notes
+ * ------------
+ *  - Each bucket maps to an LMDB named database (DBI) inside a shared
+ *    environment.
+ *  - All operations open short-lived read or write transactions and commit
+ *    synchronously; no long-running transactions are exposed here.
+ *  - Values returned by ::db_get() are malloc() allocated; caller must free.
+ *  - Error codes are negative `DB_E*` constants (defined alongside wrapper) or
+ *    LMDB status codes translated; DB_ENOTFOUND indicates missing key.
+ *
+ * Concurrency
+ * -----------
+ * LMDB manages its own locking; this facade is thread-safe provided callers
+ * do not concurrently close the same environment/bucket while in use.
+ */
 #ifndef _STORAGE_DB_LMDB_H
 #define _STORAGE_DB_LMDB_H
 

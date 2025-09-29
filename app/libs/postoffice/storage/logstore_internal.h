@@ -1,5 +1,5 @@
 /**
- * @file internal/logstore_internal.h
+ * @file logstore_internal.h
  * @brief Internal shared structures and helpers for logstore modularized implementation.
  *
  * Not part of the public installed interface. Only translation units within
