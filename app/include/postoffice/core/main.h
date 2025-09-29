@@ -1,7 +1,16 @@
 /**
  * @file main.h
- * @brief Entry-point process (orchestration) public interfaces.
  * @ingroup executables
+ * @brief Primary entry orchestrating initialization sequence and command-line integration.
+ *
+ * Sequence
+ * --------
+ * 1. Parse arguments / load configs.
+ * 2. Initialize logger → perf/metrics → storage → networking primitives.
+ * 3. Launch director (or inline run) and subordinate processes.
+ * 4. Enter top-level wait / signal loop.
+ *
+ * Provides declarations (if any) for helpers invoked by the canonical `main()` in executables.
  */
 
 #ifndef PO_CORE_MAIN_H
