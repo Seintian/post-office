@@ -9,7 +9,7 @@
 #ifndef TUI_LAYOUT_H
 #define TUI_LAYOUT_H
 
-#include "types.h"  // Already includes the tui_orientation_t type
+#include "types.h"
 
 #ifdef __cplusplus
 extern "C" {
