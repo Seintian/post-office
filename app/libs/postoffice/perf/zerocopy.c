@@ -28,7 +28,7 @@ size_t perf_zcpool_bufsize(const perf_zcpool_t *pool) {
 
 perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
     if (buf_count < 1 || buf_size == 0 || buf_size > (2UL << 20)) {
-        errno = ZCP_EINVAL;
+        errno = EINVAL;  // Use standard EINVAL instead of ZCP_EINVAL
         return NULL;
     }
 
@@ -97,13 +97,13 @@ void perf_zcpool_destroy(perf_zcpool_t **p) {
 
 void *perf_zcpool_acquire(perf_zcpool_t *p) {
     if (!p->freeq) {
-        errno = ZCP_EINVAL;
+        errno = EINVAL;  // Use standard EINVAL instead of ZCP_EINVAL
         return NULL;
     }
 
     void *buf = NULL;
     if (perf_ringbuf_dequeue(p->freeq, &buf) < 0) {
-        errno = ZCP_EAGAIN;
+        errno = EAGAIN;  // Use standard EAGAIN instead of ZCP_EAGAIN
         return NULL;
     }
 
@@ -112,7 +112,7 @@ void *perf_zcpool_acquire(perf_zcpool_t *p) {
 
 void perf_zcpool_release(perf_zcpool_t *p, void *buffer) {
     if (!p->freeq) {
-        errno = ZCP_EINVAL;
+        errno = EINVAL;  // Use standard EINVAL instead of ZCP_EINVAL
         return;
     }
 
@@ -129,7 +129,7 @@ void perf_zcpool_release(perf_zcpool_t *p, void *buffer) {
 
 size_t perf_zcpool_freecount(const perf_zcpool_t *p) {
     if (!p->freeq) {
-        errno = ZCP_EINVAL;
+        errno = EINVAL;
         return 0;
     }
 

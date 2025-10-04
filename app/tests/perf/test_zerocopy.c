@@ -1,10 +1,8 @@
 #include <errno.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "perf/zerocopy.h"
 #include "unity/unity_fixture.h"
-#include "utils/errors.h"
 
 TEST_GROUP(ZEROCOPY);
 static perf_zcpool_t *pool;
@@ -24,15 +22,15 @@ TEST_TEAR_DOWN(ZEROCOPY) {
 TEST(ZEROCOPY, INVALID_CREATE) {
     const perf_zcpool_t *p1 = perf_zcpool_create(0, 1024);
     TEST_ASSERT_NULL(p1);
-    TEST_ASSERT_EQUAL_INT(ZCP_EINVAL, errno);
+    TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
     const perf_zcpool_t *p2 = perf_zcpool_create(4, 0);
     TEST_ASSERT_NULL(p2);
-    TEST_ASSERT_EQUAL_INT(ZCP_EINVAL, errno);
+    TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
     const perf_zcpool_t *p3 = perf_zcpool_create(4, (2UL << 20) + 1);
     TEST_ASSERT_NULL(p3);
-    TEST_ASSERT_EQUAL_INT(ZCP_EINVAL, errno);
+    TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 }
 
 TEST(ZEROCOPY, ACQUIRE_RELEASE_BASIC) {
@@ -49,7 +47,7 @@ TEST(ZEROCOPY, ACQUIRE_RELEASE_BASIC) {
     // further acquire should fail immediately
     const void *b = perf_zcpool_acquire(pool);
     TEST_ASSERT_NULL(b);
-    TEST_ASSERT_EQUAL_INT(ZCP_EAGAIN, errno);
+    TEST_ASSERT_EQUAL_INT(EAGAIN, errno);
 
     // release in a different order, one at a time
     perf_zcpool_release(pool, bufs[2]);
