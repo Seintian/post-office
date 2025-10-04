@@ -6,7 +6,7 @@
  * Design Overview
  * ---------------
  *  - Storage: Contiguous array of void pointers for flexible element storage.
- *  - Resizing: Grows by a factor (e.g., 1.5x) when capacity is reached.
+ *  - Resizing: Grows by a factor of <code>VECTOR_GROWTH_FACTOR</code> when capacity is reached.
  *    Shrinks when load factor drops below a threshold (optional).
  *  - Memory: Stores raw pointers; does NOT manage the lifetime of pointed-to data.
  *    Callers must manage allocation and deallocation of elements.
@@ -25,9 +25,20 @@
  *
  * Error Handling
  * --------------
- *  - Creation returns NULL on allocation failure (errno=ENOMEM typically).
- *  - Operations that may allocate (push, insert, reserve) return error codes.
- *  - All functions require non-NULL vector handle unless otherwise specified.
+ * The vector library uses a consistent error handling strategy:
+ * 1. All functions that can fail return an int where:
+ *    - 0 indicates success
+ *    - -1 indicates failure, with errno set to indicate the specific error
+ * 2. Functions that return pointers use NULL to indicate failure, with errno set
+ * 3. Error codes used:
+ *    - EINVAL: Invalid argument (e.g., NULL vector, out of bounds index)
+ *    - ENOMEM: Memory allocation failure
+ *    - ENOENT: Element not found (for search operations)
+ *
+ * Thread Safety
+ * -------------
+ *  - The vector is not thread-safe by default. If used in a multi-threaded context,
+ *    external synchronization is required.
  *
  * @note Initial capacity is 16 by default, grows by 1.5x when full.
  * @see po_vector_push
