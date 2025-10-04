@@ -1,7 +1,7 @@
-#include <postoffice/log/logger.h>
-#include <postoffice/metrics/metrics.h>
-#include <postoffice/tui/ui.h>
-#include <postoffice/utils/argv.h>
+#include <log/logger.h>
+#include <metrics/metrics.h>
+#include <tui/ui.h>
+#include <utils/argv.h>
 #include <stdio.h>
 #include <unistd.h>
 

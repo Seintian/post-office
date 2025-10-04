@@ -2,11 +2,12 @@
 // instrumentation so that counters, timers and histograms accumulated by any
 // library code used during its lifetime can be reported at shutdown.
 
+#include <metrics/metrics.h>
+#include <perf/perf.h>
+#include <sysinfo/sysinfo.h>
+#include <utils/errors.h>
+
 #include <errno.h>
-#include <postoffice/metrics/metrics.h>
-#include <postoffice/perf/perf.h>
-#include <postoffice/sysinfo/sysinfo.h>
-#include <postoffice/utils/errors.h>
 #include <stdio.h>
 #include <unistd.h>
 
