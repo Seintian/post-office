@@ -41,11 +41,8 @@ PERF_DIR               = $(POSTOFFICE_LIBS_DIR)/perf
 METRICS_DIR            = $(POSTOFFICE_LIBS_DIR)/metrics
 PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
 STORAGE_DIR            = $(POSTOFFICE_LIBS_DIR)/storage
-UTILS_DIR              = $(POSTOFFICE_LIBS_DIR)/utils
 RANDOM_DIR             = $(POSTOFFICE_LIBS_DIR)/random
 TUI_LIB_DIR            = $(POSTOFFICE_LIBS_DIR)/tui
-# Alias used by source discovery rules (was previously undefined and caused
-# accidental recursion over the whole tree when used with find)
 TUI_DIR                = $(TUI_LIB_DIR)
 LOG_DIR                = $(POSTOFFICE_LIBS_DIR)/log
 SYSINFO_DIR            = $(POSTOFFICE_LIBS_DIR)/sysinfo
@@ -59,6 +56,8 @@ UNITY_DIR              = $(THIRDPARTY_LIBS_DIR)/unity
 
 ## Core source tree root
 CORE_SRC_DIR           = $(SRC_DIR)/core
+# Utils source directory
+UTILS_DIR              = $(SRC_DIR)/utils
 # Processes' sources directories
 MAIN_DIR               = $(CORE_SRC_DIR)/main
 SIMULATION_DIR         = $(CORE_SRC_DIR)/simulation
@@ -500,6 +499,11 @@ $(BUILD_DIR)/users_manager/%.o: $(USERS_MANAGER_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
+# Rule for utils objects
+$(BUILD_DIR)/utils/%.o: $(UTILS_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -I$(INCLUDE_DIR) -c $< -o $@
+
 # Rule for worker application objects
 $(BUILD_DIR)/worker/%.o: $(WORKER_DIR)/%.c
 	@mkdir -p $(dir $@)
@@ -686,6 +690,3 @@ tidy-fix:
 	 echo "> Makefile: Files:"; echo "$$SRCS" | tr ' ' '\n'; \
 	 clang-tidy -fix -fix-errors --format-style=file --config-file=.clang-tidy $$SRCS -- -std=c11 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -Iinclude -Iinclude/postoffice -Ilibs/postoffice -Isrc -Ilibs/thirdparty -Iinclude/thirdparty || true; \
 	 echo "> Makefile: clang-tidy fixes applied. Consider running 'make -C app format' afterwards."
-
-# (logstore has been modularized: logstore.c + logstore_worker.c + logstore_rebuild.c + logstore_integrity.c)
-
