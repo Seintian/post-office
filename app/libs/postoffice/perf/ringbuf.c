@@ -79,7 +79,7 @@ int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item) {
     size_t head = atomic_load_explicit(rb->head, memory_order_acquire);
     size_t tail = atomic_load_explicit(rb->tail, memory_order_relaxed);
     // full if writing would catch the reader
-    if ((tail - head) == rb->cap) {
+    if ((tail + 1 - head) > rb->mask) {
         errno = EAGAIN;
         return -1;
     }
