@@ -122,7 +122,7 @@ else
 endif
 
 # Linker flags
-LDFLAGS = -ldl -lrt -lpthread -lncursesw -flto=auto -Wl,--gc-sections \
+LDFLAGS = -ldl -lrt -lpthread -lm -lncursesw -flto=auto -Wl,--gc-sections \
 -fPIE -pie -Wl,-z,relro,-z,now -rdynamic
 PROFILER = # strace -e trace=all -o strace.log
 
@@ -517,12 +517,12 @@ $(BUILD_DIR)/user/%.o: $(USER_DIR)/%.c
 # Rule for shared TUI library objects
 $(BUILD_DIR)/tui/%.o: $(TUI_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(ALL_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 # Rule for app main TUI objects
 $(BUILD_DIR)/app_tui/%.o: $(APP_MAIN_TUI_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(ALL_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 # Rule for our internal libraries
 $(BUILD_DIR)/hashtable/%.o: $(HASHTABLE_DIR)/%.c
@@ -555,7 +555,7 @@ $(BUILD_DIR)/storage/%.o: $(STORAGE_DIR)/%.c
 
 $(BUILD_DIR)/utils/%.o: $(UTILS_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
 $(BUILD_DIR)/random/%.o: $(RANDOM_DIR)/%.c
 	@mkdir -p $(dir $@)

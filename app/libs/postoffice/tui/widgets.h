@@ -63,6 +63,8 @@ struct tui_button_t {
     bool is_default;                      /**< Whether this is the default button */
     bool is_cancel;                       /**< Whether this is the cancel button */
     bool is_pressed;                      /**< Whether the button is currently pressed */
+    tui_button_click_callback_t on_right_click; /**< Right click callback */
+    void (*on_scroll)(struct tui_button_t* btn, int delta, void* user_data); /**< Scroll callback (delta > 0 up, < 0 down) */
 };
 
 // Label widget
@@ -197,6 +199,9 @@ struct tui_checkbox_t {
     tui_checkbox_toggle_callback_t on_toggle; /**< Toggle callback */
 };
 
+struct tui_checkbox_t* tui_checkbox_create(const char* text, tui_rect_t bounds);
+void tui_checkbox_set_toggle_callback(struct tui_checkbox_t* checkbox, tui_checkbox_toggle_callback_t callback, void* user_data);
+
 // Radio button widget
 struct tui_radio_button_t {
     tui_widget_t base;                            /**< Base widget properties */
@@ -205,6 +210,9 @@ struct tui_radio_button_t {
     int group_id;                                 /**< Group ID for mutual exclusion */
     tui_radio_button_select_callback_t on_select; /**< Selection callback */
 };
+
+struct tui_radio_button_t* tui_radio_button_create(const char* text, tui_rect_t bounds, int group_id);
+void tui_radio_button_set_select_callback(struct tui_radio_button_t* radio, tui_radio_button_select_callback_t callback, void* user_data);
 
 // Combo box widget
 struct tui_combo_box_t {
@@ -318,6 +326,24 @@ struct tui_button_t *tui_button_create(const char *text, tui_rect_t bounds);
  */
 void tui_button_set_click_callback(struct tui_button_t *button,
                                    tui_button_click_callback_t callback, void *user_data);
+
+/**
+ * @brief Set the button's right-click callback
+ * @param button The button
+ * @param callback The callback function
+ * @param user_data User data
+ */
+void tui_button_set_right_click_callback(struct tui_button_t *button,
+                                         tui_button_click_callback_t callback, void *user_data);
+
+/**
+ * @brief Set the button's scroll callback
+ * @param button The button
+ * @param callback The callback function (delta +1 for up, -1 for down)
+ * @param user_data User data
+ */
+void tui_button_set_scroll_callback(struct tui_button_t *button,
+                                    void (*callback)(struct tui_button_t*, int, void*), void *user_data);
 
 /**
  * @brief Set the button's text

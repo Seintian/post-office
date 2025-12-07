@@ -10,7 +10,12 @@
 #ifndef TUI_H
 #define TUI_H
 
-#include "types.h"
+#include "tui/types.h"
+#include "tui/layout.h"
+#include "tui/widgets.h"
+#include "tui/table.h"
+#include "tui/components.h"
+#include "tui/ui.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,6 +68,12 @@ void tui_run(void);
 void tui_quit(void);
 
 /**
+ * @brief Check if the TUI is running
+ * @return true if running
+ */
+bool tui_is_running(void);
+
+/**
  * @brief Get terminal dimensions
  * 
  * @return A tui_size_t structure containing the width and height of the terminal
@@ -79,6 +90,13 @@ tui_size_t tui_get_screen_size(void);
  * @param root The widget to use as the root container
  */
 void tui_set_root(tui_widget_t* root);
+
+/**
+ * @brief Get the root widget
+ * 
+ * @return The root widget or NULL if not set
+ */
+tui_widget_t* tui_get_root(void);
 
 /**
  * @brief Get the currently focused widget
@@ -335,19 +353,10 @@ tui_screen_t* tui_screen_get_active(void);
  * 
  * @param dialog The dialog widget to show
  */
-void tui_dialog_show(tui_widget_t* dialog);
-
-/**
- * @brief Hide the currently active dialog
- */
-void tui_dialog_hide(void);
-
-/**
- * @brief Get the currently active dialog
- * 
- * @return The active dialog, or NULL if no dialog is active
- */
-tui_widget_t* tui_dialog_get_active(void);
+// Dialog management logic moved to ui.h to support window-based dialogs
+// void tui_dialog_show(tui_widget_t* dialog);
+// void tui_dialog_hide(void);
+// tui_widget_t* tui_dialog_get_active(void);
 
 /** @} */ // end of Dialog Management
 

@@ -13,6 +13,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Forward declarations
+typedef struct tui_layout_params_t tui_layout_params_t;
+
 // Forward declarations for widget structures
 typedef struct tui_widget_t tui_widget_t;
 typedef struct tui_window_t tui_window_t;
@@ -228,6 +235,36 @@ typedef enum {
 } tui_widget_type_t;
 
 /**
+ * @brief Layout constraints for widgets
+ */
+typedef struct tui_layout_params_t {
+    int min_width;
+    int max_width;
+    int min_height;
+    int max_height;
+    float weight_x;
+    float weight_y;
+    struct {
+        int left;
+        int top;
+        int right;
+        int bottom;
+    } margin;
+    struct {
+        int left;
+        int top;
+        int right;
+        int bottom;
+    } padding;
+    tui_horizontal_alignment_t h_align;
+    tui_vertical_alignment_t v_align;
+    bool expand_x;
+    bool expand_y;
+    bool fill_x;
+    bool fill_y;
+} tui_layout_params_t;
+
+/**
  * @brief Base widget structure
  *
  * All TUI widgets inherit from this base structure. Custom widgets should
@@ -257,6 +294,16 @@ struct tui_widget_t {
 
     // Parent container (if any)
     tui_widget_t *parent; /**< Parent widget (NULL for root widget) */
+    
+    // Sibling (for linked list in container)
+    tui_widget_t *next;   /**< Next sibling widget */
+
+    // Layout
+    tui_layout_params_t layout_params; /**< Layout parameters */
 };
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* TUI_TYPES_H */

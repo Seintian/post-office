@@ -31,7 +31,6 @@ typedef struct {
 
 ## Project Structure
 
-```txt
 <project-root>
 ├── app
 │   ├── config/
@@ -63,6 +62,12 @@ typedef struct {
 │   │       ├── net/
 │   │       ├── perf/
 │   │       ├── storage/
+│   │       ├── tui/
+│   │       │   ├── layout.h
+│   │       │   ├── tui.h
+│   │       │   ├── types.h
+│   │       │   ├── ui.h
+│   │       │   └── widgets.h
 │   │       └── utils/
 │   │           ├── argv.h
 │   │           ├── configs.h
@@ -98,7 +103,8 @@ typedef struct {
 │   │   │   │   ├── index.h
 │   │   │   │   ├── logstore.c
 │   │   │   │   ├── logstore.h
-│   │   │   │   └── storage.c
+│   │   │   │   ├── storage.c
+│   │   │   │   └── ...
 │   │   │   │
 │   │   │   ├── log/
 │   │   │   │   └── logger.c
@@ -123,25 +129,26 @@ typedef struct {
 │   │       └── unity/             ← unity.c, unity.h, unity_internals.h
 │   │
 │   ├── src/                       ← "your" executables entrypoints
-│   │   ├── main/                  ← simulation dashboard
-│   │   │   └── main.c
+│   │   ├── core/
+│   │   │   ├── main/              ← simulation dashboard
+│   │   │   │   └── main.c
+│   │   │   │
+│   │   │   └── simulation/
+│   │   │       ├── director/      ← Director process
+│   │   │       │   └── director.c
+│   │   │       │
+│   │   │       ├── ticket_issuer/
+│   │   │       │   └── ticket_issuer.c
+│   │   │       │
+│   │   │       ├── user/
+│   │   │       │   └── user.c
+│   │   │       │
+│   │   │       ├── users_manager/
+│   │   │       │   └── users_manager.c
+│   │   │       │
+│   │   │       └── worker/
+│   │   │           └── worker.c
 │   │   │
-│   │   └── simulation/
-│   │       ├── director/          ← Director process
-│   │       │   └── director.c
-│   │       │
-│   │       ├── ticket_issuer/
-│   │       │   └── ticket_issuer.c
-│   │       │
-│   │       ├── user/
-│   │       │   └── user.c
-│   │       │
-│   │       ├── users_manager/
-│   │       │   └── users_manager.c
-│   │       │
-│   │       └── worker/
-│   │           └── worker.c
-│   │
 │   │   (no modules/ stubs here—tests should go under `tests/`)
 │   │
 │   ├── tests/                     ← unit & integration tests

@@ -16,40 +16,6 @@ extern "C" {
 #endif
 
 /**
- * @brief Layout constraints for widgets
- * 
- * This structure defines how a widget should be sized and positioned within its parent container.
- * It includes minimum/maximum sizes, weights for flexible sizing, margins, padding,
- * and alignment properties.
- */
-typedef struct {
-    int min_width;
-    int max_width;
-    int min_height;
-    int max_height;
-    float weight_x;
-    float weight_y;
-    struct {
-        int left;
-        int top;
-        int right;
-        int bottom;
-    } margin;
-    struct {
-        int left;
-        int top;
-        int right;
-        int bottom;
-    } padding;
-    tui_horizontal_alignment_t h_align;
-    tui_vertical_alignment_t v_align;
-    bool expand_x;
-    bool expand_y;
-    bool fill_x;
-    bool fill_y;
-} tui_layout_params_t;
-
-/**
  * @brief Layout manager interface
  * 
  * This structure defines the interface that all layout managers must implement.
