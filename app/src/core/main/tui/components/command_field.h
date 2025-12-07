@@ -1,12 +1,8 @@
-/** \file command_field.h
- *  \ingroup tui
- *  \brief Interactive command input field handling user keystrokes, history
- *         navigation and submission to the control bridge.
- *
- *  Features
- *  --------
- *  - Line editing (insert/delete, cursor move, word jump).
- *  - History ring with search (prefix or incremental planned).
- *  - Command parsing hand-off to adapter_director / ipc layer.
- */
+#ifndef COMMAND_FIELD_H
+#define COMMAND_FIELD_H
 
+#include <postoffice/tui/tui.h>
+
+tui_widget_t* command_field_create(void);
+
+#endif

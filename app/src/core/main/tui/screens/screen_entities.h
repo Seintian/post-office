@@ -1,6 +1,8 @@
-/** \file screen_entities.h
- *  \ingroup tui
- *  \brief Entities screen rendering tabular view of all processes/entities
- *         with filtering, sorting and selection for drill-down.
- */
+#ifndef SCREEN_ENTITIES_H
+#define SCREEN_ENTITIES_H
 
+#include <postoffice/tui/tui.h>
+
+tui_widget_t* screen_entities_create(const char* title, int count);
+
+#endif

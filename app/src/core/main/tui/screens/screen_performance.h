@@ -1,6 +1,8 @@
-/** \file screen_performance.h
- *  \ingroup tui
- *  \brief Performance metrics screen visualizing counters, timers and
- *         histograms (latency distributions) with trend indicators.
- */
+#ifndef SCREEN_PERFORMANCE_H
+#define SCREEN_PERFORMANCE_H
 
+#include <postoffice/tui/tui.h>
+
+tui_widget_t* screen_performance_create(void);
+
+#endif

@@ -1,6 +1,8 @@
-/** \file screen_dashboard.h
- *  \ingroup tui
- *  \brief Primary dashboard aggregating high-level health, throughput and
- *         resource usage widgets for at-a-glance status.
- */
+#ifndef SCREEN_DASHBOARD_H
+#define SCREEN_DASHBOARD_H
 
+#include <postoffice/tui/tui.h>
+
+tui_widget_t* screen_dashboard_create(void);
+
+#endif
