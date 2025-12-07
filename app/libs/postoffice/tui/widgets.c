@@ -872,6 +872,23 @@ static bool tui_radio_handle_event(tui_widget_t* widget, const tui_event_t* even
     
     if (triggered && !rb->selected) {
         rb->selected = true;
+        
+        // Deselect others in group
+        if (widget->parent && widget->parent->type == TUI_WIDGET_PANEL) { // Check container type
+             tui_container_t* p = (tui_container_t*)widget->parent;
+             tui_widget_t* child = p->first_child;
+             while(child) {
+                 if (child != widget && child->draw == tui_radio_draw) { // Hacky type check or use type field if reliable
+                     tui_radio_button_t* peer = (tui_radio_button_t*)child;
+                     if (peer->group_id == rb->group_id) {
+                         peer->selected = false;
+                         tui_widget_draw(child);
+                     }
+                 }
+                 child = child->next;
+             }
+        }
+        
         if (rb->on_select) rb->on_select(rb, rb->group_id, widget->user_data);
         tui_widget_draw(widget);
         refresh();
@@ -974,23 +991,27 @@ static bool tui_tab_container_handle_event(tui_widget_t* widget, const tui_event
                     int label_len = (int)strlen(tabs->tabs[i]->title) + 2; // " Title "
                     int next_x = curr_x + label_len + (i < tabs->tab_count-1 ? 1 : 1);
                     
-                    if (mx >= curr_x && mx < next_x) {
+                if (mx >= curr_x && mx < next_x) {
+                        int old_idx = tabs->selected_tab;
+                        if (old_idx >= 0 && old_idx < tabs->tab_count) {
+                            tui_widget_t* old_content = tabs->tabs[old_idx]->content;
+                            if (old_content) tui_container_remove(&tabs->base, old_content);
+                        }
+
                         tabs->selected_tab = i;
+                        
+                        tui_widget_t* new_content = tabs->tabs[i]->content;
+                        if (new_content) {
+                            tui_container_add(&tabs->base, new_content);
+                        }
+
                         tui_widget_draw(widget);
                         clear(); // Hack: Force full clear because switching tabs might leave garbage from old tab
                         tui_widget_t* root = tui_get_root();
                         if (root) tui_widget_draw(root); // Redraw everything
                         
-                        // Set focus to the first focusable child of the new tab?
-                        tui_widget_t* content = tabs->tabs[i]->content;
-                        // Simplistic focus transfer (could recurse to find first input)
-                        // For now, if content is list, focus it.
-                        if (content && content->type == TUI_WIDGET_LIST) {
-                             tui_set_focus(content);
-                        } else if (content && content->type == TUI_WIDGET_CUSTOM) {
-                             // Panel... try to find child?
-                             // tui_container_focus_first(content); // Not implemented yet
-                        }
+                        // Set focus to the new content to ensure keys work immediately
+                        if (new_content) tui_set_focus(new_content);
                         
                         refresh();
                         return true;
@@ -1034,7 +1055,7 @@ static void tui_tab_container_free_impl(tui_widget_t* widget) {
 
 tui_tab_container_t* tui_tab_container_create(tui_rect_t bounds) {
     tui_tab_container_t* tabs = malloc(sizeof(tui_tab_container_t));
-    tui_widget_init(&tabs->base.base, TUI_WIDGET_CUSTOM);
+    tui_widget_init(&tabs->base.base, TUI_WIDGET_PANEL);
     tabs->base.base.bounds = bounds;
     tabs->base.base.draw = tui_tab_container_draw;
     tabs->base.base.handle_event = tui_tab_container_handle_event;
@@ -1079,7 +1100,10 @@ int tui_tab_container_add_tab(tui_tab_container_t* tabs, const char* title, tui_
     int idx = tabs->tab_count;
     tabs->tab_count++;
     
-    if (tabs->selected_tab == -1) tabs->selected_tab = 0;
+    if (tabs->selected_tab == -1) {
+        tabs->selected_tab = 0;
+        if (content) tui_container_add(&tabs->base, content);
+    }
     
     return idx;
 }

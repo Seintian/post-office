@@ -128,6 +128,11 @@ static void tui_gauge_draw(tui_widget_t* w) {
     // int color = 0; // Unused
     // Use ncurses colors if init...
     
+    // Clear background
+    for(int y=0; y < b.size.height; y++) {
+        mvhline(b.position.y + y, b.position.x, ' ', b.size.width);
+    }
+    
     mvaddch(b.position.y, b.position.x, '[');
     
     attron(A_REVERSE);

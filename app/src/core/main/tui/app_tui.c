@@ -182,7 +182,12 @@ void app_tui_run_demo(void) {
     
     // Bounds for content (tab logic usually resizes, but we pass full bounds and let layout handle it roughly)
     // The tab_container_add_tab we implemented resizes the content.
-    tui_rect_t content_bounds = bounds; // Placeholder
+    tui_rect_t content_bounds = bounds; 
+    // Fix layout offset: TabContainer starts content at y+2 (header+separator) plus margin +1 for border
+    content_bounds.position.x += 1;
+    content_bounds.position.y += 3; // +1 border, +1 header text, +1 separator
+    content_bounds.size.width -= 2;
+    content_bounds.size.height -= 4; // -2 border Y, -2 header Y
 
     tui_widget_t* dash = create_dashboard_tab(content_bounds, &cpu_graph, &mem_gauge);
     tui_tab_container_add_tab(tabs, "Dashboard", dash);
