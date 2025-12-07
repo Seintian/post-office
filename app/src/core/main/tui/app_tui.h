@@ -6,5 +6,6 @@
 // Forward declare arguments structure if needed, or pass needed values
 // For now, simple wrapper
 void app_tui_run_demo(void);
+void app_tui_run_simulation(void);
 
 #endif

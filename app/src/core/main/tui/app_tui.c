@@ -3,14 +3,10 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
-#include "app_tui.h"
-#include <postoffice/tui/tui.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
+
 
 // --- Callbacks ---
 
@@ -233,5 +229,281 @@ void app_tui_run_demo(void) {
     tui_set_update_callback(on_demo_update, &ctx);
     tui_run();
     
+    tui_cleanup();
+}
+
+// --- Simulation TUI ---
+
+// Forward declarations
+static tui_widget_t* create_director_screen(void);
+static tui_widget_t* create_ticket_issuer_screen(void);
+static tui_widget_t* create_users_manager_screen(void);
+static tui_widget_t* create_worker_screen(void);
+static tui_widget_t* create_user_screen(void);
+
+// Context for simulation TUI
+typedef struct {
+    tui_widget_t* content_container;
+    tui_input_field_t* input;
+} sim_context_t;
+
+static sim_context_t g_sim_ctx;
+
+static void on_sidebar_select(tui_list_t* list, int index, void* data) {
+    (void)data;
+    if (!g_sim_ctx.content_container) return;
+
+    // Clear current content
+    tui_container_remove_all((tui_container_t*)g_sim_ctx.content_container);
+
+    tui_widget_t* new_content = NULL;
+    const char* item_text = tui_list_get_item(list, index);
+    
+    if (item_text) {
+        if (strcmp(item_text, "Director") == 0) {
+            new_content = create_director_screen();
+        } else if (strcmp(item_text, "Ticket Issuer") == 0) {
+            new_content = create_ticket_issuer_screen();
+        } else if (strcmp(item_text, "Users Manager") == 0) {
+            new_content = create_users_manager_screen();
+        } else if (strcmp(item_text, "Worker") == 0) {
+            new_content = create_worker_screen();
+        } else if (strcmp(item_text, "User") == 0) {
+            new_content = create_user_screen();
+        }
+    }
+
+    if (new_content) {
+        // Expand content to fill container
+        new_content->layout_params.expand_x = true;
+        new_content->layout_params.expand_y = true;
+        new_content->layout_params.fill_x = true;
+        new_content->layout_params.fill_y = true;
+        tui_container_add((tui_container_t*)g_sim_ctx.content_container, new_content);
+    }
+    
+    // Force layout update
+    tui_widget_layout_update((tui_widget_t*)g_sim_ctx.content_container); // If available, or root update
+}
+
+static tui_widget_t* create_director_screen(void) {
+    tui_rect_t bounds = {0};
+    tui_tab_container_t* tabs = tui_tab_container_create(bounds);
+    
+    // Overview Tab
+    tui_panel_t* p1 = tui_panel_create(bounds, NULL);
+    tui_container_set_layout((tui_container_t*)p1, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 1)); // Clean inner spacing
+    // Add padding to panel content so text doesn't touch border
+    tui_layout_params_set_padding(&p1->base.base.layout_params, 1, 1, 1, 1);
+    
+    // Status moved to header, so just show some content here
+    tui_label_t* l1 = tui_label_create("Director Logs:", (tui_point_t){0,0});
+    tui_container_add(&p1->base, (tui_widget_t*)l1);
+    tui_tab_container_add_tab(tabs, "Overview", (tui_widget_t*)p1);
+
+    // Processes Tab
+    tui_panel_t* p2 = tui_panel_create(bounds, "Processes");
+    tui_container_set_layout((tui_container_t*)p2, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 1));
+    tui_layout_params_set_padding(&p2->base.base.layout_params, 1, 1, 1, 1);
+    
+    tui_list_t* list = tui_list_create(bounds);
+    tui_list_add_item(list, "Process 1 (Running)");
+    tui_list_add_item(list, "Process 2 (Idle)");
+    list->base.layout_params.expand_y = true;
+    list->base.layout_params.fill_x = true;
+    list->base.layout_params.weight_y = 1.0f; 
+    tui_container_add(&p2->base, (tui_widget_t*)list);
+    tui_tab_container_add_tab(tabs, "Processes", (tui_widget_t*)p2);
+
+    return (tui_widget_t*)tabs;
+}
+
+static tui_widget_t* create_ticket_issuer_screen(void) {
+    tui_rect_t bounds = {0};
+    tui_tab_container_t* tabs = tui_tab_container_create(bounds);
+    
+    tui_panel_t* p1 = tui_panel_create(bounds, NULL);
+    tui_container_set_layout((tui_container_t*)p1, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 1));
+    tui_layout_params_set_padding(&p1->base.base.layout_params, 1, 1, 1, 1);
+
+    tui_label_t* l1 = tui_label_create("Issued Tickets: 12", (tui_point_t){0,0});
+    tui_container_add(&p1->base, (tui_widget_t*)l1);
+    tui_tab_container_add_tab(tabs, "Status", (tui_widget_t*)p1);
+
+    return (tui_widget_t*)tabs;
+}
+
+static tui_widget_t* create_users_manager_screen(void) {
+    tui_rect_t bounds = {0};
+    tui_tab_container_t* tabs = tui_tab_container_create(bounds);
+    
+    tui_panel_t* p1 = tui_panel_create(bounds, NULL);
+    tui_container_set_layout((tui_container_t*)p1, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 1));
+    tui_layout_params_set_padding(&p1->base.base.layout_params, 1, 1, 1, 1);
+
+    tui_label_t* l1 = tui_label_create("Active Users: 3", (tui_point_t){0,0});
+    tui_container_add(&p1->base, (tui_widget_t*)l1);
+    tui_tab_container_add_tab(tabs, "Users", (tui_widget_t*)p1);
+
+    return (tui_widget_t*)tabs;
+}
+
+static tui_widget_t* create_worker_screen(void) {
+    tui_rect_t bounds = {0};
+    tui_tab_container_t* tabs = tui_tab_container_create(bounds);
+    
+    tui_panel_t* p1 = tui_panel_create(bounds, "Job Queue");
+    tui_container_set_layout((tui_container_t*)p1, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 1));
+    tui_layout_params_set_padding(&p1->base.base.layout_params, 1, 1, 1, 1);
+
+    tui_label_t* l1 = tui_label_create("Active Jobs: 5", (tui_point_t){0,0});
+    tui_container_add(&p1->base, (tui_widget_t*)l1);
+    tui_tab_container_add_tab(tabs, "Queue", (tui_widget_t*)p1);
+
+    return (tui_widget_t*)tabs;
+}
+
+static tui_widget_t* create_user_screen(void) {
+    tui_rect_t bounds = {0};
+    tui_tab_container_t* tabs = tui_tab_container_create(bounds);
+    
+    tui_panel_t* p1 = tui_panel_create(bounds, "Request Form");
+    tui_container_set_layout((tui_container_t*)p1, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 1));
+    tui_layout_params_set_padding(&p1->base.base.layout_params, 2, 1, 2, 1); // More horizontal padding
+
+    tui_container_add(&p1->base, (tui_widget_t*)tui_label_create("Enter Request:", (tui_point_t){0,0}));
+    
+    tui_input_field_t* inp = tui_input_field_create(bounds, 50);
+    inp->base.layout_params.fill_x = true;
+    inp->base.layout_params.min_height = 1;
+    // Add margin top to input
+    tui_layout_params_set_margin(&inp->base.layout_params, 0, 1, 0, 0); 
+    tui_container_add(&p1->base, (tui_widget_t*)inp);
+    
+    tui_tab_container_add_tab(tabs, "New Request", (tui_widget_t*)p1);
+
+    return (tui_widget_t*)tabs;
+}
+
+void app_tui_run_simulation(void) {
+    if (!tui_init()) return;
+
+    // Use full screen
+    tui_size_t screen = tui_get_screen_size();
+    tui_rect_t bounds = {{0, 0}, screen};
+    
+    // Root container
+    tui_container_t* root = tui_container_create();
+    tui_widget_set_bounds((tui_widget_t*)root, bounds);
+    // Vertical Box Layout for Root
+    tui_container_set_layout(root, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 0));
+    // Root padding to avoid screen edge
+    // tui_layout_params_set_padding(&root->base.layout_params, 1, 1, 1, 1); 
+    tui_set_root((tui_widget_t*)root);
+
+    // 1. Header
+    tui_panel_t* header = tui_panel_create(bounds, NULL); 
+    header->show_border = true;
+    header->base.base.layout_params.min_height = 3;
+    header->base.base.layout_params.fill_x = true;
+    // Use center alignment for title
+    tui_container_set_layout(&header->base, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 0));
+    tui_layout_params_set_padding(&header->base.base.layout_params, 0, 1, 0, 0); // Padding top 1 in header content
+    
+    tui_container_add(root, (tui_widget_t*)header);
+
+    tui_label_t* title = tui_label_create("Post Office Simulation", (tui_point_t){0, 0});
+    title->base.layout_params.h_align = TUI_ALIGN_CENTER; // Center the label
+    title->base.layout_params.fill_x = true; 
+    tui_container_add(&header->base, (tui_widget_t*)title);
+    
+    tui_label_t* subtitle = tui_label_create("Director Status: Running", (tui_point_t){0, 0});
+    subtitle->base.layout_params.h_align = TUI_ALIGN_CENTER;
+    subtitle->base.layout_params.fill_x = true;
+    tui_container_add(&header->base, (tui_widget_t*)subtitle);
+    
+    // 2. Middle Container (Sidebar + Content)
+    tui_container_t* middle = tui_container_create();
+    middle->base.layout_params.weight_y = 1.0f; // Expand vertically
+    middle->base.layout_params.fill_x = true;   // Fill width
+    middle->base.layout_params.expand_y = true;
+    // Add margin between header and middle?
+    // tui_layout_params_set_margin(&middle->base.layout_params, 0, 1, 0, 1); 
+    
+    tui_container_set_layout(middle, tui_layout_box_create(TUI_ORIENTATION_HORIZONTAL, 0)); // 0 spacing, sidebar border will handle
+    tui_container_add(root, (tui_widget_t*)middle);
+
+    // 2a. Sidebar
+    // Wrap List in a Panel to get a Border
+    tui_panel_t* sidebar_panel = tui_panel_create(bounds, "Menu");
+    sidebar_panel->base.base.layout_params.min_width = 25; // Wider sidebar
+    sidebar_panel->base.base.layout_params.expand_y = true;
+    sidebar_panel->base.base.layout_params.weight_x = 0; 
+    
+    tui_container_set_layout(&sidebar_panel->base, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 0));
+    tui_layout_params_set_padding(&sidebar_panel->base.base.layout_params, 1, 1, 1, 1); // Padding inside sidebar border
+
+    tui_list_t* sidebar = tui_list_create(bounds);
+    sidebar->base.layout_params.expand_y = true;
+    sidebar->base.layout_params.fill_x = true;
+    
+    tui_list_add_item(sidebar, "Director");
+    tui_list_add_item(sidebar, "Ticket Issuer");
+    tui_list_add_item(sidebar, "Users Manager");
+    tui_list_add_item(sidebar, "Worker");
+    tui_list_add_item(sidebar, "User");
+    tui_list_set_select_callback(sidebar, on_sidebar_select, NULL);
+    
+    tui_container_add(&sidebar_panel->base, (tui_widget_t*)sidebar);
+    tui_container_add(middle, (tui_widget_t*)sidebar_panel);
+
+    // 2b. Content Area
+    tui_container_t* content = tui_container_create();
+    content->base.layout_params.weight_x = 1.0f; 
+    content->base.layout_params.expand_y = true; 
+    content->base.layout_params.fill_x = true;
+    // Add margin left to separate from sidebar
+    tui_layout_params_set_margin(&content->base.layout_params, 1, 0, 0, 0);
+    
+    tui_container_set_layout(content, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 0)); 
+    tui_container_add(middle, (tui_widget_t*)content);
+    
+    g_sim_ctx.content_container = (tui_widget_t*)content;
+
+    // 3. Command Input
+    // Use a panel with title "Command"
+    tui_panel_t* input_panel = tui_panel_create(bounds, "Command");
+    input_panel->base.base.layout_params.min_height = 3;
+    input_panel->base.base.layout_params.fill_x = true;
+    
+    tui_container_set_layout(&input_panel->base, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 0));
+    tui_container_set_layout(&input_panel->base, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 0));
+    // Increase bottom padding to lift input from bottom edge or vice versa
+    // User said "input is a row too high", so maybe we simply add padding top/bottom to center it or push it down
+    tui_layout_params_set_padding(&input_panel->base.base.layout_params, 1, 0, 1, 0); // Padding left/right only for now
+
+
+    tui_input_field_t* input = tui_input_field_create(bounds, 128);
+    input->base.layout_params.fill_x = true;
+    input->base.layout_params.min_height = 1;
+    // Add margin top to push it down if needed, or margin bottom to lift it up?
+    // "input is a row too high" -> It's too high up? Meaning it needs to go down.
+    // If the panel is 3 high, and input is 1 high, and vertical box...
+    // Adding top margin might push it down.
+    tui_layout_params_set_margin(&input->base.layout_params, 1, 0, 0, 0);
+
+    tui_container_add((tui_container_t*)input_panel, (tui_widget_t*)input);
+    tui_container_add(root, (tui_widget_t*)input_panel);
+    
+    g_sim_ctx.input = input;
+
+    // Trigger initial selection
+    on_sidebar_select(sidebar, 0, NULL);
+    
+    // Force layout update before first render
+    tui_widget_layout_update((tui_widget_t*)root);
+
+    tui_render();
+    tui_run();
     tui_cleanup();
 }

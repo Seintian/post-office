@@ -20,15 +20,23 @@ int main(int argc, char *argv[]) {
     // Or we scan argv manually if arg structure is unknown 
     // For safety, scanning argv manually to respect previous behavior
     bool tui_demo = false;
+    bool tui_sim = false;
     for(int i=1; i<argc; i++) {
         if(strcmp(argv[i], "--tui-demo") == 0) {
             tui_demo = true;
-            break;
+        } else if(strcmp(argv[i], "--tui") == 0) {
+            tui_sim = true;
         }
     }
 
     if (tui_demo) {
         app_tui_run_demo();
+        po_args_destroy(&args);
+        return 0;
+    }
+
+    if (tui_sim) {
+        app_tui_run_simulation();
         po_args_destroy(&args);
         return 0;
     }

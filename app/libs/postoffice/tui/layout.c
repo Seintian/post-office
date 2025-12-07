@@ -61,6 +61,17 @@ tui_rect_t tui_rect_apply_margins(tui_rect_t rect, const tui_layout_params_t* pa
     return rect;
 }
 
+tui_rect_t tui_rect_apply_padding(tui_rect_t rect, const tui_layout_params_t* params) {
+    if (!params) return rect;
+    rect.position.x += (int16_t)params->padding.left;
+    rect.position.y += (int16_t)params->padding.top;
+    rect.size.width -= (int16_t)(params->padding.left + params->padding.right);
+    rect.size.height -= (int16_t)(params->padding.top + params->padding.bottom);
+    if (rect.size.width < 0) rect.size.width = 0;
+    if (rect.size.height < 0) rect.size.height = 0;
+    return rect;
+}
+
 // --- Layout Logic Helpers ---
 
 // Helper to align a child within an allocated slot
@@ -110,9 +121,10 @@ static void box_layout_fn(tui_layout_manager_t* self, tui_widget_t* container_wi
     box_layout_data_t* data = (box_layout_data_t*)self->data;
     
     tui_rect_t bounds = container_widget->bounds;
-    // Apply container padding if any (not strictly in params but maybe container specialized)
-    // tui_layout_params_t* cp = &container_widget->layout_params; 
-    // bounds = tui_rect_apply_padding(bounds, cp); // wait, padding logic is usually inner
+    // Apply container padding
+    // We access the widget's layout params directly.
+    tui_layout_params_t* cp = &container_widget->layout_params; 
+    bounds = tui_rect_apply_padding(bounds, cp);
     
     // Calculate total fixed size and total weight
     int total_fixed = 0;
@@ -207,6 +219,39 @@ tui_layout_manager_t* tui_create_box_layout(tui_orientation_t orientation, int s
     return lm;
 }
 
+// --- Stack Layout ---
+
+static void stack_layout_fn(tui_layout_manager_t* self, tui_widget_t* container_widget) {
+    if (!self || !container_widget) return;
+    tui_container_t* container = (tui_container_t*)container_widget;
+    
+    tui_widget_t* child = container->first_child;
+    while (child) {
+        if (!child->visible) {
+            child = child->next;
+            continue;
+        }
+        // Stack layout simply fills the container for each child (respecting child's params/margins)
+        align_child_in_slot(child, container_widget->bounds);
+        child = child->next;
+    }
+}
+
+static void stack_layout_free(tui_layout_manager_t* self) {
+    if (self) {
+        free(self);
+    }
+}
+
+tui_layout_manager_t* tui_layout_stack_create(void) {
+    tui_layout_manager_t* lm = malloc(sizeof(tui_layout_manager_t));
+    lm->data = NULL;
+    lm->layout = stack_layout_fn;
+    lm->free = stack_layout_free;
+    lm->measure = NULL;
+    return lm;
+}
+
 
 // --- API Wrappers ---
 
@@ -230,5 +275,24 @@ void tui_widget_set_layout(tui_widget_t* widget, tui_layout_manager_t* layout) {
         // Assuming it's a container structure compatible
         tui_container_t* c = (tui_container_t*)widget;
         tui_container_set_layout(c, layout);
+    }
+}
+
+void tui_widget_layout_update(tui_widget_t* widget) {
+    if (!widget) return;
+    
+    // If widget has a layout manager, run it
+    if (widget->type == TUI_WIDGET_PANEL || widget->type == TUI_WIDGET_WINDOW || widget->type == TUI_WIDGET_CUSTOM) {
+         tui_container_t* c = (tui_container_t*)widget;
+         if (c->layout && c->layout->layout) {
+             c->layout->layout(c->layout, widget);
+         }
+         
+         // Recursively update children
+         tui_widget_t* child = c->first_child;
+         while (child) {
+             tui_widget_layout_update(child);
+             child = child->next;
+         }
     }
 }

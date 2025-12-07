@@ -751,6 +751,11 @@ bool tui_list_add_item(tui_list_t* list, const char* text) {
     return true;
 }
 
+const char *tui_list_get_item(const struct tui_list_t *list, int index) {
+    if (!list || index < 0 || index >= list->item_count) return NULL;
+    return list->items[index]->text;
+}
+
 void tui_list_set_select_callback(tui_list_t* list, tui_list_select_callback_t callback, void* user_data) {
     if (list) {
         list->on_select = callback;

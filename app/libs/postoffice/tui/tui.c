@@ -8,6 +8,7 @@
 #include <tui/tui.h>
 #include "types.h"
 #include "widgets.h" // For widget drawing
+#include "layout.h"  // For layout updates
 
 #include "perf/perf.h"
 #include "perf/ringbuf.h"
@@ -204,6 +205,7 @@ void tui_set_root(tui_widget_t* root) {
         tui_size_t size = tui_get_screen_size();
         tui_rect_t bounds = {{0, 0}, size};
         tui_widget_set_bounds(root, bounds);
+        tui_widget_layout_update(root);
     }
 }
 
@@ -298,6 +300,7 @@ bool tui_process_event(void) {
                 .size = {(int16_t)event.data.resize.width, (int16_t)event.data.resize.height}
             };
             tui_widget_set_bounds(g_tui.root, bounds);
+            tui_widget_layout_update(g_tui.root);
         }
         clear(); // Invalidate screen
     }
