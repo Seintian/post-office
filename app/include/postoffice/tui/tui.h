@@ -61,6 +61,20 @@ bool tui_set_target_fps(int fps);
 void tui_run(void);
 
 /**
+ * @brief Callback function type for main loop updates
+ * @param data User data passed to tui_set_update_callback
+ */
+typedef void (*tui_update_cb_t)(void* data);
+
+/**
+ * @brief Set a callback function to be called every frame
+ * 
+ * @param cb The callback function
+ * @param data User data to pass to the callback
+ */
+void tui_set_update_callback(tui_update_cb_t cb, void* data);
+
+/**
  * @brief Stop the main event loop
  * 
  * Call this function to exit the main event loop and return from tui_run().

@@ -43,6 +43,23 @@ static void on_radio_select(tui_radio_button_t* rb, int group, void* data) {
     (void)rb; (void)data; (void)group;
 }
 
+static void on_demo_update(void* data) {
+    struct {
+        tui_graph_t* graph;
+        tui_gauge_t* gauge;
+    } *ctx = data;
+
+    if (ctx && ctx->graph) {
+        static float t = 0;
+        t += 0.1f;
+        float val = 50.0f + 30.0f * sinf(t);
+        tui_graph_add_value(ctx->graph, val);
+        if (ctx->gauge) {
+            tui_gauge_set_value(ctx->gauge, fabsf(100.0f * sinf(t * 0.5f)));
+        }
+    }
+}
+
 // --- Tab Creators ---
 
 static tui_widget_t* create_dashboard_tab(tui_rect_t bounds, tui_graph_t** out_graph, tui_gauge_t** out_gauge) {
@@ -202,31 +219,19 @@ void app_tui_run_demo(void) {
     // Quit button is already on Dashboard
     (void)on_quit; (void)on_radio_select; // Mark used to suppress warning if we don't wire them up yet
     
-    // Initial drawput a global Quit Key (q) or a button on Dashboard.
-    // There is a quit button in create_dashboard_tab code (Wait, I removed it in creation above? No I added 'Add Process').
-    // Let's add explicit Quit button to Dashboard.
-    // ... Actually I didn't add the quit button in `create_dashboard_tab` above, let me check...
-    // I see `on_quit` defined but not used.
-    // I'll add a quit button to the Dashboard tab.
-    
     // Initial draw
     tui_render();
+
+    tui_set_target_fps(20);
     
-    while (tui_is_running()) {
-        tui_process_events();
-        
-        // Update Graph (only if dashboard is active? or always)
-        if (cpu_graph) {
-            static float t = 0;
-            t += 0.1f;
-            float val = 50.0f + 30.0f * sinf(t);
-            tui_graph_add_value(cpu_graph, val);
-            tui_gauge_set_value(mem_gauge, fabsf(100.0f * sinf(t * 0.5f)));
-        }
-        
-        tui_render();
-        tui_sleep(50);
-    }
+    // Context for animation callback
+    struct demo_context {
+        tui_graph_t* graph;
+        tui_gauge_t* gauge;
+    } ctx = { cpu_graph, mem_gauge };
+
+    tui_set_update_callback(on_demo_update, &ctx);
+    tui_run();
     
     tui_cleanup();
 }

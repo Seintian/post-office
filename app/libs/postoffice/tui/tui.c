@@ -9,6 +9,10 @@
 #include "types.h"
 #include "widgets.h" // For widget drawing
 
+#include "perf/perf.h"
+#include "perf/ringbuf.h"
+#include "perf/zerocopy.h"
+
 #include <ncurses.h>
 #include <locale.h>
 #include <signal.h>
@@ -24,13 +28,23 @@ static struct {
     tui_widget_t* root;
     tui_widget_t* focused;
     struct timespec last_frame_time;
+    // Event queue resources
+    po_perf_ringbuf_t* event_q;
+    perf_zcpool_t* event_pool;
 } g_tui = {
     .initialized = false,
     .running = false,
     .target_fps = 30,
     .root = NULL,
-    .focused = NULL
+    .focused = NULL,
+    .event_q = NULL,
+    .event_pool = NULL
 };
+
+static struct {
+    tui_update_cb_t cb;
+    void* data;
+} g_update = { NULL, NULL };
 
 // Signal handler for resize
 static void handle_winch(int sig) {
@@ -78,6 +92,21 @@ bool tui_init(void) {
     sa.sa_handler = handle_winch;
     sigaction(SIGWINCH, &sa, NULL);
 
+    // Initialize perf resources
+    g_tui.event_q = perf_ringbuf_create(256);
+    g_tui.event_pool = perf_zcpool_create(256, sizeof(tui_event_t));
+    if (!g_tui.event_q || !g_tui.event_pool) {
+        endwin();
+        return false;
+    }
+    
+    // Attempt init perf (ignore EALREADY)
+    if (po_perf_init(16, 16, 16) == 0) {
+        // Register TUI metrics
+        po_perf_counter_create("tui.events");
+        po_perf_counter_create("tui.frames");
+    }
+
     g_tui.initialized = true;
     g_tui.running = true;
 
@@ -98,14 +127,25 @@ void tui_cleanup(void) {
 
     printf("\033[?1003l\n"); // Disable mouse movement reporting
     endwin();
+    
+    if (g_tui.event_q) perf_ringbuf_destroy(&g_tui.event_q);
+    if (g_tui.event_pool) perf_zcpool_destroy(&g_tui.event_pool);
+
     g_tui.initialized = false;
     g_tui.running = false;
+    g_update.cb = NULL;
+    g_update.data = NULL;
 }
 
 bool tui_set_target_fps(int fps) {
     if (fps <= 0) return false;
     g_tui.target_fps = fps;
     return true;
+}
+
+void tui_set_update_callback(tui_update_cb_t cb, void* data) {
+    g_update.cb = cb;
+    g_update.data = data;
 }
 
 void tui_quit(void) {
@@ -125,7 +165,13 @@ void tui_run(void) {
         clock_gettime(CLOCK_MONOTONIC, &start);
 
         tui_process_events();
+        
+        if (g_update.cb) {
+            g_update.cb(g_update.data);
+        }
+
         tui_render();
+        po_perf_counter_inc("tui.frames");
 
         clock_gettime(CLOCK_MONOTONIC, &end);
         
@@ -187,17 +233,16 @@ void tui_set_focus(tui_widget_t* widget) {
     }
 }
 
-// Event queue implementation (simple circular buffer)
-#define EVENT_QUEUE_SIZE 64
-static tui_event_t g_event_queue[EVENT_QUEUE_SIZE];
-static int g_event_head = 0;
-static int g_event_tail = 0;
-
+// Event queue implementation using perf ringbuf
 void tui_post_event(const tui_event_t* event) {
-    int next_head = (g_event_head + 1) % EVENT_QUEUE_SIZE;
-    if (next_head != g_event_tail) {
-        g_event_queue[g_event_head] = *event;
-        g_event_head = next_head;
+    if (!g_tui.event_pool || !g_tui.event_q) return;
+
+    tui_event_t* e = perf_zcpool_acquire(g_tui.event_pool);
+    if (!e) return; // Drop if no buffers
+
+    *e = *event;
+    if (perf_ringbuf_enqueue(g_tui.event_q, e) != 0) {
+        perf_zcpool_release(g_tui.event_pool, e);
     }
 }
 
@@ -234,12 +279,16 @@ bool tui_process_event(void) {
     }
 
     // 2. Process one event from queue
-    if (g_event_head == g_event_tail) {
+    tui_event_t* ptr_event = NULL;
+    if (perf_ringbuf_dequeue(g_tui.event_q, (void**)&ptr_event) != 0) {
         return false;
     }
 
-    tui_event_t event = g_event_queue[g_event_tail];
-    g_event_tail = (g_event_tail + 1) % EVENT_QUEUE_SIZE;
+    tui_event_t event = *ptr_event;
+    // Release buffer immediately after copy
+    perf_zcpool_release(g_tui.event_pool, ptr_event);
+
+    po_perf_counter_inc("tui.events");
 
     // Global handling
     if (event.type == TUI_EVENT_RESIZE) {

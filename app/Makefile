@@ -450,25 +450,25 @@ help:
 
 # Create executables
 $(MAIN_EXEC): $(MAIN_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(DIRECTOR_EXEC): $(DIRECTOR_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(TICKET_ISSUER_EXEC): $(TICKET_ISSUER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(USERS_MANAGER_EXEC): $(USERS_MANAGER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(WORKER_EXEC): $(WORKER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(USER_EXEC): $(USER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(TEST_MAIN_EXEC): $(TEST_MAIN_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(ALL_I) -o $@ $^
+	$(CC) $(CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 # --- Static Pattern Rules for Compilation ---
 # This is the robust way to compile object files. Each rule is explicitly
