@@ -157,6 +157,7 @@ USERS_MANAGER_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)users_manager
 
 # Arguments for main process
 MAIN_ARGS = --config "$(CONFIG)" --loglevel "$(LOG_LEVEL)"
+MAIN_TUI_ARGS = $(MAIN_ARGS) --tui
 MAIN_EXEC = $(PROFILER) $(BIN_DIR)/$(PROJECT_PREFIX)main
 
 # Arguments for director process
@@ -297,7 +298,7 @@ ALL_TARGETS = $(addprefix $(BIN_DIR)/, $(PROCESSES))
 SIMULATION_TARGETS = $(filter-out $(MAIN_EXEC), $(ALL_TARGETS))
 
 # Rules
-.PHONY: start simulation all _simulation-only dev test compile_commands doc clean-doc _clean-build _clean-logs _clean-crash-reports clean help clean-coverage
+.PHONY: start simulation all _simulation-only dev test compile_commands doc clean-doc _clean-build _clean-logs _clean-crash-reports clean help clean-coverage start-tui
 
 # Default target: start the application automatically
 start:
@@ -307,6 +308,15 @@ start:
 	@($(MAIN_EXEC) $(MAIN_ARGS) && \
 	(echo "> Makefile: Main process exited successfully.")) || \
 		(EXIT_CODE=$$? && echo "> Makefile: ERROR: Main process failed with exit code $$EXIT_CODE"; exit $$EXIT_CODE)
+
+# Start the main process with TUI
+start-tui:
+	@$(MAKE) all -j
+	@echo "> Makefile: Running the main process with TUI..."
+	@echo
+	@($(MAIN_EXEC) $(MAIN_TUI_ARGS) && \
+	(echo "> Makefile: Main process with TUI exited successfully.")) || \
+		(EXIT_CODE=$$? && echo "> Makefile: ERROR: Main process with TUI failed with exit code $$EXIT_CODE"; exit $$EXIT_CODE)
 
 # Run the simulation
 simulation: _simulation-only
@@ -426,8 +436,9 @@ clean-coverage:
 
 # Display help message
 help:
-	@echo "Usage: make [start|simulation|add-users|timeout|explode|all|reset-env|doc|clean-doc|clean|dev|test|help]"
+	@echo "Usage: make [start|start-tui|simulation|add-users|timeout|explode|all|reset-env|doc|clean-doc|clean|dev|test|help]"
 	@echo "    start: Start the application (default target)"
+	@echo "    start-tui: Start the application with Text User Interface (TUI)"
 	@echo "    simulation: Run the simulation (Director process)"
 	@echo "    add-users: Run the Users Manager to add new users"
 	@echo "    timeout: Run the simulation with TIMEOUT configuration"

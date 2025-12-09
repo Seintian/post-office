@@ -8,6 +8,7 @@
 #include "widgets.h"
 #include <stdlib.h>
 #include <string.h>
+#include <ncurses.h>
 
 // --- Window ---
 
@@ -104,8 +105,13 @@ void tui_dialog_close(tui_window_t* window) {
     // Remove from root
     if (window->root) {
         tui_container_remove((tui_container_t*)window->root, window->active_dialog);
-        tui_widget_destroy(window->active_dialog); // Assuming dialog is owned by window when shown
+        tui_widget_destroy(window->active_dialog); 
         window->active_dialog = NULL;
+        
+        // Redraw everything to clear the "ghost" of the dialog
+        clear();
+        tui_widget_draw(window->root);
+        refresh();
     }
 }
 
@@ -116,23 +122,100 @@ static void on_message_box_ok(tui_button_t* btn, void* data) {
     tui_dialog_close(parent);
 }
 
+// Custom draw for dialog to fill background
+static void tui_dialog_draw(tui_widget_t* widget) {
+    tui_panel_t* p = (tui_panel_t*)widget;
+    tui_rect_t b = widget->bounds;
+    
+    // Clear background
+    for(int y = b.position.y; y < b.position.y + b.size.height; y++) {
+        mvhline(y, b.position.x, ' ', b.size.width);
+    }
+    
+    // Draw standard panel (border/title/children)
+    // We can't easily call tui_panel_draw because it's static in widgets.c
+    // But we can replicate the border drawing or rely on tui_panel_draw if we could access it.
+    // Since we can't access it, we'll reimplement basic border here.
+    
+    if (p->show_border) {
+        // Corners
+        mvaddch(b.position.y, b.position.x, ACS_ULCORNER);
+        mvaddch(b.position.y, b.position.x + b.size.width - 1, ACS_URCORNER);
+        mvaddch(b.position.y + b.size.height - 1, b.position.x, ACS_LLCORNER);
+        mvaddch(b.position.y + b.size.height - 1, b.position.x + b.size.width - 1, ACS_LRCORNER);
+        
+        // Sides
+        mvhline(b.position.y, b.position.x + 1, ACS_HLINE, b.size.width - 2);
+        mvhline(b.position.y + b.size.height - 1, b.position.x + 1, ACS_HLINE, b.size.width - 2);
+        mvvline(b.position.y + 1, b.position.x, ACS_VLINE, b.size.height - 2);
+        mvvline(b.position.y + 1, b.position.x + b.size.width - 1, ACS_VLINE, b.size.height - 2);
+
+        if (p->title) {
+            mvprintw(b.position.y, b.position.x + 2, " %s ", p->title);
+        }
+    }
+    
+    // Draw children
+    // We can cast to container and iterate, but we need tui_container_draw which is static in widgets.c?
+    // tui_container_draw IS static in widgets.c.
+    // However, tui_widget_draw on children works.
+    tui_container_t* c = (tui_container_t*)widget;
+    tui_widget_t* child = c->first_child;
+    while (child) {
+        tui_widget_draw(child);
+        child = child->next;
+    }
+}
+
 // Simple message box using high-level dialog structure
 void tui_message_box_show(tui_window_t* parent, const char* title, const char* message) {
     if (!parent) return;
     
     tui_size_t screen = tui_get_screen_size();
+    
+    // We create the panel with explicit bounds, but since it will be in a StackLayout,
+    // we MUST set layout params to control its size and position.
+    // The bounds passed to create() are mostly initial.
     tui_rect_t bounds = {{(int16_t)(screen.width/4), (int16_t)(screen.height/3)}, {(int16_t)(screen.width/2), (int16_t)(screen.height/3)}};
     
     tui_panel_t* dlg = tui_panel_create(bounds, title);
+    // Override draw
+    dlg->base.base.draw = tui_dialog_draw;
+
+    // Stack Layout Params for the Dialog itself
+    tui_layout_params_set_alignment(&dlg->base.base.layout_params, TUI_ALIGN_CENTER, TUI_ALIGN_MIDDLE);
+    // Fix size to 1/2 width, 1/3 height
+    dlg->base.base.layout_params.min_width = screen.width / 2;
+    dlg->base.base.layout_params.max_width = screen.width / 2;
+    dlg->base.base.layout_params.min_height = screen.height / 3;
+    dlg->base.base.layout_params.max_height = screen.height / 3;
+
+    // Use a Vertical Box layout for the Dialog's content
+    tui_container_set_layout((tui_container_t*)dlg, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 1)); // 1 line spacing
+    // Padding inside the dialog
+    tui_layout_params_set_padding(&dlg->base.base.layout_params, 2, 2, 2, 1);
     
     // Text
-    tui_label_t* lbl = tui_label_create(message, (tui_point_t){(int16_t)(bounds.position.x+2), (int16_t)(bounds.position.y+2)});
+    // Note: Position passed to create is ignored by Box Layout
+    tui_label_t* lbl = tui_label_create(message, (tui_point_t){0,0});
+    // Center the label horizontally
+    tui_layout_params_set_alignment(&lbl->base.layout_params, TUI_ALIGN_CENTER, TUI_ALIGN_MIDDLE);
+    // Let text expand to fill width to allow centering
+    lbl->base.layout_params.fill_x = true;
+    lbl->base.layout_params.weight_y = 1.0f; // Push button down
+    
     tui_container_add((tui_container_t*)dlg, (tui_widget_t*)lbl);
     
     // OK Button
-    tui_rect_t btn_bounds = {{(int16_t)(bounds.position.x + bounds.size.width/2 - 5), (int16_t)(bounds.position.y + bounds.size.height - 2)}, {10, 1}};
+    tui_rect_t btn_bounds = {{0,0}, {10, 1}};
     tui_button_t* btn = tui_button_create("OK", btn_bounds);
     tui_button_set_click_callback(btn, on_message_box_ok, parent);
+    
+    // Center button
+    tui_layout_params_set_alignment(&btn->base.layout_params, TUI_ALIGN_CENTER, TUI_ALIGN_BOTTOM);
+    // Fixed size
+    btn->base.layout_params.min_width = 10;
+    btn->base.layout_params.min_height = 1;
     
     tui_container_add((tui_container_t*)dlg, (tui_widget_t*)btn);
     

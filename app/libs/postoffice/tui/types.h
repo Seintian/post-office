@@ -230,6 +230,7 @@ typedef enum {
     TUI_WIDGET_INPUT,        /**< Text input field */
     TUI_WIDGET_LIST,         /**< Scrollable list */
     TUI_WIDGET_PANEL,        /**< Container with border and optional title */
+    TUI_WIDGET_TAB_CONTAINER, /**< Container with tabs */
     TUI_WIDGET_PROGRESS_BAR, /**< Progress indicator */
     TUI_WIDGET_CUSTOM        /**< Application-defined custom widget */
 } tui_widget_type_t;

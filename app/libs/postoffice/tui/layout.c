@@ -282,7 +282,7 @@ void tui_widget_layout_update(tui_widget_t* widget) {
     if (!widget) return;
     
     // If widget has a layout manager, run it
-    if (widget->type == TUI_WIDGET_PANEL || widget->type == TUI_WIDGET_WINDOW || widget->type == TUI_WIDGET_CUSTOM) {
+    if (widget->type == TUI_WIDGET_PANEL || widget->type == TUI_WIDGET_WINDOW || widget->type == TUI_WIDGET_TAB_CONTAINER) {
          tui_container_t* c = (tui_container_t*)widget;
          if (c->layout && c->layout->layout) {
              c->layout->layout(c->layout, widget);
@@ -291,8 +291,9 @@ void tui_widget_layout_update(tui_widget_t* widget) {
          // Recursively update children
          tui_widget_t* child = c->first_child;
          while (child) {
+             tui_widget_t* next = child->next;
              tui_widget_layout_update(child);
-             child = child->next;
+             child = next;
          }
     }
 }

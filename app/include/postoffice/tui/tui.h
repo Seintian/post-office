@@ -121,6 +121,18 @@ tui_widget_t* tui_get_root(void);
 tui_widget_t* tui_get_focused_widget(void);
 
 /**
+ * @brief Set a global event handler function
+ * 
+ * The global handler is called before any other event processing.
+ * If it returns true, the event is considered handled and will not be
+ * dispatched to widgets.
+ * 
+ * @param callback The callback function
+ * @param user_data User data to pass to the callback
+ */
+void tui_set_global_event_handler(bool (*callback)(const tui_event_t* event, void* user_data), void* user_data);
+
+/**
  * @brief Process all pending events
  * 
  * This function processes all pending input and window events.

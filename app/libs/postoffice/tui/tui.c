@@ -47,6 +47,11 @@ static struct {
     void* data;
 } g_update = { NULL, NULL };
 
+static struct {
+    bool (*cb)(const tui_event_t* event, void* user_data);
+    void* data;
+} g_global_handler = { NULL, NULL };
+
 // Signal handler for resize
 static void handle_winch(int sig) {
     (void)sig;
@@ -63,6 +68,11 @@ static void handle_winch(int sig) {
     tui_post_event(&event);
 }
 
+void tui_set_global_event_handler(bool (*callback)(const tui_event_t* event, void* user_data), void* user_data) {
+    g_global_handler.cb = callback;
+    g_global_handler.data = user_data;
+}
+
 bool tui_init(void) {
     if (g_tui.initialized) return true;
 
@@ -71,9 +81,10 @@ bool tui_init(void) {
 
     // Initialize ncurses
     initscr();
-    cbreak();               // Disable line buffering
+    raw();                  // Disable line buffering and flow control (allows Ctrl+C/Q etc)
     noecho();               // Don't echo input
     keypad(stdscr, TRUE);   // Enable special keys
+    set_escdelay(25);       // Low delay for ESC key responsiveness
     curs_set(0);            // Hide cursor
     nodelay(stdscr, TRUE);  // Non-blocking input
     
@@ -292,6 +303,13 @@ bool tui_process_event(void) {
 
     po_perf_counter_inc("tui.events");
 
+    // Global handler
+    if (g_global_handler.cb) {
+        if (g_global_handler.cb(&event, g_global_handler.data)) {
+            return true;
+        }
+    }
+
     // Global handling
     if (event.type == TUI_EVENT_RESIZE) {
         if (g_tui.root) {
@@ -318,13 +336,26 @@ bool tui_process_event(void) {
              tui_point_t p = {(int16_t)event.data.mouse.x, (int16_t)event.data.mouse.y};
              tui_widget_t* target = tui_widget_find_at(g_tui.root, p);
              if (target) {
-                 // Update focus on click
-                 if (event.data.mouse.pressed && target->focusable) {
-                     tui_set_focus(target);
+                 // Update focus on click (Press or Clicked)
+                 bool is_interaction = event.data.mouse.pressed || 
+                                      (event.data.mouse.button & (BUTTON1_CLICKED | BUTTON2_CLICKED | BUTTON3_CLICKED));
+                 
+                 if (is_interaction) {
+                     if (target->focusable) {
+                         tui_set_focus(target);
+                     } else {
+                         // Click on background/container -> clear focus
+                         tui_set_focus(NULL);
+                     }
                  }
                  handled = tui_send_event(target, &event);
              }
-        } else {
+        } else if (event.type == TUI_EVENT_KEY) {
+            // Handle global shortcuts
+            if (event.data.key == 3 || event.data.key == 17) { // Ctrl+C or Ctrl+Q
+                tui_quit();
+                return true;
+            }
             handled = tui_send_event(g_tui.root, &event);
         }
     }

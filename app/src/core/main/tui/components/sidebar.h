@@ -3,6 +3,6 @@
 
 #include <postoffice/tui/tui.h>
 
-tui_widget_t* sidebar_create(tui_list_select_callback_t on_select, void* userdata);
+tui_widget_t* sidebar_create(tui_list_select_callback_t on_select, void* userdata, tui_list_t** out_list);
 
 #endif
