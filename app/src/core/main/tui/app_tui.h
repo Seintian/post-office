@@ -6,6 +6,7 @@
 // Forward declare arguments structure if needed, or pass needed values
 // For now, simple wrapper
 void app_tui_run_demo(void);
-void app_tui_run_simulation(const char *config_path);
+// Run the TUI for simulation
+void app_tui_run_simulation(void);
 
 #endif

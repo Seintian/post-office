@@ -1,10 +1,12 @@
-#include <utils/argv.h>
+#include "utils/argv.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <postoffice/log/logger.h>
 #include <postoffice/metrics/metrics.h>
+#include <postoffice/sysinfo/sysinfo.h>
 #include "tui/app_tui.h"
+#include "simulation/simulation_lifecycle.h"
 
 int main(int argc, char *argv[]) {
     po_args_t args;
@@ -29,6 +31,9 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // Initialize simulation lifecycle
+    simulation_init(args.config_file);
+
     if (tui_demo) {
         app_tui_run_demo();
         po_args_destroy(&args);
@@ -36,7 +41,15 @@ int main(int argc, char *argv[]) {
     }
 
     if (tui_sim) {
-        app_tui_run_simulation(args.config_file);
+        // Start simulation processes
+        simulation_start();
+
+        // Run TUI
+        app_tui_run_simulation();
+
+        // Stop simulation when TUI exits
+        simulation_stop();
+
         po_args_destroy(&args);
         return 0;
     }
@@ -69,12 +82,25 @@ int main(int argc, char *argv[]) {
     LOG_INFO("post-office main started (level=%d)%s", (int)po_logger_get_level(),
              args.syslog ? " with syslog" : "");
 
+    // Collect and log system information
+    po_sysinfo_t sysinfo;
+    if (po_sysinfo_collect(&sysinfo) == 0) {
+        // Log brief info
+        LOG_INFO("System: %d physical cores, %ld MB RAM", sysinfo.physical_cores, sysinfo.total_ram / 1024 / 1024);
+        // Print detailed info to stdout if running headless
+        if (!tui_sim && !tui_demo) {
+            po_sysinfo_print(&sysinfo, stdout);
+        }
+    } else {
+        LOG_WARN("Failed to collect system information");
+    }
+
     // Example metric usage at startup
     PO_METRIC_COUNTER_INC("app.start");
 
-    // TODO: Implement application subsystems initialization
-
-    LOG_INFO("Application subsystems initialization would go here");
+    // Headless execution
+    LOG_INFO("Entering headless simulation mode...");
+    simulation_run_headless();
 
     // Clean shutdown and exit
     po_logger_shutdown();

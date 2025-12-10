@@ -23,7 +23,7 @@ tui_widget_t* screen_config_create(void);
 
  */
 
-void screen_config_set_path(const char* path);
+
 
 
 

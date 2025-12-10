@@ -155,10 +155,10 @@ static void on_sidebar_select(tui_list_t* list, int index, void* data) {
     }
 }
 
-void app_tui_run_simulation(const char *config_path) {
+void app_tui_run_simulation(void) {
     if (!tui_init()) return;
 
-    screen_config_set_path(config_path);
+    // screen_config_set_path(config_path); // Removed: Config is now global and set in main
 
     tui_set_global_event_handler(on_global_event, NULL);
 
@@ -240,5 +240,5 @@ void app_tui_run_simulation(const char *config_path) {
 }
 
 void app_tui_run_demo(void) {
-    app_tui_run_simulation(NULL);
+    app_tui_run_simulation();
 }

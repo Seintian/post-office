@@ -60,6 +60,7 @@ CORE_SRC_DIR           = $(SRC_DIR)/core
 UTILS_DIR              = $(SRC_DIR)/utils
 # Processes' sources directories
 MAIN_DIR               = $(CORE_SRC_DIR)/main
+MAIN_SIM_DIR           = $(MAIN_DIR)/simulation
 SIMULATION_DIR         = $(CORE_SRC_DIR)/simulation
 DIRECTOR_DIR           = $(SIMULATION_DIR)/director
 TICKET_ISSUER_DIR      = $(SIMULATION_DIR)/ticket_issuer
@@ -210,6 +211,7 @@ UNITY_SRC       = $(wildcard $(UNITY_DIR)/*.c)
 # paths to static pattern rules (which only allow a single-directory stem).
 # Nested trees (main/tui, director/ctrl_bridge) are handled separately below.
 MAIN_APP_SRC          = $(wildcard $(MAIN_DIR)/*.c)
+MAIN_SIM_SRC          = $(wildcard $(MAIN_SIM_DIR)/*.c)
 TUI_SRC_UNNORMALIZED  = $(shell find $(TUI_DIR) -name '*.c')
 APP_MAIN_TUI_SRC_UNNORMALIZED = $(shell find $(APP_MAIN_TUI_DIR) -name '*.c')
 TUI_SRC               = $(patsubst ./%,%,$(TUI_SRC_UNNORMALIZED))
@@ -263,6 +265,7 @@ DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(RANDOM_OBJS) $(HASHTABLE_OBJS
 
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
+MAIN_SIM_OBJS 			= $(patsubst $(MAIN_SIM_DIR)/%.c,$(BUILD_DIR)/main/simulation/%.o,$(MAIN_SIM_SRC))
 TUI_OBJS              = $(patsubst $(TUI_DIR)/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SRC))
 APP_MAIN_TUI_OBJS     = $(patsubst $(APP_MAIN_TUI_DIR)/%.c,$(BUILD_DIR)/app_tui/%.o,$(APP_MAIN_TUI_SRC))
 DIRECTOR_APP_OBJS 		= $(patsubst $(DIRECTOR_DIR)/%.c,$(BUILD_DIR)/director/%.o,$(DIRECTOR_APP_SRC))
@@ -275,7 +278,7 @@ TEST_ONLY_SRCS         = $(shell find $(TESTS_DIR) -name '*.c')
 TEST_OBJS              = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_ONLY_SRCS))
 
 # Full dependency list for each final executable
-MAIN_OBJS           = $(MAIN_APP_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
+MAIN_OBJS           = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
 DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 USERS_MANAGER_OBJS 	= $(USERS_MANAGER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
@@ -487,6 +490,11 @@ $(TEST_MAIN_EXEC): $(TEST_MAIN_OBJS) | $(BIN_DIR)
 
 # Rule for main application objects
 $(BUILD_DIR)/main/%.o: $(MAIN_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
+
+# Rule for main simulation objects
+$(BUILD_DIR)/main/simulation/%.o: $(MAIN_SIM_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 

@@ -1,4 +1,6 @@
 #include "screen_config.h"
+#include "simulation/simulation_lifecycle.h"
+#include "common/args.h"
 #include <postoffice/tui/tui.h>
 #include <utils/configs.h>
 #include <utils/argv.h>
@@ -42,13 +44,6 @@ typedef struct {
 
 static config_screen_ctx_t g_cfg_ctx;
 
-void screen_config_set_path(const char* path) {
-    if (g_cfg_ctx.config_path) {
-        free(g_cfg_ctx.config_path);
-    }
-    g_cfg_ctx.config_path = path ? strdup(path) : NULL;
-}
-
 // Callback for iterating config
 static void populate_list_cb(const char *section, const char *key, const char *value, void *user_data) {
     tui_list_t *list = (tui_list_t *)user_data;
@@ -86,7 +81,7 @@ static void on_item_selected(tui_list_t* list, int index, void* data) {
         // tui_input_set_text((tui_input_t*)g_cfg_ctx.edit_field, val);
         // Casting to input type if available
     }
-    
+
     char status[256];
     snprintf(status, sizeof(status), "Selected: %s.%s", section, key);
     // tui_label_set_text((tui_label_t*)g_cfg_ctx.status_label, status);
@@ -94,17 +89,18 @@ static void on_item_selected(tui_list_t* list, int index, void* data) {
 
 // Reload config from file
 static void reload_config(void) {
-    if (!g_cfg_ctx.config_path) return;
-    
+    const char* path = g_simulation_config_path;
+    if (!path) return;
+
     if (g_cfg_ctx.config) {
         po_config_free(&g_cfg_ctx.config);
     }
-    
-    if (po_config_load(g_cfg_ctx.config_path, &g_cfg_ctx.config) != 0) {
+
+    if (po_config_load(path, &g_cfg_ctx.config) != 0) {
         // Error loading
         return;
     }
-    
+
     if (g_cfg_ctx.list) {
         // Remove all items manually if clear is not available
         // Assuming tui_list_remove_all exists or we recreate list
@@ -112,14 +108,14 @@ static void reload_config(void) {
         // Let's assume tui_list_clear is not available based on error
         // Re-creating might be safer or looking for remove function
         // tui_list_clear((tui_list_t*)g_cfg_ctx.list); 
-        
+
         // WORKAROUND: For now, just append (duplicates if reloaded)
         // or check if we can remove items.
         // tui_list_remove_item(list, index);
-        
+
         // Let's rely on append for initial load. 
         // Real implementation would clear.
-        
+
         // Just append for now.
         po_config_foreach(g_cfg_ctx.config, populate_list_cb, g_cfg_ctx.list);
     }
@@ -150,37 +146,29 @@ tui_widget_t* screen_config_create(void) {
     edit_area->base.layout_params.fill_x = true;
     edit_area->base.layout_params.min_height = 3;
     tui_container_set_layout(edit_area, tui_layout_box_create(TUI_ORIENTATION_HORIZONTAL, 1));
-    
+
     tui_label_t* lbl = tui_label_create("Value:", (tui_point_t){0,0});
     tui_container_add(edit_area, (tui_widget_t*)lbl);
-    
+
     // tui_input_t* input = tui_input_create(...); // If input exists
     // For now using placeholder
     tui_label_t* input_placeholder = tui_label_create("[Edit Value Here]", (tui_point_t){0,0});
     tui_container_add(edit_area, (tui_widget_t*)input_placeholder);
     g_cfg_ctx.edit_field = (tui_widget_t*)input_placeholder;
-    
+
     tui_container_add(root, (tui_widget_t*)edit_area);
 
     // 5. Status / Buttons
     tui_container_t* buttons = tui_container_create();
     tui_container_set_layout(buttons, tui_layout_box_create(TUI_ORIENTATION_HORIZONTAL, 1));
-    
+
     // tui_button_t* btn_save = tui_button_create("Save", ...);
     // tui_container_add(buttons, (tui_widget_t*)btn_save);
 
-        tui_container_add(root, (tui_widget_t*)buttons);
+    tui_container_add(root, (tui_widget_t*)buttons);
 
-    
+    // Initial load
+    reload_config();
 
-        // Initial load
-
-        reload_config();
-
-    
-
-        return (tui_widget_t*)root;
-
-    }
-
-    
+    return (tui_widget_t*)root;
+}
