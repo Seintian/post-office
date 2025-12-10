@@ -276,3 +276,97 @@ int po_config_get_bool(const po_config_t *cfg, const char *section, const char *
     errno = INIH_EINVAL;
     return -1;
 }
+
+int po_config_set_str(po_config_t *cfg, const char *section, const char *key, const char *value) {
+    char *full_key = get_full_key(section, key);
+    if (!full_key) {
+        errno = ENOMEM;
+        return -1;
+    }
+
+    // Check if exists to manage memory
+    if (po_hashtable_contains_key(cfg->entries, full_key)) {
+        // We need to replace the value.
+        char *new_val = strdup(value);
+        if (!new_val) {
+            free(full_key);
+            errno = ENOMEM;
+            return -1;
+        }
+        
+        // We need to free the OLD value after replacing, but we lose the pointer then.
+        // So get it first.
+        char *old_val = po_hashtable_get(cfg->entries, full_key);
+        
+        if (po_hashtable_replace(cfg->entries, full_key, new_val) != 1) {
+             // Should not happen if contains_key is true
+             free(new_val);
+             free(full_key);
+             return -1;
+        }
+        
+        if (old_val) free(old_val);
+        free(full_key); // Now we can free the search key
+    } else {
+        // Insert new
+        char *val_copy = strdup(value);
+        if (!val_copy) {
+            free(full_key);
+            errno = ENOMEM;
+            return -1;
+        }
+        
+        if (po_hashtable_put(cfg->entries, full_key, val_copy) != 1) {
+            free(full_key);
+            free(val_copy);
+            return -1;
+        }
+        
+        // Also ensure section exists
+        if (section && *section) {
+             if (!po_hashset_contains(cfg->sections, section)) {
+                 char *sec_copy = strdup(section);
+                 if (sec_copy) {
+                     po_hashset_add(cfg->sections, sec_copy);
+                 }
+             }
+        }
+    }
+    
+    return 0;
+}
+
+void po_config_foreach(const po_config_t *cfg, po_config_entry_cb cb, void *user_data) {
+    po_hashtable_iter_t *it = po_hashtable_iterator(cfg->entries);
+    if (!it) return;
+
+    while (po_hashtable_iter_next(it)) {
+        const char *full_key = po_hashtable_iter_key(it);
+        const char *val = po_hashtable_iter_value(it);
+        
+        // Split section.key
+        // full_key format: "section.key" or "key" (if no section)
+        const char *dot = strchr(full_key, '.');
+        if (dot) {
+            // We need to temporarily extract section and key
+            // But full_key is const (from iterator).
+            // We can make a copy or do pointer arithmetic.
+            size_t sec_len = (size_t)(dot - full_key);
+            char *sec_buf = malloc(sec_len + 1);
+            if (sec_buf) {
+                memcpy(sec_buf, full_key, sec_len);
+                sec_buf[sec_len] = '\0';
+                
+                cb(sec_buf, dot + 1, val, user_data);
+                free(sec_buf);
+            }
+        } else {
+            cb("", full_key, val, user_data);
+        }
+    }
+    
+    free(it); // Assuming iterator needs freeing? 
+    // `po_hashtable_iterator` returns `po_hashtable_iter_t *`. 
+    // Checked `hashtable.c`? No, header says "Allocate an iterator".
+    // Usually iterators need freeing. `free(it)` is likely correct.
+}

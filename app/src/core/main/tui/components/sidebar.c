@@ -20,6 +20,7 @@ tui_widget_t* sidebar_create(tui_list_select_callback_t on_select, void* userdat
     tui_list_add_item(list, "Worker");
     tui_list_add_item(list, "User");
     tui_list_add_item(list, "Performance");
+    tui_list_add_item(list, "Configuration");
     
     if (on_select) {
         tui_list_set_select_callback(list, on_select, userdata);

@@ -1,6 +1,30 @@
-/** \file screen_config.h
- *  \ingroup tui
- *  \brief Configuration inspection & (future) editing screen showing current
- *         runtime parameters, validation statuses and pending changes.
+#ifndef SCREEN_CONFIG_H
+#define SCREEN_CONFIG_H
+
+#include <postoffice/tui/tui.h>
+
+/**
+
+ * @brief Create the configuration editor screen.
+
+ * @return A new widget representing the configuration screen.
+
  */
 
+tui_widget_t* screen_config_create(void);
+
+
+
+/**
+
+ * @brief Set the path to the configuration file to be edited.
+
+ * @param path Path string (copied internally).
+
+ */
+
+void screen_config_set_path(const char* path);
+
+
+
+#endif // SCREEN_CONFIG_H

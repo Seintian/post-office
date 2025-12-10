@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (tui_sim) {
-        app_tui_run_simulation();
+        app_tui_run_simulation(args.config_file);
         po_args_destroy(&args);
         return 0;
     }

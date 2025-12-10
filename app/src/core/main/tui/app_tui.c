@@ -17,6 +17,7 @@
 #include "screens/screen_entities.h"
 #include "screens/screen_template.h" 
 #include "screens/screen_performance.h"
+#include "screens/screen_config.h"
 
 // Forward declaration
 static void on_sidebar_select(tui_list_t* list, int index, void* data);
@@ -133,6 +134,8 @@ static void on_sidebar_select(tui_list_t* list, int index, void* data) {
             new_content = screen_user_create();
         } else if (strcmp(item_text, "Performance") == 0) {
             new_content = screen_performance_create();
+        } else if (strcmp(item_text, "Configuration") == 0) {
+            new_content = screen_config_create();
         }
     }
 
@@ -152,8 +155,10 @@ static void on_sidebar_select(tui_list_t* list, int index, void* data) {
     }
 }
 
-void app_tui_run_simulation(void) {
+void app_tui_run_simulation(const char *config_path) {
     if (!tui_init()) return;
+
+    screen_config_set_path(config_path);
 
     tui_set_global_event_handler(on_global_event, NULL);
 
@@ -235,5 +240,5 @@ void app_tui_run_simulation(void) {
 }
 
 void app_tui_run_demo(void) {
-    app_tui_run_simulation();
+    app_tui_run_simulation(NULL);
 }

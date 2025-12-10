@@ -96,6 +96,42 @@ int po_config_get_long(const po_config_t *cfg, const char *section, const char *
 int po_config_get_bool(const po_config_t *cfg, const char *section, const char *key,
                        bool *out_value) __nonnull((1, 3, 4));
 
+/**
+ * @brief Set a value as a string.
+ *
+ * Updates the existing value or inserts a new one if it doesn't exist.
+ * The value is duplicated, so the caller retains ownership of the input string.
+ *
+ * @param cfg       Config handle.
+ * @param section   Section name.
+ * @param key       Key name.
+ * @param value     Value to set.
+ * @return 0 on success; non-zero on allocation failure or other error.
+ */
+int po_config_set_str(po_config_t *cfg, const char *section, const char *key, const char *value)
+    __nonnull((1, 3, 4));
+
+/**
+ * @brief Callback for configuration iteration.
+ *
+ * @param section   Section name.
+ * @param key       Key name (without section prefix).
+ * @param value     Value string.
+ * @param user_data User-provided context.
+ */
+typedef void (*po_config_entry_cb)(const char *section, const char *key, const char *value,
+                                   void *user_data);
+
+/**
+ * @brief Iterate over all configuration entries.
+ *
+ * @param cfg       Config handle.
+ * @param cb        Callback function to invoke for each entry.
+ * @param user_data User-provided context passed to the callback.
+ */
+void po_config_foreach(const po_config_t *cfg, po_config_entry_cb cb, void *user_data)
+    __nonnull((1, 2));
+
 #ifdef __cplusplus
 }
 #endif
