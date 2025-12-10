@@ -14,6 +14,7 @@ void po_args_init(po_args_t *args) {
     args->syslog = false;
     args->syslog_ident = NULL;
     args->tui_demo = false;
+    args->tui_sim = false;
     args->fd = -1;
 }
 
@@ -26,6 +27,7 @@ void po_args_print_usage(int fd, const char *prog_name) {
             "  -l, --loglevel LEVEL  Set log level (TRACE|DEBUG|INFO|WARN|ERROR|FATAL or 0..5)\n"
             "      --syslog          Enable syslog logging sink\n"
             "      --syslog-ident S  Set syslog ident (default: 'postoffice')\n"
+            "      --tui             Run with TUI (Terminal User Interface)\n"
             "      --tui-demo        Run a minimal TUI smoke demo and exit\n");
 }
 
@@ -106,6 +108,9 @@ static int po_handle_option(int opt, po_args_t *args, int fd, const char *prog_n
     case 3: // --tui-demo
         args->tui_demo = true;
         return 0;
+    case 4: // --tui
+        args->tui_sim = true;
+        return 0;
     case '?':
     default:
         po_args_print_usage(fd, prog_name);
@@ -122,6 +127,7 @@ int po_args_parse(po_args_t *args, int argc, char **argv, int fd) {
         {"syslog", no_argument, NULL, 1},
         {"syslog-ident", required_argument, NULL, 2},
         {"tui-demo", no_argument, NULL, 3},
+        {"tui", no_argument, NULL, 4},
         {NULL, 0, NULL, 0}
     };
 

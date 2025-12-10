@@ -39,6 +39,7 @@ typedef struct {
 
     /* Demo / mode flags */
     bool tui_demo;      /**< Run minimal TUI smoke demo then exit if true. */
+    bool tui_sim;       /**< Run TUI with simulation */
 } po_args_t;
 
 /**

@@ -1,6 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include "simulation_lifecycle.h"
 #include <stdio.h>
+#include <stdbool.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
@@ -19,7 +21,7 @@ void simulation_init(const char* config_path) {
     g_simulation_config_path = config_path; // Assumes config_path lifetime is managed by caller (main args)
 }
 
-void simulation_start(void) {
+void simulation_start(bool tui_mode) {
     if (g_director_pid > 0) return; // Already running
 
     printf("Starting simulation (Director)...\n");
@@ -46,6 +48,10 @@ void simulation_start(void) {
     posix_spawn_file_actions_t actions;
     posix_spawn_file_actions_init(&actions);
     // Default: inherit stdin, stdout, stderr
+    if (tui_mode) {
+        // Redirect stdout to /dev/null to prevent TUI corruption
+        posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0644);
+    }
 
     int status = posix_spawn(&g_director_pid, exe_path, &actions, NULL, argv, environ);
     posix_spawn_file_actions_destroy(&actions);
@@ -77,7 +83,7 @@ static void handle_signal(int sig) {
 }
 
 void simulation_run_headless(void) {
-    simulation_start();
+    simulation_start(false);
     if (g_director_pid <= 0) return;
 
     g_running = 1;

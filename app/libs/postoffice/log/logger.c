@@ -18,6 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/syscall.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/time.h>
 #include <syslog.h>
 #include <time.h>
@@ -77,6 +79,41 @@ static log_record_t g_sentinel; // shutdown marker (never in freelist)
 static const char *const level_metrics[] = {"logger.level.trace", "logger.level.debug",
                                             "logger.level.info",  "logger.level.warn",
                                             "logger.level.error", "logger.level.fatal"};
+
+// --- Directory Helper ---
+static int mkdir_p(const char *path) {
+    if (!path || !*path) return -1;
+    char *subpath = strdup(path);
+    if (!subpath) return -1;
+
+    char *p = subpath;
+    // Skip leading slash
+    if (*p == '/') p++;
+
+    for (; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (mkdir(subpath, 0755) != 0) {
+                if (errno != EEXIST) {
+                    free(subpath);
+                    return -1;
+                }
+            }
+            *p = '/';
+        }
+    }
+
+    // Create the final leaf if it's a directory path (this function expects a directory path)
+    if (mkdir(subpath, 0755) != 0) {
+        if (errno != EEXIST) {
+            free(subpath);
+            return -1;
+        }
+    }
+
+    free(subpath);
+    return 0;
+}
 
 // --- Helpers ---
 static inline uint64_t get_tid(void) {
@@ -182,6 +219,10 @@ static void *worker_main(void *arg) {
             atomic_fetch_add_explicit(&g_processed, 1, memory_order_relaxed);
             recycle_record(r);
         }
+
+        // Batch processed, flush file sink if active
+        if ((g_sinks_mask & LOGGER_SINK_FILE) && g_fp)
+            fflush(g_fp);
     }
 
     void *p; // Drain remaining
@@ -197,6 +238,10 @@ static void *worker_main(void *arg) {
             recycle_record(r);
         }
     }
+
+    // Final flush
+    if ((g_sinks_mask & LOGGER_SINK_FILE) && g_fp)
+        fflush(g_fp);
 
     free(batch);
     return NULL;
@@ -353,6 +398,18 @@ int po_logger_add_sink_console(bool use_stderr) {
 }
 
 int po_logger_add_sink_file(const char *path, bool append) {
+    // Attempt to create parent directories
+    char *dir = strdup(path);
+    if (dir) {
+        char *slash = strrchr(dir, '/');
+        if (slash) {
+            *slash = '\0';
+            // Ignore errors here; straightforward fopen will fail if mkdir failed, checking that is enough
+            mkdir_p(dir); 
+        }
+        free(dir);
+    }
+
     const char *mode = append ? "a" : "w";
     FILE *fp = fopen(path, mode);
     if (!fp)

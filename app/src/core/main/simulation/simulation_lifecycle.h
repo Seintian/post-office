@@ -1,6 +1,8 @@
 #ifndef SIMULATION_LIFECYCLE_H
 #define SIMULATION_LIFECYCLE_H
 
+#include <stdbool.h>
+
 /**
  * Global configuration path for the simulation.
  * Set during initialization and accessible throughout the application.
@@ -16,8 +18,9 @@ void simulation_init(const char* config_path);
 /**
  * Start the simulation processes (Director, etc.).
  * Does not block.
+ * @param tui_mode If true, suppress stdout of child processes.
  */
-void simulation_start(void);
+void simulation_start(bool tui_mode);
 
 /**
  * Stop the simulation processes.
