@@ -30,14 +30,12 @@
 #include <stdint.h>
 #include <sys/cdefs.h>
 
+#include "net/net.h"
 #include "protocol.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* Forward declaration of zero-copy buffer type provided by perf/zero-copy */
-typedef struct zcp_buffer zcp_buffer_t;
 
 /**
  * @brief Default maximum frame payload size (in bytes).
@@ -66,31 +64,6 @@ int framing_init(uint32_t max_payload_bytes);
  * Useful for validating payload lengths before attempting sends.
  */
 uint32_t framing_get_max_payload(void);
-
-/**
- * @brief Read a full message from a socket into a zero-copy buffer.
- *
- * This function implements a blocking/read-until-complete semantic on the
- * provided file descriptor. It will allocate a zcp_buffer_t for the payload
- * (from the perf zero-copy pool) and fill the header_out with the header in
- * host byte order.
- *
- * Ownership:
- * - On success: *payload_out is a reference to a zcp_buffer_t. The caller is
- *   responsible for calling zcp_release(*payload_out) when done.
- * - On failure: *payload_out is left unchanged.
- *
- * Return values:
- * - 0 on success
- * - -1 on error (errno set)
- * - -2 if peer closed the connection (EOF)
- *
- * Note: This function uses blocking I/O semantics by repeatedly calling read
- * until the full message is received. For integration with an event-driven
- * poller, use a non-blocking, incremental decoder variant (not exported
- * here) implemented internally in the framing module.
- */
-int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out) __nonnull((2, 3));
 
 /**
  * @brief Write a message to a socket from a contiguous payload buffer.

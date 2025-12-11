@@ -285,7 +285,7 @@ USERS_MANAGER_OBJS 	= $(USERS_MANAGER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 WORKER_OBJS 		= $(WORKER_APP_OBJS) $(DEFAULTS_OBJS)
 USER_OBJS 			= $(USER_APP_OBJS) $(DEFAULTS_OBJS)
 # Application objects (except entrypoints) to link into tests
-APP_ALL_OBJS       = $(MAIN_APP_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) \
+APP_ALL_OBJS       = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) \
                      $(TICKET_ISSUER_APP_OBJS) $(USERS_MANAGER_APP_OBJS) $(WORKER_APP_OBJS) $(USER_APP_OBJS)
 APP_ENTRYPOINT_OBJS = $(BUILD_DIR)/main/main.o $(BUILD_DIR)/director/director.o $(BUILD_DIR)/ticket_issuer/ticket_issuer.o \
                       $(BUILD_DIR)/users_manager/users_manager.o $(BUILD_DIR)/worker/worker.o $(BUILD_DIR)/user/user.o

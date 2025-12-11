@@ -12,6 +12,8 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
 
@@ -228,80 +230,52 @@ static int read_full(int fd, void *buf, size_t len) {
     return 0;
 }
 
-int framing_read_msg(int fd, po_header_t *header_out, zcp_buffer_t **payload_out) {
-    // 1) read 4-byte length prefix
+int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
+                          uint32_t payload_buf_size, uint32_t *payload_len_out) {
+    // 1. Peek at the length prefix to check if we have a full message
     uint32_t len_be = 0;
-    int rc = read_full(fd, &len_be, sizeof(len_be));
-    if (rc != 0) {
-        if (rc == -1)
-            PO_METRIC_COUNTER_INC("framing.read.len.fail");
-        return rc;
+    ssize_t pn = recv(fd, &len_be, sizeof(len_be), MSG_PEEK | MSG_DONTWAIT);
+    if (pn < (ssize_t)sizeof(len_be)) {
+        if (pn == 0) return -2; // EOF
+        // If error (including EAGAIN) or partial peek, return EAGAIN to avoid desync
+        if (pn < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            PO_METRIC_COUNTER_INC("framing.read_into.len.peek_fail");
+            return -1;
+        }
+        errno = EAGAIN;
+        return -1;
     }
 
-    uint32_t total = ntohl(len_be);
-    if (total < sizeof(po_header_t)) {
+    // 2. Check if total message bytes are available
+    uint32_t remaining = ntohl(len_be);
+    
+    // Early validation of the peeked length
+    if (remaining < sizeof(po_header_t)) {
         errno = EPROTO;
         return -1;
     }
-
-    // 2) read header
-    po_header_t net_hdr;
-    rc = read_full(fd, &net_hdr, sizeof(net_hdr));
-    if (rc != 0) {
-        if (rc == -1)
-            PO_METRIC_COUNTER_INC("framing.read.hdr.fail");
-        return rc;
-    }
-
-    // convert to host for validation and return
-    *header_out = net_hdr;
-    protocol_header_to_host(header_out);
-    if (header_out->version != PROTOCOL_VERSION) {
-        errno = EPROTONOSUPPORT;
-        return -1;
-    }
-
-    uint32_t payload_len = total - (uint32_t)sizeof(po_header_t);
-    if (payload_len > g_max_payload) {
-        PO_METRIC_COUNTER_INC("framing.read.emsgsize");
+    if (remaining - sizeof(po_header_t) > g_max_payload) {
+        PO_METRIC_COUNTER_INC("framing.read_into.emsgsize_peek");
         errno = EMSGSIZE;
         return -1;
     }
 
-    // 3) read payload bytes. Zero-copy pool integration is not available in this
-    // translation unit, so we read and discard payload for now and return NULL.
-    if (payload_len == 0) {
-        *payload_out = NULL;
-        PO_METRIC_COUNTER_INC("framing.read.msg");
-        return 0;
+    int avail = 0;
+    if (ioctl(fd, FIONREAD, &avail) < 0) {
+         PO_METRIC_COUNTER_INC("framing.read_into.ioctl.fail");
+         return -1;
     }
 
-    unsigned char *tmp = malloc(payload_len);
-    if (!tmp) {
-        errno = ENOMEM;
+    if ((size_t)avail < sizeof(len_be) + remaining) {
+        errno = EAGAIN;
         return -1;
     }
 
-    rc = read_full(fd, tmp, payload_len);
-    free(tmp);
-    if (rc != 0) {
-        if (rc == -1)
-            PO_METRIC_COUNTER_INC("framing.read.payload.fail");
-        return rc;
-    }
-    PO_METRIC_COUNTER_INC("framing.read.msg");
-    PO_METRIC_COUNTER_ADD("framing.read.msg.bytes", payload_len);
-    *payload_out = NULL;
-    return 0;
-}
-
-int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
-                          uint32_t payload_buf_size, uint32_t *payload_len_out) {
-    uint32_t len_be = 0;
+    // 3. Read for real (guaranteed not to block if FIONREAD was correct)
     int rc = read_full(fd, &len_be, sizeof(len_be));
     if (rc != 0) {
-        if (rc == -1)
-            PO_METRIC_COUNTER_INC("framing.read_into.len.fail");
+        // Should not happen given check
+        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_into.len.fail");
         return rc;
     }
 
@@ -314,8 +288,7 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
     po_header_t net_hdr;
     rc = read_full(fd, &net_hdr, sizeof(net_hdr));
     if (rc != 0) {
-        if (rc == -1)
-            PO_METRIC_COUNTER_INC("framing.read_into.hdr.fail");
+        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_into.hdr.fail");
         return rc;
     }
 
@@ -346,8 +319,7 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
 
     rc = read_full(fd, payload_buf, payload_len);
     if (rc != 0) {
-        if (rc == -1)
-            PO_METRIC_COUNTER_INC("framing.read_into.payload.fail");
+        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_into.payload.fail");
         return rc;
     }
 

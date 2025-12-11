@@ -36,47 +36,11 @@
 #include <stdint.h>
 #include <sys/cdefs.h>
 
+#include "net/net.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/**
- * @brief Fixed protocol version (host order numeric constant).
- *
- * Bump this on backward-incompatible wire changes. For additive compatible
- * evolution prefer feature discovery through flags or message type ranges.
- */
-#define PROTOCOL_VERSION 0x0001u
-
-#pragma pack(push, 1)
-/**
- * @brief On-the-wire message header (packed, network byte order fields).
- *
- * All fields are packed to avoid unwanted padding bytes. The `payload_len`
- * counts the exact number of payload bytes that follow the header on the
- * wire (not including the 4-byte framing length prefix used by framing.h).
- */
-typedef struct {
-    uint16_t version;     /**< Protocol version (network byte order) */
-    uint8_t msg_type;     /**< Message type identifier */
-    uint8_t flags;        /**< Message flags (bitmask) */
-    uint32_t payload_len; /**< Length of the payload in bytes (network order) */
-} po_header_t;
-#pragma pack(pop)
-
-/**
- * @name Flag bits for po_header_t::flags
- * @brief Bitmask namespace for per-message qualifiers.
- *
- * Additional flags should occupy higher unused bits (e.g., 0x08, 0x10...).
- * @{ */
-enum {
-    PO_FLAG_NONE = 0x00u,       /**< No special flags */
-    PO_FLAG_COMPRESSED = 0x01u, /**< Payload is compressed */
-    PO_FLAG_ENCRYPTED = 0x02u,  /**< Payload is encrypted */
-    PO_FLAG_URGENT = 0x04u,     /**< High priority / expedited processing */
-};
-/** @} */
 
 /**
  * @brief Initialize a protocol header.

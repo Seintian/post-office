@@ -27,10 +27,11 @@ TEST(FRAMING, ROUND_TRIP_EMPTY_PAYLOAD) {
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     po_header_t out;
-    zcp_buffer_t *payload = NULL;
-    rc = framing_read_msg(sv[1], &out, &payload);
+    uint8_t buf[128];
+    uint32_t len_out = 0;
+    rc = framing_read_msg_into(sv[1], &out, buf, sizeof(buf), &len_out);
     TEST_ASSERT_EQUAL_INT(0, rc);
-    TEST_ASSERT_NULL(payload);
+    TEST_ASSERT_EQUAL_UINT32(0u, len_out);
     TEST_ASSERT_EQUAL_HEX16(PROTOCOL_VERSION, out.version);
     TEST_ASSERT_EQUAL_HEX8(0x10u, out.msg_type);
     TEST_ASSERT_EQUAL_HEX8(PO_FLAG_NONE, out.flags);
@@ -49,13 +50,15 @@ TEST(FRAMING, ROUND_TRIP_SMALL_PAYLOAD) {
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     po_header_t out;
-    zcp_buffer_t *payload = NULL;
-    rc = framing_read_msg(sv[1], &out, &payload);
+    uint8_t buf[128];
+    uint32_t len_out = 0;
+    rc = framing_read_msg_into(sv[1], &out, buf, sizeof(buf), &len_out);
     TEST_ASSERT_EQUAL_INT(0, rc);
-    TEST_ASSERT_NULL(payload); // zero-copy not wired yet, framing discards payload
+    TEST_ASSERT_EQUAL_UINT32(sizeof msg, len_out);
     TEST_ASSERT_EQUAL_HEX16(PROTOCOL_VERSION, out.version);
     TEST_ASSERT_EQUAL_HEX8(0x20u, out.msg_type);
     TEST_ASSERT_EQUAL_UINT32(sizeof msg, out.payload_len);
+    TEST_ASSERT_EQUAL_MEMORY(msg, buf, sizeof msg);
     close(sv[0]);
     close(sv[1]);
 }
@@ -89,8 +92,9 @@ TEST(FRAMING, READ_REJECTS_TOTAL_SMALLER_THAN_HEADER) {
     ssize_t wn = write(sv[0], &total_be, sizeof(total_be));
     TEST_ASSERT_EQUAL_INT(sizeof(total_be), (int)wn);
     po_header_t out;
-    zcp_buffer_t *payload = NULL;
-    int rc = framing_read_msg(sv[1], &out, &payload);
+    uint8_t buf[128];
+    uint32_t len_out = 0;
+    int rc = framing_read_msg_into(sv[1], &out, buf, sizeof(buf), &len_out);
     TEST_ASSERT_EQUAL_INT(-1, rc);
     TEST_ASSERT_EQUAL_INT(EPROTO, errno);
     close(sv[0]);
@@ -111,8 +115,9 @@ TEST(FRAMING, READ_REJECTS_BAD_VERSION) {
     (void)!write(sv[0], &total_be, sizeof total_be);
     (void)!write(sv[0], &bad_hdr, sizeof bad_hdr);
     po_header_t out;
-    zcp_buffer_t *payload = NULL;
-    int rc = framing_read_msg(sv[1], &out, &payload);
+    uint8_t buf[128];
+    uint32_t len_out = 0;
+    int rc = framing_read_msg_into(sv[1], &out, buf, sizeof(buf), &len_out);
     TEST_ASSERT_EQUAL_INT(-1, rc);
     TEST_ASSERT_EQUAL_INT(EPROTONOSUPPORT, errno);
     close(sv[0]);
@@ -132,8 +137,9 @@ TEST(FRAMING, READ_REJECTS_TOO_LARGE_PAYLOAD) {
     (void)!write(sv[0], &total_be, sizeof total_be);
     (void)!write(sv[0], &h, sizeof h);
     po_header_t out;
-    zcp_buffer_t *payload = NULL;
-    int rc = framing_read_msg(sv[1], &out, &payload);
+    uint8_t buf[128];
+    uint32_t len_out = 0;
+    int rc = framing_read_msg_into(sv[1], &out, buf, sizeof(buf), &len_out);
     TEST_ASSERT_EQUAL_INT(-1, rc);
     TEST_ASSERT_EQUAL_INT(EMSGSIZE, errno);
     close(sv[0]);
@@ -171,11 +177,12 @@ TEST(FRAMING, WRITE_ZERO_COPY_TREATED_AS_ZERO_PAYLOAD) {
     int rc = framing_write_zcp(sv[0], &h, (const zcp_buffer_t *)&dummy);
     TEST_ASSERT_EQUAL_INT(0, rc);
     po_header_t out;
-    zcp_buffer_t *payload = NULL;
-    rc = framing_read_msg(sv[1], &out, &payload);
+    uint8_t buf[128];
+    uint32_t len_out = 0;
+    rc = framing_read_msg_into(sv[1], &out, buf, sizeof(buf), &len_out);
     TEST_ASSERT_EQUAL_INT(0, rc);
     TEST_ASSERT_EQUAL_UINT32(0u, out.payload_len);
-    TEST_ASSERT_NULL(payload);
+    TEST_ASSERT_EQUAL_UINT32(0u, len_out);
     close(sv[0]);
     close(sv[1]);
 }

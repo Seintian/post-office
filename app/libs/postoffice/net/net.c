@@ -43,6 +43,17 @@ int net_init_zerocopy(size_t tx_buffers, size_t rx_buffers, size_t buf_size) {
     return 0;
 }
 
+void net_shutdown_zerocopy(void) {
+    if (g_tx_pool) {
+        perf_zcpool_destroy(&g_tx_pool);
+        g_tx_pool = NULL;
+    }
+    if (g_rx_pool) {
+        perf_zcpool_destroy(&g_rx_pool);
+        g_rx_pool = NULL;
+    }
+}
+
 void *net_zcp_acquire_tx(void) {
     if (!g_tx_pool)
         return NULL;
@@ -114,11 +125,29 @@ int net_send_message_zcp(int fd, uint8_t msg_type, uint8_t flags, void *payload_
 }
 
 int net_recv_message(int fd, po_header_t *header_out, zcp_buffer_t **payload_out) {
-    int rc = framing_read_msg(fd, header_out, payload_out);
+    void *buf = net_zcp_acquire_rx();
+    if (!buf) {
+        PO_METRIC_COUNTER_INC("net.recv.acquire.fail");
+        errno = ENOMEM;
+        return -1;
+    }
+
+    uint32_t buf_cap = 0;
+    if (g_rx_pool)
+        buf_cap = (uint32_t)perf_zcpool_bufsize(g_rx_pool);
+    
+    // We trust framing_read_msg_into to validate payload_len vs buf_cap
+    uint32_t payload_len = 0;
+    int rc = framing_read_msg_into(fd, header_out, buf, buf_cap, &payload_len);
     if (rc == 0) {
         PO_METRIC_COUNTER_INC("net.recv");
         PO_METRIC_COUNTER_ADD("net.recv.bytes", header_out->payload_len);
-    } else if (rc != -2)
+        *payload_out = (zcp_buffer_t *)buf;
+        return 0;
+    }
+
+    net_zcp_release_rx(buf);
+    if (rc != -2)
         PO_METRIC_COUNTER_INC("net.recv.fail");
 
     return rc;
@@ -126,38 +155,25 @@ int net_recv_message(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
 
 int net_recv_message_zcp(int fd, po_header_t *header_out, void **payload_out,
                          uint32_t *payload_len_out) {
-    void *buf = NULL;
-    uint32_t buf_cap = 0;
-    if (g_rx_pool) {
-        buf = perf_zcpool_acquire(g_rx_pool);
-        if (buf)
-            buf_cap = (uint32_t)perf_zcpool_bufsize(g_rx_pool);
+    void *buf = net_zcp_acquire_rx();
+    if (!buf) {
+        PO_METRIC_COUNTER_INC("net.recv.zcp.acquire.fail");
+        errno = ENOMEM;
+        return -1;
     }
 
-    if (buf) {
-        int rc = framing_read_msg_into(fd, header_out, buf, buf_cap, payload_len_out);
-        if (rc == 0) {
-            PO_METRIC_COUNTER_INC("net.recv.zcp");
-            PO_METRIC_COUNTER_ADD("net.recv.zcp.bytes", *payload_len_out);
-
-            *payload_out = buf;
-            return 0;
-        }
-
-        perf_zcpool_release(g_rx_pool, buf);
-        PO_METRIC_COUNTER_INC("net.recv.zcp.fail");
-    }
-
-    zcp_buffer_t *zbuf = NULL;
-    int rc = framing_read_msg(fd, header_out, &zbuf);
+    uint32_t buf_cap = (uint32_t)perf_zcpool_bufsize(g_rx_pool);
+    int rc = framing_read_msg_into(fd, header_out, buf, buf_cap, payload_len_out);
     if (rc == 0) {
-        PO_METRIC_COUNTER_INC("net.recv");
-        PO_METRIC_COUNTER_ADD("net.recv.bytes", header_out->payload_len);
+        PO_METRIC_COUNTER_INC("net.recv.zcp");
+        PO_METRIC_COUNTER_ADD("net.recv.zcp.bytes", *payload_len_out);
 
-        *payload_len_out = header_out->payload_len;
-        *payload_out = NULL;
-    } else if (rc != -2)
-        PO_METRIC_COUNTER_INC("net.recv.fail");
+        *payload_out = buf;
+        return 0;
+    }
+
+    net_zcp_release_rx(buf);
+    PO_METRIC_COUNTER_INC("net.recv.zcp.fail");
 
     return rc;
 }

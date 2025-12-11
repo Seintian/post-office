@@ -3,7 +3,7 @@
  * @brief Epoll-based poller simple wrapper.
  */
 
-#include "net/poller.h"
+#include "net/net.h"
 
 #include <errno.h>
 #include <stdlib.h>

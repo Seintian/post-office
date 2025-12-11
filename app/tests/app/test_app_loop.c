@@ -11,7 +11,7 @@
 #include <unistd.h>
 
 #include "net/net.h"
-#include "net/poller.h"
+#include "net/framing.h"
 #include "perf/perf.h"
 #include "storage/db_lmdb.h"
 #include "unity/unity_fixture.h"
@@ -41,6 +41,7 @@ TEST_SETUP(APP) {
     // Initialize perf and framing for net module
     TEST_ASSERT_EQUAL_INT(0, po_perf_init(1, 1, 1));
     framing_init(0);
+    net_init_zerocopy(16, 16, 4096);
 
     // Temp LMDB environment
     const char *TEMPLATE = "/tmp/appmainXXXXXX";
@@ -109,9 +110,10 @@ TEST(APP, MAIN_LOOP_END_TO_END) {
     po_header_t hdr;
     zcp_buffer_t *buf = NULL;
     TEST_ASSERT_EQUAL_INT(0, net_recv_message(sv[1], &hdr, &buf));
-    // Current framing drops payload; we only check header fields
-    TEST_ASSERT_NULL(buf);
+    // We now receive a valid buffer
+    TEST_ASSERT_NOT_NULL(buf);
     TEST_ASSERT_EQUAL_HEX8(0x7Au, hdr.msg_type);
+    net_zcp_release_rx(buf);
 
     // Persist something about the message into storage
     char key[16];
