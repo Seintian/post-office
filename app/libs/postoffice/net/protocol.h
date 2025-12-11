@@ -140,7 +140,7 @@ int protocol_encode(uint8_t msg_type, uint8_t flags, const void *payload, uint32
  * @return 0 on success, -1 on error.
  */
 int protocol_decode(const po_header_t *net_hdr, void *payload_buf, uint32_t payload_buf_size,
-                    uint32_t *payload_len_out);
+                    uint32_t *payload_len_out) __nonnull((1));
 
 #ifdef __cplusplus
 }

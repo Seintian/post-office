@@ -6,6 +6,9 @@
 #include "net/net.h"
 
 #include <errno.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <sched.h>
 
 #include "metrics/metrics.h"
 #include "net/framing.h"
@@ -17,11 +20,29 @@
 static perf_zcpool_t *g_tx_pool;
 static perf_zcpool_t *g_rx_pool;
 
+/* Lightweight synchronization for pool lifecycle:
+ * - A small mutex protects concurrent init/shutdown operations.
+ * - Atomic "users" counters track active buffer users; shutdown sets
+ *   a shutting flag and waits for the counters to reach zero before
+ *   destroying the pool. This prevents destroying a pool while a
+ *   caller still holds an acquired buffer, and does not require
+ *   changing the public API. */
+static pthread_mutex_t g_zcpool_create_lock = PTHREAD_MUTEX_INITIALIZER;
+static atomic_uint g_tx_users = 0;
+static atomic_uint g_rx_users = 0;
+static atomic_bool g_tx_shutting = ATOMIC_VAR_INIT(false);
+static atomic_bool g_rx_shutting = ATOMIC_VAR_INIT(false);
+
 int net_init_zerocopy(size_t tx_buffers, size_t rx_buffers, size_t buf_size) {
+    /* Protect init/shutdown races with a mutex. Simple and sufficient for
+     * pool lifecycle operations which are infrequent compared to acquire/release. */
+    pthread_mutex_lock(&g_zcpool_create_lock);
+
     if (!g_tx_pool) {
         g_tx_pool = perf_zcpool_create(tx_buffers, buf_size);
         if (!g_tx_pool) {
             PO_METRIC_COUNTER_INC("net.zcpool.tx.create.fail");
+            pthread_mutex_unlock(&g_zcpool_create_lock);
             return -1;
         }
 
@@ -33,6 +54,8 @@ int net_init_zerocopy(size_t tx_buffers, size_t rx_buffers, size_t buf_size) {
         g_rx_pool = perf_zcpool_create(rx_buffers, buf_size);
         if (!g_rx_pool) {
             PO_METRIC_COUNTER_INC("net.zcpool.rx.create.fail");
+            /* If TX created above, keep it; caller can shutdown later. */
+            pthread_mutex_unlock(&g_zcpool_create_lock);
             return -1;
         }
 
@@ -40,10 +63,24 @@ int net_init_zerocopy(size_t tx_buffers, size_t rx_buffers, size_t buf_size) {
         PO_METRIC_COUNTER_ADD("net.zcpool.rx.buffers", rx_buffers);
     }
 
+    pthread_mutex_unlock(&g_zcpool_create_lock);
+
     return 0;
 }
 
 void net_shutdown_zerocopy(void) {
+    /* Prevent new acquisitions, wait for active users to drain, then
+     * safely destroy the pools. */
+    pthread_mutex_lock(&g_zcpool_create_lock);
+
+    atomic_store(&g_tx_shutting, true);
+    atomic_store(&g_rx_shutting, true);
+
+    /* Wait for active users to finish. */
+    while (atomic_load(&g_tx_users) != 0 || atomic_load(&g_rx_users) != 0) {
+        sched_yield();
+    }
+
     if (g_tx_pool) {
         perf_zcpool_destroy(&g_tx_pool);
         g_tx_pool = NULL;
@@ -52,11 +89,32 @@ void net_shutdown_zerocopy(void) {
         perf_zcpool_destroy(&g_rx_pool);
         g_rx_pool = NULL;
     }
+
+    atomic_store(&g_tx_shutting, false);
+    atomic_store(&g_rx_shutting, false);
+
+    pthread_mutex_unlock(&g_zcpool_create_lock);
 }
 
 void *net_zcp_acquire_tx(void) {
-    if (!g_tx_pool)
+    /* Prevent new acquisitions during shutdown and count active users so
+     * shutdown can wait for them. */
+    if (atomic_load(&g_tx_shutting))
         return NULL;
+
+    atomic_fetch_add(&g_tx_users, 1);
+
+    /* Re-check shutting flag to avoid a race where shutdown started just
+     * after we incremented users. */
+    if (atomic_load(&g_tx_shutting)) {
+        atomic_fetch_sub(&g_tx_users, 1);
+        return NULL;
+    }
+
+    if (!g_tx_pool) {
+        atomic_fetch_sub(&g_tx_users, 1);
+        return NULL;
+    }
 
     void *p = perf_zcpool_acquire(g_tx_pool);
     if (p)
@@ -64,19 +122,38 @@ void *net_zcp_acquire_tx(void) {
     else
         PO_METRIC_COUNTER_INC("net.tx.acquire.fail");
 
+    if (!p) /* failed to acquire; decrement user count */
+        atomic_fetch_sub(&g_tx_users, 1);
+
     return p;
 }
 
 void net_zcp_release_tx(void *buf) {
-    if (g_tx_pool && buf) {
+    if (!buf) return;
+
+    if (g_tx_pool) {
         perf_zcpool_release(g_tx_pool, buf);
         PO_METRIC_COUNTER_INC("net.tx.release");
     }
+
+    atomic_fetch_sub(&g_tx_users, 1);
 }
 
 void *net_zcp_acquire_rx(void) {
-    if (!g_rx_pool)
+    if (atomic_load(&g_rx_shutting))
         return NULL;
+
+    atomic_fetch_add(&g_rx_users, 1);
+
+    if (atomic_load(&g_rx_shutting)) {
+        atomic_fetch_sub(&g_rx_users, 1);
+        return NULL;
+    }
+
+    if (!g_rx_pool) {
+        atomic_fetch_sub(&g_rx_users, 1);
+        return NULL;
+    }
 
     void *p = perf_zcpool_acquire(g_rx_pool);
     if (p)
@@ -84,14 +161,21 @@ void *net_zcp_acquire_rx(void) {
     else
         PO_METRIC_COUNTER_INC("net.rx.acquire.fail");
 
+    if (!p)
+        atomic_fetch_sub(&g_rx_users, 1);
+
     return p;
 }
 
 void net_zcp_release_rx(void *buf) {
-    if (g_rx_pool && buf) {
+    if (!buf) return;
+
+    if (g_rx_pool) {
         perf_zcpool_release(g_rx_pool, buf);
         PO_METRIC_COUNTER_INC("net.rx.release");
     }
+
+    atomic_fetch_sub(&g_rx_users, 1);
 }
 
 int net_send_message(int fd, uint8_t msg_type, uint8_t flags, const uint8_t *payload,
@@ -131,14 +215,9 @@ int net_recv_message(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
         errno = ENOMEM;
         return -1;
     }
-
-    if (!g_rx_pool) {
-        PO_METRIC_COUNTER_INC("net.recv.pool.invalid");
-        net_zcp_release_rx(buf);
-        errno = EINVAL;
-        return -1;
-    }
-
+    /* net_zcp_acquire_rx incremented the active-user counter and validated
+     * that g_rx_pool was set at acquire time, and shutdown won't destroy the
+     * pool until all users finish. */
     uint32_t buf_cap = (uint32_t)perf_zcpool_bufsize(g_rx_pool);
     uint32_t payload_len = 0;
     int rc = framing_read_msg_into(fd, header_out, buf, buf_cap, &payload_len);
