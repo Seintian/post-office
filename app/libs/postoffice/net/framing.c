@@ -70,7 +70,7 @@ static int write_full(int fd, const void *buf, size_t len) {
 int framing_write_msg(int fd, const po_header_t *header_net, const uint8_t *payload,
                       uint32_t payload_len) {
     if (payload_len > g_max_payload) {
-        PO_METRIC_COUNTER_INC("framing.write.emsgsize");
+        PO_METRIC_COUNTER_INC("framing.write.size.invalid");
         errno = EMSGSIZE;
         return -1;
     }
@@ -142,7 +142,7 @@ int framing_write_zcp(int fd, const po_header_t *header_net, const zcp_buffer_t 
     uint32_t payload_len = ntohl(header_net->payload_len);
 
     if (payload_len > g_max_payload) {
-        PO_METRIC_COUNTER_INC("framing.write_zcp.emsgsize");
+        PO_METRIC_COUNTER_INC("framing.write_zcp.size.invalid");
         errno = EMSGSIZE;
         return -1;
     }
@@ -247,39 +247,40 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
     }
 
     // 2. Check if total message bytes are available
-    uint32_t remaining = ntohl(len_be);
-    
+    uint32_t peeked_total = ntohl(len_be);
+
     // Early validation of the peeked length
-    if (remaining < sizeof(po_header_t)) {
+    if (peeked_total < sizeof(po_header_t)) {
         errno = EPROTO;
         return -1;
     }
-    if (remaining - sizeof(po_header_t) > g_max_payload) {
-        PO_METRIC_COUNTER_INC("framing.read_into.emsgsize_peek");
+    if (peeked_total - sizeof(po_header_t) > g_max_payload) {
+        PO_METRIC_COUNTER_INC("framing.read.size.invalid");
         errno = EMSGSIZE;
         return -1;
     }
 
     int avail = 0;
+#ifdef FIONREAD
     if (ioctl(fd, FIONREAD, &avail) < 0) {
-         PO_METRIC_COUNTER_INC("framing.read_into.ioctl.fail");
-         return -1;
+        // Fallback: assume insufficient data and rely on blocking read semantics
+        avail = 0;
     }
-
-    if ((size_t)avail < sizeof(len_be) + remaining) {
+#endif
+    // If we got a valid avail count, check if we have enough bytes
+    if (avail > 0 && (size_t)avail < sizeof(len_be) + peeked_total) {
         errno = EAGAIN;
         return -1;
     }
 
     // 3. Read for real (guaranteed not to block if FIONREAD was correct)
-    int rc = read_full(fd, &len_be, sizeof(len_be));
+    uint32_t len_be_actual = 0;
+    int rc = read_full(fd, &len_be_actual, sizeof(len_be_actual));
     if (rc != 0) {
-        // Should not happen given check
         if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_into.len.fail");
         return rc;
     }
-
-    uint32_t total = ntohl(len_be);
+    uint32_t total = ntohl(len_be_actual);
     if (total < sizeof(po_header_t)) {
         errno = EPROTO;
         return -1;
@@ -301,7 +302,7 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
 
     uint32_t payload_len = total - (uint32_t)sizeof(po_header_t);
     if (payload_len > g_max_payload) {
-        PO_METRIC_COUNTER_INC("framing.read_into.emsgsize");
+        PO_METRIC_COUNTER_INC("framing.read.size.invalid");
         errno = EMSGSIZE;
         return -1;
     }
@@ -312,7 +313,7 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
         return 0;
     }
     if (!payload_buf || payload_buf_size < payload_len) {
-        PO_METRIC_COUNTER_INC("framing.read_into.emsgsize_buf");
+        PO_METRIC_COUNTER_INC("framing.read.buf.overflow");
         errno = EMSGSIZE;
         return -1;
     }

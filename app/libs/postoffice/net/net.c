@@ -132,11 +132,14 @@ int net_recv_message(int fd, po_header_t *header_out, zcp_buffer_t **payload_out
         return -1;
     }
 
-    uint32_t buf_cap = 0;
-    if (g_rx_pool)
-        buf_cap = (uint32_t)perf_zcpool_bufsize(g_rx_pool);
-    
-    // We trust framing_read_msg_into to validate payload_len vs buf_cap
+    if (!g_rx_pool) {
+        PO_METRIC_COUNTER_INC("net.recv.pool.invalid");
+        net_zcp_release_rx(buf);
+        errno = EINVAL;
+        return -1;
+    }
+
+    uint32_t buf_cap = (uint32_t)perf_zcpool_bufsize(g_rx_pool);
     uint32_t payload_len = 0;
     int rc = framing_read_msg_into(fd, header_out, buf, buf_cap, &payload_len);
     if (rc == 0) {

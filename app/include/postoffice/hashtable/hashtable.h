@@ -1,14 +1,13 @@
 /**
  * @file hashtable.h
  * @ingroup hashtable
- * @brief Open-addressed hash table (key -> value) with linear probing, dynamic
+ * @brief Hash table (key -> value) with chaining collision resolution, dynamic
  *        resizing, and optional iteration helpers.
  *
  * Design Overview
  * ---------------
- *  - Collision Resolution: Linear probing (open addressing). Probe sequence:
- *        `h, (h+1) % capacity, (h+2) % capacity, ...` until empty / tombstone
- *        / key match.
+ *  - Collision Resolution: Separate chaining with singly-linked lists. Each
+ *        bucket maintains a chain of nodes for handling hash collisions.
  *  - Resizing: Capacity expands to the next prime when load factor exceeds an
  *    internal high watermark (e.g. ~0.70). It may shrink when the load factor
  *    falls below a low watermark to reclaim memory (hysteresis prevents rapid

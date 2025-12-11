@@ -13,9 +13,7 @@
 
 int protocol_encode(uint8_t msg_type, uint8_t flags, const void *payload, uint32_t payload_len,
                     po_header_t *out_hdr) {
-    if (!out_hdr)
-        return -1;
-
+    // out_hdr is non-null per __nonnull__ attribute
     if (payload_len && !payload) {
         PO_METRIC_COUNTER_INC("protocol.encode.invalid");
         return -1;
@@ -30,9 +28,7 @@ int protocol_encode(uint8_t msg_type, uint8_t flags, const void *payload, uint32
 
 int protocol_decode(const po_header_t *net_hdr, void *payload_buf, uint32_t payload_buf_size,
                     uint32_t *payload_len_out) {
-    if (!net_hdr)
-        return -1;
-
+    // net_hdr is non-null per __nonnull__ attribute
     po_header_t tmp = *net_hdr; // copy to convert
     protocol_header_to_host(&tmp);
 

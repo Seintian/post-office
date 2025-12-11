@@ -122,12 +122,6 @@ int po_socket_listen(const char *address, const char *port, int backlog) {
     }
 
     freeaddrinfo(res);
-
-    if (listen_fd >= 0 && listen(listen_fd, backlog) < 0) {
-        close(listen_fd);
-        listen_fd = -1;
-    }
-
     return listen_fd; // -1 if something didn't work
 }
 

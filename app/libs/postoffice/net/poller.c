@@ -60,6 +60,9 @@ poller_t *poller_create(void) {
 }
 
 void poller_destroy(poller_t *p) {
+    if (!p)
+        return;
+
     if (p->efd >= 0)
         close(p->efd);
 
