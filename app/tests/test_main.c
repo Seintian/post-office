@@ -22,6 +22,8 @@ extern TEST_GROUP_RUNNER(RANDOM);
 extern TEST_GROUP_RUNNER(PRIME);
 extern TEST_GROUP_RUNNER(LOGSTORE);
 
+extern TEST_GROUP_RUNNER(BACKTRACE);
+
 static void RunAllTests(void) {
     RUN_TEST_GROUP(ARGV);
     RUN_TEST_GROUP(CONFIGS);
@@ -43,6 +45,7 @@ static void RunAllTests(void) {
     RUN_TEST_GROUP(RANDOM);
     RUN_TEST_GROUP(PRIME);
     RUN_TEST_GROUP(LOGSTORE);
+    RUN_TEST_GROUP(BACKTRACE);
 }
 
 int main(int argc, const char *argv[]) {

@@ -239,6 +239,16 @@ void po_logger_log(po_log_level_t level, const char *file, int line, const char 
 void po_logger_logv(po_log_level_t level, const char *file, int line, const char *func,
                     const char *fmt, va_list ap);
 
+/**
+ * @brief Dump pending log messages from the ring buffer to a file descriptor.
+ *
+ * This function bypasses the writer thread and best-effort dumps all records
+ * currently in the ring buffer. Intended for use in crash handlers.
+ *
+ * @param fd File descriptor to write to.
+ */
+void po_logger_crash_dump(int fd);
+
 #ifdef __cplusplus
 }
 #endif

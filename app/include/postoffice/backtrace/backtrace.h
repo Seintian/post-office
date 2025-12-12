@@ -1,6 +1,9 @@
 #ifndef BACKTRACE_H
 #define BACKTRACE_H
 
+#include <ucontext.h>
+#include <signal.h>
+
 /**
  * @brief Initialize the backtrace library.
  *
@@ -19,10 +22,13 @@ void backtrace_init(const char* crash_dump_dir);
 void backtrace_print(void);
 
 /**
- * @brief Save the current stacktrace to a specific file.
+ * @brief Save the current stacktrace and memory snapshot to a specific file.
  *
  * @param filepath Path to the file where the stacktrace will be saved.
+ * @param fault_rip Faulting instruction pointer (optional, can be NULL).
+ * @param uc User context from signal handler containing registers (optional, can be NULL).
+ * @param info Signal info containing crash details (optional, can be NULL).
  */
-void backtrace_save(const char* filepath, void* fault_rip);
+void backtrace_save(const char* filepath, void* fault_rip, ucontext_t* uc, siginfo_t* info);
 
 #endif // BACKTRACE_H

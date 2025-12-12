@@ -17,13 +17,26 @@
 #include <stdint.h>
 #include <ucontext.h>
 #include <sys/ucontext.h>
+#include <linux/seccomp.h>
+
+#include <sys/mman.h>
+#include <ctype.h>
+#include <inttypes.h>
+#include <dirent.h>
 
 #include "postoffice/backtrace/backtrace.h"
+#include "postoffice/log/logger.h"
 #include "utils/signals.h"
+
+#ifndef SYS_SECCOMP
+#define SYS_SECCOMP 1
+#endif
 
 #define MAX_FRAMES 64
 #define MAX_PATH_LEN 1024
 #define ADDR2LINE_CMD "addr2line"
+
+extern char **environ;
 
 static char g_crash_dump_dir[MAX_PATH_LEN] = {0};
 
@@ -35,16 +48,247 @@ static void safe_write(int fd, const char* format, ...) {
     int len = vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
     if (len > 0) {
+        if ((size_t)len >= sizeof(buffer)) {
+            len = (int)(sizeof(buffer) - 1);
+        }
         if (write(fd, buffer, (size_t)len) == -1) {
             // best effort, ignoring error in crash handler
         }
     }
 }
 
+/* Print detailed signal information */
+static void print_signal_info(int fd, siginfo_t *info) {
+    if (!info) return;
+
+    safe_write(fd, "\nSignal Details:\n");
+    safe_write(fd, "  Signal: %d\n", info->si_signo);
+    safe_write(fd, "  Code: %d\n", info->si_code);
+
+    // Decode common codes
+    switch (info->si_signo) {
+        case SIGSEGV:
+            if      (info->si_code == SEGV_MAPERR) safe_write(fd, " (SEGV_MAPERR - Address not mapped)");
+            else if (info->si_code == SEGV_ACCERR) safe_write(fd, " (SEGV_ACCERR - Invalid permissions)");
+#ifdef SEGV_BNDERR
+            else if (info->si_code == SEGV_BNDERR) safe_write(fd, " (SEGV_BNDERR - Failed address bound checks)");
+#endif
+#ifdef SEGV_PKUERR
+            else if (info->si_code == SEGV_PKUERR) safe_write(fd, " (SEGV_PKUERR - Protection key check failed)");
+#endif
+            break;
+        case SIGBUS:
+            if      (info->si_code == BUS_ADRALN) safe_write(fd, " (BUS_ADRALN - Invalid address alignment)");
+            else if (info->si_code == BUS_ADRERR) safe_write(fd, " (BUS_ADRERR - Non-existent physical address)");
+            else if (info->si_code == BUS_OBJERR) safe_write(fd, " (BUS_OBJERR - Object specific hardware error)");
+#ifdef BUS_MCEERR_AR
+            else if (info->si_code == BUS_MCEERR_AR) safe_write(fd, " (BUS_MCEERR_AR - Hardware memory error: action required)");
+#endif
+#ifdef BUS_MCEERR_AO
+            else if (info->si_code == BUS_MCEERR_AO) safe_write(fd, " (BUS_MCEERR_AO - Hardware memory error: action optional)");
+#endif
+            break;
+        case SIGFPE:
+            if      (info->si_code == FPE_INTDIV) safe_write(fd, " (FPE_INTDIV - Integer divide by zero)");
+            else if (info->si_code == FPE_INTOVF) safe_write(fd, " (FPE_INTOVF - Integer overflow)");
+            else if (info->si_code == FPE_FLTDIV) safe_write(fd, " (FPE_FLTDIV - Floating point divide by zero)");
+            else if (info->si_code == FPE_FLTOVF) safe_write(fd, " (FPE_FLTOVF - Floating point overflow)");
+            else if (info->si_code == FPE_FLTUND) safe_write(fd, " (FPE_FLTUND - Floating point underflow)");
+            else if (info->si_code == FPE_FLTRES) safe_write(fd, " (FPE_FLTRES - Floating point inexact result)");
+            else if (info->si_code == FPE_FLTINV) safe_write(fd, " (FPE_FLTINV - Floating point invalid operation)");
+            else if (info->si_code == FPE_FLTSUB) safe_write(fd, " (FPE_FLTSUB - Subscript out of range)");
+            break;
+        case SIGILL:
+            if      (info->si_code == ILL_ILLOPC) safe_write(fd, " (ILL_ILLOPC - Illegal opcode)");
+            else if (info->si_code == ILL_ILLOPN) safe_write(fd, " (ILL_ILLOPN - Illegal operand)");
+            else if (info->si_code == ILL_ILLADR) safe_write(fd, " (ILL_ILLADR - Illegal addressing mode)");
+            else if (info->si_code == ILL_ILLTRP) safe_write(fd, " (ILL_ILLTRP - Illegal trap)");
+            else if (info->si_code == ILL_PRVOPC) safe_write(fd, " (ILL_PRVOPC - Privileged opcode)");
+            else if (info->si_code == ILL_PRVREG) safe_write(fd, " (ILL_PRVREG - Privileged register)");
+            else if (info->si_code == ILL_COPROC) safe_write(fd, " (ILL_COPROC - Coprocessor error)");
+            else if (info->si_code == ILL_BADSTK) safe_write(fd, " (ILL_BADSTK - Internal stack error)");
+            break;
+        case SIGTRAP:
+            if      (info->si_code == TRAP_BRKPT) safe_write(fd, " (TRAP_BRKPT - Process breakpoint)");
+            else if (info->si_code == TRAP_TRACE) safe_write(fd, " (TRAP_TRACE - Process trace trap)");
+            break;
+#ifdef SIGSYS
+        case SIGSYS:
+            if      (info->si_code == SYS_SECCOMP) safe_write(fd, " (SYS_SECCOMP - Seccomp filter)");
+            break;
+#endif
+    }
+    safe_write(fd, "\n");
+
+    if (info->si_code <= 0) { // Sent by user
+        safe_write(fd, "  Sender PID: %d, UID: %d\n", info->si_pid, info->si_uid);
+    }
+
+    safe_write(fd, "  Fault Address: %p\n", info->si_addr);
+}
+
+/* Print process status from /proc/self/status */
+static void print_process_status(int fd) {
+    safe_write(fd, "\nProcess Status (/proc/self/status):\n");
+    int status_fd = open("/proc/self/status", O_RDONLY);
+    if (status_fd == -1) {
+        safe_write(fd, "  Failed to open /proc/self/status\n");
+        return;
+    }
+
+    char buffer[1024];
+    ssize_t bytes;
+    while ((bytes = read(status_fd, buffer, sizeof(buffer))) > 0) {
+        if (write(fd, buffer, (size_t)bytes) == -1) {}
+    }
+    close(status_fd);
+    safe_write(fd, "\n");
+}
+
+/* Print list of open file descriptors */
+static void print_open_fds(int fd) {
+    safe_write(fd, "\nOpen File Descriptors:\n");
+    DIR *d = opendir("/proc/self/fd");
+    if (!d) {
+        safe_write(fd, "  Failed to open /proc/self/fd\n");
+        return;
+    }
+
+    struct dirent *dir;
+    while ((dir = readdir(d)) != NULL) {
+        if (dir->d_type == DT_LNK) {
+            char link_path[1024];
+            char target[1024];
+            snprintf(link_path, sizeof(link_path), "/proc/self/fd/%s", dir->d_name);
+            ssize_t len = readlink(link_path, target, sizeof(target) - 1);
+            if (len != -1) {
+                target[len] = '\0';
+                safe_write(fd, "  FD %s -> %s\n", dir->d_name, target);
+            } else {
+                 safe_write(fd, "  FD %s -> (unknown)\n", dir->d_name);
+            }
+        }
+    }
+    closedir(d);
+}
+
+/* Print environment variables */
+static void print_environment(int fd) {
+    safe_write(fd, "\nEnvironment Variables:\n");
+    if (!environ) {
+        safe_write(fd, "  (null)\n");
+        return;
+    }
+
+    for (char **env = environ; *env; ++env) {
+        safe_write(fd, "  %s\n", *env);
+    }
+}
+
+/* Print CPU registers (x86_64 only) */
+static void print_registers(int fd, ucontext_t *uc) {
+    safe_write(fd, "\nRegisters:\n");
+#ifdef __x86_64__
+    mcontext_t *mc = &uc->uc_mcontext;
+    safe_write(fd, "  RAX: %016llx  RBX: %016llx  RCX: %016llx\n", 
+               mc->gregs[REG_RAX], mc->gregs[REG_RBX], mc->gregs[REG_RCX]);
+    safe_write(fd, "  RDX: %016llx  RSI: %016llx  RDI: %016llx\n", 
+               mc->gregs[REG_RDX], mc->gregs[REG_RSI], mc->gregs[REG_RDI]);
+    safe_write(fd, "  RBP: %016llx  RSP: %016llx  R8 : %016llx\n", 
+               mc->gregs[REG_RBP], mc->gregs[REG_RSP], mc->gregs[REG_R8]);
+    safe_write(fd, "  R9 : %016llx  R10: %016llx  R11: %016llx\n", 
+               mc->gregs[REG_R9], mc->gregs[REG_R10], mc->gregs[REG_R11]);
+    safe_write(fd, "  R12: %016llx  R13: %016llx  R14: %016llx\n", 
+               mc->gregs[REG_R12], mc->gregs[REG_R13], mc->gregs[REG_R14]);
+    safe_write(fd, "  R15: %016llx  RIP: %016llx  EFL: %016llx\n", 
+               mc->gregs[REG_R15], mc->gregs[REG_RIP], mc->gregs[REG_EFL]);
+    safe_write(fd, "  CSGSFS: %016llx\n", mc->gregs[REG_CSGSFS]);
+#else
+    safe_write(fd, "  [Registers dump not implemented for this architecture]\n");
+#endif
+}
+
+/* Helper to print a hex dump of memory */
+static void print_hex_dump(int fd, const void *addr, size_t len) {
+    const unsigned char *p = (const unsigned char *)addr;
+    size_t i;
+    char ascii[17];
+    ascii[16] = '\0';
+
+    for (i = 0; i < len; i++) {
+        if (i % 16 == 0) {
+            safe_write(fd, "%016lx: ", (uintptr_t)(p + i));
+        }
+
+        safe_write(fd, "%02x ", p[i]);
+        if (isprint(p[i])) {
+            ascii[i % 16] = (char)p[i];
+        } else {
+            ascii[i % 16] = '.';
+        }
+
+        if ((i + 1) % 16 == 0) {
+            safe_write(fd, " |%s|\n", ascii);
+        } else if (i == len - 1) {
+            // Padding for last line
+            int remaining = 16 - ((int)i % 16) - 1;
+            for (int k = 0; k < remaining; k++) {
+                safe_write(fd, "   ");
+            }
+            ascii[(i % 16) + 1] = '\0'; // terminate earlier
+            safe_write(fd, " |%s|\n", ascii);
+        }
+    }
+}
+
+/* Print stack memory snapshot */
+static void print_stack_memory(int fd, const void *sp) {
+    safe_write(fd, "\nStack Dump (SP +/- 256 bytes):\n");
+    if (!sp) {
+        safe_write(fd, "  Stack pointer invalid.\n");
+        return;
+    }
+
+    uintptr_t start = (uintptr_t)sp - 256;
+    // Align to 16 bytes
+    start &= ~(uintptr_t)0xF; 
+
+    // Safety check: try to read strict bounds or use mincore/msync to check validity?
+    // For crash handler, we just try. If we segfault again, valid double fault handling is tricky.
+    // We will assume that the 512 bytes around SP are likely mapped.
+
+    // We can try to use `write` with a pipe to /dev/null to test validity, or just go for it.
+    // Given the complexity of safe probing, we will output provided the address doesn't look obviously null.
+
+    print_hex_dump(fd, (void*)start, 512);
+}
+
+/* Print memory maps from /proc/self/maps */
+static void print_memory_maps(int fd) {
+    safe_write(fd, "\nMemory Maps:\n");
+    int map_fd = open("/proc/self/maps", O_RDONLY);
+    if (map_fd == -1) {
+        safe_write(fd, "  Failed to open /proc/self/maps\n");
+        return;
+    }
+
+    char buffer[1024];
+    ssize_t bytes;
+    while ((bytes = read(map_fd, buffer, sizeof(buffer))) > 0) {
+        // We might need to handle partial writes, but for safe_write and crash dump
+        // best effort is acceptable.
+        if (write(fd, buffer, (size_t)bytes) == -1) {
+            // ignore
+        }
+    }
+    close(map_fd);
+    safe_write(fd, "\n");
+}
+
 /* Resolve address to file:line using addr2line */
 static void resolve_addr2line(void* addr, char* out_file, size_t file_len, char* out_func, size_t func_len) {
     int pipe_out[2];
-    
+
     // Initialize outputs
     strncpy(out_file, "??:0", file_len);
     strncpy(out_func, "??", func_len);
@@ -141,18 +385,13 @@ static void print_backtrace_fd(int fd, void* fault_rip) {
 
         Dl_info info;
         if (dladdr(addr_to_resolve, &info)) {
-            // Filter spurious signal trampoline frame incorrectly resolved to lmdb
-            // This is a heuristic: if we are in the crash handler path (i > 0)
-            // and the symbol is mdb_node_move (detected artifact), allow suppressing or labeling it.
-            // For now, let's just label it if we suspect it's the trampoline.
-            
             if (info.dli_sname) {
                 snprintf(funcname, sizeof(funcname), "%s", info.dli_sname);
             }
             if (info.dli_fname) {
                 snprintf(filename, sizeof(filename), "%s", info.dli_fname);
             }
-            
+
             if (info.dli_fbase) {
                 addr_for_addr2line = (void*)((uintptr_t)addr_to_resolve - (uintptr_t)info.dli_fbase);
             }
@@ -193,7 +432,31 @@ void backtrace_print(void) {
     print_backtrace_fd(STDERR_FILENO, NULL);
 }
 
-void backtrace_save(const char* filepath, void* fault_rip) {
+/* Print command line arguments from /proc/self/cmdline */
+static void print_command_line(int fd) {
+    safe_write(fd, "\nCommand Line:\n");
+    int cmd_fd = open("/proc/self/cmdline", O_RDONLY);
+    if (cmd_fd == -1) {
+        safe_write(fd, "  Failed to open /proc/self/cmdline\n");
+        return;
+    }
+
+    char buffer[4096];
+    ssize_t bytes = read(cmd_fd, buffer, sizeof(buffer) - 1);
+    close(cmd_fd);
+
+    if (bytes > 0) {
+        buffer[bytes] = '\0';
+        for (ssize_t i = 0; i < bytes - 1; i++) {
+            if (buffer[i] == '\0') buffer[i] = ' ';
+        }
+        safe_write(fd, "  %s\n", buffer);
+    } else {
+        safe_write(fd, "  (empty)\n");
+    }
+}
+
+void backtrace_save(const char* filepath, void* fault_rip, ucontext_t* uc, siginfo_t* info) {
     int fd = open(filepath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd == -1) {
         perror("Failed to open crash dump file");
@@ -207,7 +470,30 @@ void backtrace_save(const char* filepath, void* fault_rip) {
         safe_write(fd, "Crash Timestamp: %s", time_str);
     }
 
+    // Basic signal info (also printed to stderr in handler, but good to have in file)
+    if (info) {
+        safe_write(fd, "Signal: %d, Address: %p\n", info->si_signo, info->si_addr);
+        print_signal_info(fd, info);
+    }
+
     print_backtrace_fd(fd, fault_rip);
+
+    if (uc) {
+        print_registers(fd, uc);
+#ifdef __x86_64__
+        print_stack_memory(fd, (void*)uc->uc_mcontext.gregs[REG_RSP]);
+#endif
+    }
+
+    print_command_line(fd);
+    print_process_status(fd);
+    print_open_fds(fd);
+    print_environment(fd);
+    print_memory_maps(fd);
+
+    // Dump pending logs
+    po_logger_crash_dump(fd);
+
     close(fd);
 }
 
@@ -233,7 +519,7 @@ static void crash_handler(int sig, siginfo_t* info, void* ctx) {
         time_t now = time(NULL);
         snprintf(dump_path, sizeof(dump_path), "%s/crash_%ld.log", g_crash_dump_dir, now);
         safe_write(STDERR_FILENO, "Saving crash report to: %s\n", dump_path);
-        backtrace_save(dump_path, fault_rip);
+        backtrace_save(dump_path, fault_rip, uc, info);
     }
 
     safe_write(STDERR_FILENO, "Aborting process.\n");
@@ -258,7 +544,12 @@ void backtrace_init(const char* crash_dump_dir) {
     /* Ideally we'd use sigutil_handle_terminating but we want a specific handler */
 
     /* Just manually hook our special handler */
-    int signals[] = {SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE};
+    int signals[] = {
+        SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE, SIGTRAP
+#ifdef SIGSYS
+        , SIGSYS
+#endif
+    };
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_sigaction = crash_handler;

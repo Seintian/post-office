@@ -587,3 +587,22 @@ void po_logger_log(po_log_level_t level, const char *file, int line, const char 
     po_logger_logv(level, file, line, func, fmt, ap);
     va_end(ap);
 }
+
+void po_logger_crash_dump(int fd) {
+    char scratch[MAX_RECORD_SIZE];
+    const char *header = "\n--- Pending Log Messages (Ring Buffer Dump) ---\n";
+    if (write(fd, header, strlen(header)) < 0) {} 
+
+    // Drain ring buffer
+    // Note: This modifies the ring buffer state which is acceptable during a crash.
+    void *p;
+    while (g_ring && perf_ringbuf_dequeue(g_ring, &p) == 0) {
+        log_record_t *r = (log_record_t *)p;
+        if (r && r != &g_sentinel) {
+            record_format_line(r, scratch, sizeof(scratch));
+            if (write(fd, scratch, strlen(scratch)) < 0) {} 
+        }
+    }
+    const char *footer = "--- End of Pending Logs ---\n";
+    if (write(fd, footer, strlen(footer)) < 0) {} 
+}
