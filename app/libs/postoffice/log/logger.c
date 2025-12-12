@@ -589,18 +589,37 @@ void po_logger_log(po_log_level_t level, const char *file, int line, const char 
 }
 
 void po_logger_crash_dump(int fd) {
-    char scratch[MAX_RECORD_SIZE];
+    // Async-signal-safe dump. Avoids snprintf, localtime, malloc.
+    // Uses write() and strlen() (which is generally safe) directly.
     const char *header = "\n--- Pending Log Messages (Ring Buffer Dump) ---\n";
     if (write(fd, header, strlen(header)) < 0) {} 
 
-    // Drain ring buffer
-    // Note: This modifies the ring buffer state which is acceptable during a crash.
     void *p;
     while (g_ring && perf_ringbuf_dequeue(g_ring, &p) == 0) {
         log_record_t *r = (log_record_t *)p;
         if (r && r != &g_sentinel) {
-            record_format_line(r, scratch, sizeof(scratch));
-            if (write(fd, scratch, strlen(scratch)) < 0) {} 
+             const char *lvl = "UNKNOWN";
+             switch(r->level) {
+                 case LOG_TRACE: lvl = "TRACE"; break;
+                 case LOG_DEBUG: lvl = "DEBUG"; break;
+                 case LOG_INFO:  lvl = "INFO "; break;
+                 case LOG_WARN:  lvl = "WARN "; break;
+                 case LOG_ERROR: lvl = "ERROR"; break;
+                 case LOG_FATAL: lvl = "FATAL"; break;
+             }
+             
+             // [LEVEL] func - msg
+             if (write(fd, "[", 1) < 0) {}
+             if (write(fd, lvl, 5) < 0) {}
+             if (write(fd, "] ", 2) < 0) {}
+             
+             if (r->func[0]) {
+                 if (write(fd, r->func, strlen(r->func)) < 0) {}
+                 if (write(fd, " - ", 3) < 0) {}
+             }
+             
+             if (write(fd, r->msg, strlen(r->msg)) < 0) {}
+             if (write(fd, "\n", 1) < 0) {}
         }
     }
     const char *footer = "--- End of Pending Logs ---\n";

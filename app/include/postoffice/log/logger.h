@@ -245,6 +245,9 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
  * This function bypasses the writer thread and best-effort dumps all records
  * currently in the ring buffer. Intended for use in crash handlers.
  *
+ * @note This function is async-signal-safe (uses only write/strlen).
+ * @warning The provided file descriptor must be valid and writable.
+ *
  * @param fd File descriptor to write to.
  */
 void po_logger_crash_dump(int fd);
