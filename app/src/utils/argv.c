@@ -1,10 +1,10 @@
 #include "utils/argv.h"
 
 #include <getopt.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 
 void po_args_init(po_args_t *args) {
     args->help = false;

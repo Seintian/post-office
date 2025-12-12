@@ -1,6 +1,7 @@
 #include <utils/argv.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <postoffice/backtrace/backtrace.h>
 #include <postoffice/log/logger.h>
 #include <postoffice/metrics/metrics.h>
 #include <postoffice/sysinfo/sysinfo.h>
@@ -232,6 +233,9 @@ int main(int argc, char *argv[]) {
         po_args_destroy(&args);
         return 1;
     }
+
+    // Initialize backtrace library
+    backtrace_init("crash_reports");
 
     LOG_DEBUG("Parsed arguments: config=%s, tui_demo=%d, tui_sim=%d, syslog=%d, loglevel=%d",
               args.config_file ? args.config_file : "<none>",

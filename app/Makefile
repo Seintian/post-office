@@ -46,6 +46,7 @@ TUI_LIB_DIR            = $(POSTOFFICE_LIBS_DIR)/tui
 TUI_DIR                = $(TUI_LIB_DIR)
 LOG_DIR                = $(POSTOFFICE_LIBS_DIR)/log
 SYSINFO_DIR            = $(POSTOFFICE_LIBS_DIR)/sysinfo
+BACKTRACE_DIR          = $(POSTOFFICE_LIBS_DIR)/backtrace
 
 ## Third-party Libraries
 INIH_DIR               = $(THIRDPARTY_LIBS_DIR)/inih
@@ -197,6 +198,7 @@ UTILS_SRC       = $(wildcard $(UTILS_DIR)/*.c)
 RANDOM_SRC      = $(wildcard $(RANDOM_DIR)/*.c)
 LOG_SRC         = $(wildcard $(LOG_DIR)/*.c)
 SYSINFO_SRC     = $(wildcard $(SYSINFO_DIR)/*.c)
+BACKTRACE_SRC     = $(wildcard $(BACKTRACE_DIR)/*.c)
 
 ## Third-party Libraries
 INIH_SRC        = $(wildcard $(INIH_DIR)/*.c)
@@ -249,6 +251,7 @@ UTILS_OBJS          = $(patsubst $(UTILS_DIR)/%.c,$(BUILD_DIR)/utils/%.o,$(UTILS
 RANDOM_OBJS         = $(patsubst $(RANDOM_DIR)/%.c,$(BUILD_DIR)/random/%.o,$(RANDOM_SRC))
 LOG_OBJS            = $(patsubst $(LOG_DIR)/%.c,$(BUILD_DIR)/log/%.o,$(LOG_SRC))
 SYSINFO_OBJS        = $(patsubst $(SYSINFO_DIR)/%.c,$(BUILD_DIR)/sysinfo/%.o,$(SYSINFO_SRC))
+BACKTRACE_OBJS      = $(patsubst $(BACKTRACE_DIR)/%.c,$(BUILD_DIR)/backtrace/%.o,$(BACKTRACE_SRC))
 
 ## Third-party Libraries
 INIH_OBJS           = $(patsubst $(INIH_DIR)/%.c,$(BUILD_DIR)/inih/%.o,$(INIH_SRC))
@@ -261,7 +264,8 @@ LIBFORT_OBJS        = $(patsubst $(LIBFORT_DIR)/%.c,$(BUILD_DIR)/libfort/%.o,$(L
 DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(RANDOM_OBJS) $(HASHTABLE_OBJS) \
                       $(PRIME_OBJS) $(LOG_C_OBJS) $(METRICS_OBJS) \
 					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
-					  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS) $(SYSINFO_OBJS)
+					  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS) $(SYSINFO_OBJS) \
+					  $(BACKTRACE_OBJS)
 
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
@@ -585,6 +589,10 @@ $(BUILD_DIR)/log/%.o: $(LOG_DIR)/%.c
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 $(BUILD_DIR)/sysinfo/%.o: $(SYSINFO_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+$(BUILD_DIR)/backtrace/%.o: $(BACKTRACE_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
