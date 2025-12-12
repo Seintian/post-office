@@ -98,8 +98,36 @@ typedef struct {
  * (SIOCGIFMTU), /proc/sys/net/core/somaxconn, endianness test. Unavailable
  * data points are set to sentinel values (-1, 0, empty string).
  *
+ * Thread-safety and reentrancy:
+ *  - `po_sysinfo_collect` is safe to call concurrently from multiple threads
+ *    provided each caller supplies a distinct `po_sysinfo_t *info` output
+ *    buffer. The function writes into the caller-supplied `info` structure and
+ *    does not serialize access to that buffer. Callers must avoid sharing the
+ *    same output struct across threads without external synchronization.
+ *  - The collector uses only local variables and best-effort reads from
+ *    kernel interfaces; it does not rely on global mutable state and therefore
+ *    does not conflict with the background sampler except for reading the same
+ *    kernel-provided statistics.
+ *
+ * Error vs "unavailable" behaviour:
+ *  - Returns 0 on overall success. Returns -1 on a hard failure (for
+ *    example when a required syscall fails or when `info` is NULL); in hard
+ *    failure cases `errno` is set where applicable.
+ *  - Several sub-collectors perform best-effort sampling: they may choose to
+ *    return success while setting specific fields to sentinel values (e.g.
+ *    `cpu_util_pct == -1.0`) when transient sampling fails. In that case the
+ *    function typically returns 0 but the field values indicate "unavailable".
+ *  - Example: short-interval CPU sampling will set `cpu_util_pct` and
+ *    `cpu_iowait_pct` to -1.0 if sampling failed, while other fields may still
+ *    be populated. If reading `/proc/meminfo` fails the collector will return
+ *    -1 and `errno` will be set.
+ *
+ * NULL pointer handling:
+ *  - `info` must be non-NULL; passing NULL yields -1 and `errno` is set to
+ *    `EINVAL`.
+ *
  * @param info Output pointer (must be non-NULL).
- * @return 0 on success; -1 on failure (errno reflects first hard failure).
+ * @return 0 on success; -1 on hard failure (errno reflects the cause when set).
  */
 int po_sysinfo_collect(po_sysinfo_t *info);
 
@@ -107,8 +135,34 @@ int po_sysinfo_collect(po_sysinfo_t *info);
  * @brief Initialize background system info sampler (optional).
  *
  * Starts a background thread that periodically samples dynamic system
- * parameters (CPU utilization, I/O wait percentage) for more accurate
- * readings when ::po_sysinfo_collect is called.
+ * parameters (CPU utilization, I/O wait percentage) and stores them in an
+ * internal cache for callers that prefer lightweight reads via
+ * ::po_sysinfo_sampler_get(). The sampler is an optional performance
+ * optimization and is not required for ::po_sysinfo_collect().
+ *
+ * Idempotency and concurrency:
+ *  - Calling `po_sysinfo_sampler_init()` when the sampler is already running
+ *    will return 0 and not create a second sampler thread in the common
+ *    (single-threaded) usage pattern. However, the implementation does not
+ *    serialize concurrent calls to `po_sysinfo_sampler_init()`; if two
+ *    threads concurrently call init there is a race that may result in
+ *    multiple sampler threads being created. Therefore callers MUST ensure
+ *    that start/stop are coordinated by the application (for example, only a
+ *    single initialization path should call init/stop).
+ *
+ * Resource cleanup:
+ *  - `po_sysinfo_sampler_stop()` joins the sampler thread and clears cached
+ *    values. Callers should invoke `po_sysinfo_sampler_stop()` during orderly
+ *    shutdown to ensure the sampler thread is cleanly terminated.
+ *  - If the application exits without calling `po_sysinfo_sampler_stop()`,
+ *    process termination will stop all threads and the OS will reclaim
+ *    resources; this is less graceful and may bypass internal cleanup logic.
+ *
+ * Return and errno semantics:
+ *  - Returns 0 on success. On thread-creation failure the function returns
+ *    non-zero (typically -1). The pthread API error code is returned from
+ *    pthread_create internally; callers should treat any non-zero return as
+ *    an error and should not rely on `errno` being set by this call.
  *
  * @return 0 on success, non-zero on failure.
  */
@@ -116,17 +170,44 @@ int po_sysinfo_sampler_init(void);
 
 /**
  * @brief Stop background system info sampler.
+ *
+ * Idempotency:
+ *  - `po_sysinfo_sampler_stop()` is safe to call multiple times; a second
+ *    call after the sampler has stopped is a no-op.
+ *  - As with init, callers must coordinate start/stop invocations to avoid
+ *    races when multiple threads may attempt to start or stop the sampler.
  */
 void po_sysinfo_sampler_stop(void);
 
 /**
  * @brief Get the latest sampled CPU utilization and I/O wait percentages (0..100).
  *
- * If the sampler is not running or data is unavailable, values are set to -1.0.
+ * Behavior and semantics:
+ *  - If the sampler thread is running, the function copies internally cached
+ *    values into the provided output locations and returns 0.
+ *  - If the sampler is not running the function returns -1 to indicate the
+ *    sampler is unavailable. In that case cached values are not copied.
+ *  - If the sampler is running but the sampled data is currently
+ *    unavailable, the function will set the output values to -1.0 and return
+ *    0 to indicate success with "unavailable" data.
  *
- * @param cpu_util_pct Output pointer for CPU utilization percentage.
- * @param cpu_iowait_pct Output pointer for CPU I/O wait percentage.
- * @return 0 on success, non-zero on failure.
+ * Thread-safety:
+ *  - `po_sysinfo_sampler_get()` may be called concurrently from multiple
+ *    threads. The implementation protects access to the internal cached values
+ *    with a mutex so concurrent readers get a consistent snapshot.
+ *  - It is safe to call `po_sysinfo_sampler_get()` concurrently with
+ *    `po_sysinfo_collect()`; the sampler and collector operate on distinct
+ *    memory and kernel interfaces and do not conflict.
+ *
+ * NULL pointer handling:
+ *  - Either `cpu_util_pct` or `cpu_iowait_pct` (or both) may be NULL. Passing
+ *    NULL for an output parameter indicates the caller does not require that
+ *    specific value.
+ *
+ * Return values:
+ *  - 0 on success (values copied; copied values may be -1.0 to indicate
+ *    "unavailable").
+ *  - -1 if the sampler is not running or if a hard error occurs.
  */
 int po_sysinfo_sampler_get(double *cpu_util_pct, double *cpu_iowait_pct);
 

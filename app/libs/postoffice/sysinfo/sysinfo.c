@@ -419,9 +419,30 @@ static int load_cpu_usage_info(po_sysinfo_t *info) {
         return -1;
     }
 
+    /* Default to unavailable */
     info->cpu_iowait_pct = -1.0;
     info->cpu_util_pct = -1.0;
 
+    /*
+     * Prefer cached sampler values when available to avoid the blocking
+     * short-interval sleep performed below. If the sampler is running and
+     * returns values (including -1.0 for unavailable), use them. If the
+     * sampler is not running (po_sysinfo_sampler_get returns non-zero),
+     * fall back to the short-interval sampling which blocks ~100ms.
+     */
+    double util = -1.0, iow = -1.0;
+    if (po_sysinfo_sampler_get(&util, &iow) == 0) {
+        /* If sampler returned sentinel unavailable values, fall back to
+         * blocking short-interval sampling to obtain a concrete measurement. */
+        if (util >= 0.0 && iow >= 0.0) {
+            info->cpu_util_pct = util;
+            info->cpu_iowait_pct = iow;
+            return 0;
+        }
+        /* else continue to fallback sampling below */
+    }
+
+    /* Fallback: perform short-interval sampling (blocking). */
     unsigned long long idle1, iow1, tot1;
     if (read_proc_stat(&idle1, &iow1, &tot1) != 0)
         return 0; /* best-effort */
@@ -443,13 +464,13 @@ static int load_cpu_usage_info(po_sysinfo_t *info) {
         return 0;
     }
 
-    double util = 0.0;
+    double util_calc = 0.0;
     if (total_delta > idle_delta)
-        util = ((double)(total_delta - idle_delta) / (double)total_delta) * 100.0;
+        util_calc = ((double)(total_delta - idle_delta) / (double)total_delta) * 100.0;
 
     double iow_pct = ((double)iowait_delta / (double)total_delta) * 100.0;
 
-    info->cpu_util_pct = util;
+    info->cpu_util_pct = util_calc;
     info->cpu_iowait_pct = iow_pct;
 
     return 0;

@@ -24,7 +24,7 @@ static int parse_arguments(po_args_t *args, int argc, char *argv[]) {
     int rc = po_args_parse(args, argc, argv, STDERR_FILENO);
     if (rc != 0) {
         po_args_destroy(args);
-        return rc < 0;
+        return rc;
     }
     return 0;
 }
@@ -35,14 +35,14 @@ static int parse_arguments(po_args_t *args, int argc, char *argv[]) {
  * @param args Parsed command-line arguments
  * @return 0 on success, non-zero on failure
  */
-static int initialize_logger(const po_args_t *args) {
+static int initialize_logger(int loglevel) {
     po_logger_config_t cfg = {
-        .level = (args->loglevel >= 0 && args->loglevel <= 5) ? (po_log_level_t)args->loglevel : LOG_INFO,
+        .level = (loglevel >= 0 && loglevel <= 5) ? (po_log_level_t)loglevel : LOG_INFO,
         .ring_capacity = 1u << 14, // 16384 entries
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
     };
-    
+
     if (po_logger_init(&cfg) != 0) {
         fprintf(stderr, "logger: init failed\n");
         return 1;
@@ -87,7 +87,7 @@ static int initialize_metrics(void) {
  * 
  * @param is_tui True if running in TUI mode (for context only)
  */
-static void log_system_information(bool is_tui) {
+static void log_system_info(bool is_tui) {
     (void)is_tui;
     po_sysinfo_t sysinfo;
     if (po_sysinfo_collect(&sysinfo) == 0) {
@@ -156,9 +156,16 @@ static void log_startup_info(const po_args_t *args) {
  */
 static void cleanup_resources(po_args_t *args) {
     /* Stop background samplers before shutting down other systems */
+    LOG_INFO("Cleaning up resources and shutting down");
     po_sysinfo_sampler_stop();
-    po_logger_shutdown();
+    LOG_DEBUG("Sysinfo sampler stopped");
+
     po_metrics_shutdown();
+    LOG_DEBUG("Metrics subsystem shut down");
+
+    po_logger_shutdown();
+    LOG_DEBUG("Logger shut down");
+
     po_args_destroy(args);
 }
 
@@ -221,14 +228,16 @@ int main(int argc, char *argv[]) {
     }
 
     // Initialize logger
-    if (initialize_logger(&args) != 0) {
-        po_metrics_shutdown();
+    if (initialize_logger(args.loglevel) != 0) {
         po_args_destroy(&args);
         return 1;
     }
 
-    // Initialize simulation lifecycle
-    simulation_init(args.config_file);
+    LOG_DEBUG("Parsed arguments: config=%s, tui_demo=%d, tui_sim=%d, syslog=%d, loglevel=%d",
+              args.config_file ? args.config_file : "<none>",
+              (int)args.tui_demo, (int)args.tui_sim, (int)args.syslog, args.loglevel);
+
+    LOG_DEBUG("Logger initialized (level=%d)", (int)po_logger_get_level());
 
     // Determine execution mode
     bool is_tui = args.tui_demo || args.tui_sim;
@@ -236,18 +245,32 @@ int main(int argc, char *argv[]) {
     // Configure logger sinks based on mode
     configure_logger_sinks(&args, is_tui);
 
+    LOG_DEBUG("Logger sinks configured (is_tui=%d)", (int)is_tui);
+
+    // Initialize simulation lifecycle
+    simulation_init(args.config_file);
+
+    LOG_INFO("Simulation lifecycle initialized (config=%s)", args.config_file ? args.config_file : "<none>");
+
     // Initialize metrics
     if (initialize_metrics() != 0) {
+        po_logger_shutdown();
         po_args_destroy(&args);
         return 1;
     }
 
+    LOG_DEBUG("Metrics subsystem initialized");
+
     /* Start background sampler for precise CPU metrics */
-    (void)po_sysinfo_sampler_init();
+    if (po_sysinfo_sampler_init() != 0) {
+        LOG_WARN("Failed to start system info sampler");
+    } else {
+        LOG_DEBUG("System info sampler started");
+    }
 
     // Log startup information
     log_startup_info(&args);
-    log_system_information(is_tui);
+    log_system_info(is_tui);
 
     // Dispatch to appropriate mode handler
     if (args.tui_demo) {
