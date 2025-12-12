@@ -67,13 +67,24 @@ typedef struct {
     int64_t cache_l3;           //!< L3 cache size (bytes) or -1.
     int64_t total_ram;          //!< Total system RAM (bytes) or -1.
     int64_t free_ram;           //!< Available RAM (bytes) or -1.
+    int64_t swap_total;         //!< Total swap space (bytes) or -1.
+    int64_t swap_free;          //!< Free swap space (bytes) or -1.
     int64_t page_size;          //!< Base page size (bytes).
     po_hugepage_info_t hugepage_info; //!< Huge page snapshot.
     uint64_t max_open_files;    //!< RLIMIT_NOFILE soft limit.
     uint64_t max_processes;     //!< RLIMIT_NPROC soft limit (0 if unlimited / unsupported).
     uint64_t max_stack_size;    //!< RLIMIT_STACK soft limit (bytes) or RLIM_INFINITY encoded.
     uint64_t disk_free;         //!< Free bytes on filesystem containing current working dir.
+    uint64_t uptime_seconds;    //!< System uptime in seconds since boot.
+    double load_avg_1min;       //!< System load average over 1 minute or -1.0 if unavailable.
+    double load_avg_5min;       //!< System load average over 5 minutes or -1.0 if unavailable.
+    double load_avg_15min;      //!< System load average over 15 minutes or -1.0 if unavailable.
     char fs_type[16];           //!< Filesystem type (truncated) e.g. "ext4", "xfs".
+    char hostname[256];         //!< Hostname or empty string if unavailable.
+    char cpu_vendor[64];        //!< CPU vendor/manufacturer (e.g., "GenuineIntel", "AuthenticAMD").
+    char cpu_brand[256];        //!< CPU brand string or empty string if unavailable.
+    double cpu_iowait_pct;      //!< CPU I/O-wait percentage measured over short interval, -1.0 if unavailable.
+    double cpu_util_pct;        //!< CPU utilization percentage (active time) over short interval, -1.0 if unavailable.
     int32_t mtu;                //!< Primary interface MTU or -1 if not determined.
     int32_t somaxconn;          //!< net.core.somaxconn sysctl value or -1.
     int32_t is_little_endian;   //!< 1 if little-endian, 0 if big-endian.
@@ -91,6 +102,33 @@ typedef struct {
  * @return 0 on success; -1 on failure (errno reflects first hard failure).
  */
 int po_sysinfo_collect(po_sysinfo_t *info);
+
+/**
+ * @brief Initialize background system info sampler (optional).
+ *
+ * Starts a background thread that periodically samples dynamic system
+ * parameters (CPU utilization, I/O wait percentage) for more accurate
+ * readings when ::po_sysinfo_collect is called.
+ *
+ * @return 0 on success, non-zero on failure.
+ */
+int po_sysinfo_sampler_init(void);
+
+/**
+ * @brief Stop background system info sampler.
+ */
+void po_sysinfo_sampler_stop(void);
+
+/**
+ * @brief Get the latest sampled CPU utilization and I/O wait percentages (0..100).
+ *
+ * If the sampler is not running or data is unavailable, values are set to -1.0.
+ *
+ * @param cpu_util_pct Output pointer for CPU utilization percentage.
+ * @param cpu_iowait_pct Output pointer for CPU I/O wait percentage.
+ * @return 0 on success, non-zero on failure.
+ */
+int po_sysinfo_sampler_get(double *cpu_util_pct, double *cpu_iowait_pct);
 
 /**
  * @brief Pretty-print collected system information to a FILE*.
