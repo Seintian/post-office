@@ -9,7 +9,7 @@ static perf_zcpool_t *pool;
 
 TEST_SETUP(ZEROCOPY) {
     // create a pool of 4 buffers, each 1024 bytes
-    pool = perf_zcpool_create(4, 1024);
+    pool = perf_zcpool_create(4, 1024, PERF_ZCPOOL_NOFLAGS);
     TEST_ASSERT_NOT_NULL(pool);
     // ring of 4 can only hold 3 entries → freecount == 3
     TEST_ASSERT_EQUAL_UINT(3, perf_zcpool_freecount(pool));
@@ -20,15 +20,15 @@ TEST_TEAR_DOWN(ZEROCOPY) {
 }
 
 TEST(ZEROCOPY, INVALID_CREATE) {
-    const perf_zcpool_t *p1 = perf_zcpool_create(0, 1024);
+    const perf_zcpool_t *p1 = perf_zcpool_create(0, 1024, PERF_ZCPOOL_NOFLAGS);
     TEST_ASSERT_NULL(p1);
     TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
-    const perf_zcpool_t *p2 = perf_zcpool_create(4, 0);
+    const perf_zcpool_t *p2 = perf_zcpool_create(4, 0, PERF_ZCPOOL_NOFLAGS);
     TEST_ASSERT_NULL(p2);
     TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 
-    const perf_zcpool_t *p3 = perf_zcpool_create(4, (2UL << 20) + 1);
+    const perf_zcpool_t *p3 = perf_zcpool_create(4, (2UL << 20) + 1, PERF_ZCPOOL_NOFLAGS);
     TEST_ASSERT_NULL(p3);
     TEST_ASSERT_EQUAL_INT(EINVAL, errno);
 }

@@ -1,7 +1,3 @@
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
-
 #include "perf/zerocopy.h"
 
 #include <errno.h>
@@ -14,19 +10,21 @@
 
 #include "perf/ringbuf.h"
 #include "utils/errors.h"
+#include "metrics/metrics.h"
 
 struct perf_zcpool {
     void *base; // start of mapped region
     size_t buf_size;
     size_t buf_count;
     po_perf_ringbuf_t *freeq; // ring buffer of free pointers
+    perf_zcpool_flags_t flags;
 };
 
 size_t perf_zcpool_bufsize(const perf_zcpool_t *pool) {
     return pool->buf_size;
 }
 
-perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
+perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size, perf_zcpool_flags_t flags) {
     if (buf_count < 1 || buf_size == 0 || buf_size > (2UL << 20)) {
         errno = EINVAL;  // Use standard EINVAL instead of ZCP_EINVAL
         return NULL;
@@ -58,7 +56,12 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
     p->base = base;
     p->buf_size = buf_size;
     p->buf_count = buf_count;
-    p->freeq = perf_ringbuf_create(buf_count);
+    p->flags = flags;
+    // We do NOT use PERF_RINGBUF_METRICS for internal freeq unless ZCP_METRICS is set
+    // AND even then, the pool call usually implies the ring call.
+    // However, if we enable both, we get double metrics for enqueue/dequeue vs acquire/release.
+    // Let's NOT enable metrics on the internal ringbuf to keep it cleaner.
+    p->freeq = perf_ringbuf_create(buf_count, PERF_RINGBUF_NOFLAGS);
     if (!p->freeq) {
         munmap(base, aligned);
         free(p);
@@ -71,6 +74,14 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size) {
         perf_ringbuf_enqueue(p->freeq, ptr);
     }
 
+    if (flags & PERF_ZCPOOL_METRICS) {
+        PO_METRIC_COUNTER_CREATE("zcpool.create");
+        PO_METRIC_COUNTER_INC("zcpool.create");
+        PO_METRIC_COUNTER_CREATE("zcpool.acquire");
+        PO_METRIC_COUNTER_CREATE("zcpool.release");
+        PO_METRIC_COUNTER_CREATE("zcpool.exhausted");
+    }
+
     return p;
 }
 
@@ -79,6 +90,9 @@ void perf_zcpool_destroy(perf_zcpool_t **p) {
         return;
 
     perf_zcpool_t *pool = *p;
+
+    if (pool->flags & PERF_ZCPOOL_METRICS)
+        PO_METRIC_COUNTER_INC("zcpool.destroy");
 
     // free ring and unmap region
     if (pool->freeq)
@@ -103,9 +117,14 @@ void *perf_zcpool_acquire(perf_zcpool_t *p) {
 
     void *buf = NULL;
     if (perf_ringbuf_dequeue(p->freeq, &buf) < 0) {
+        if (p->flags & PERF_ZCPOOL_METRICS)
+            PO_METRIC_COUNTER_INC("zcpool.exhausted");
         errno = EAGAIN;  // Use standard EAGAIN instead of ZCP_EAGAIN
         return NULL;
     }
+
+    if (p->flags & PERF_ZCPOOL_METRICS)
+        PO_METRIC_COUNTER_INC("zcpool.acquire");
 
     return buf;
 }
@@ -125,6 +144,9 @@ void perf_zcpool_release(perf_zcpool_t *p, void *buffer) {
 
     // Optionally check buffer in range [base, base+count*size)
     perf_ringbuf_enqueue(p->freeq, buffer);
+
+    if (p->flags & PERF_ZCPOOL_METRICS)
+        PO_METRIC_COUNTER_INC("zcpool.release");
 }
 
 size_t perf_zcpool_freecount(const perf_zcpool_t *p) {

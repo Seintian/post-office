@@ -99,13 +99,15 @@ po_logstore_t *po_logstore_open_cfg(const po_logstore_cfg *cfg) {
     ls->env = env;
     ls->idx = idx;
     size_t cap = cfg->ring_capacity ? cfg->ring_capacity : 1024;
-    ls->q = perf_ringbuf_create(cap);
+    
+    ls->q = perf_ringbuf_create(cap, PERF_RINGBUF_METRICS);
     if (!ls->q) {
         po_logstore_close(&ls);
         PO_METRIC_COUNTER_INC("logstore.open.fail");
         return NULL;
     }
-    ls->b = perf_batcher_create(ls->q, cfg->batch_size ? cfg->batch_size : 32);
+    
+    ls->b = perf_batcher_create(ls->q, cfg->batch_size ? cfg->batch_size : 32, PERF_BATCHER_METRICS);
     if (!ls->b) {
         po_logstore_close(&ls);
         PO_METRIC_COUNTER_INC("logstore.open.fail");

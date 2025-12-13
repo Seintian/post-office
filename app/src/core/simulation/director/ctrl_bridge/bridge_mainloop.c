@@ -1,149 +1,161 @@
-/* Minimal control bridge implementation.
+/* Minimal control bridge implementation using postoffice/net API.
  * Listens on a UNIX domain socket and accepts simple line-based commands.
- * For now commands are logged and acknowledged. This is a skeleton to be
- * expanded with proper framing/codec (bridge_codec.h) and Director API
- * dispatching.
  */
 
 #define _POSIX_C_SOURCE 200809L
 #include "bridge_mainloop.h"
+#include <postoffice/metrics/metrics.h>
+#include <postoffice/log/logger.h>
+#include <postoffice/net/net.h>
+#include <postoffice/net/socket.h>
+#include <postoffice/net/poller.h>
+
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <signal.h>
-#include <sys/stat.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
-/* Default control socket path. Adjustable later or moved to config. */
+/* Default control socket path. */
 static const char* ctrl_socket_path = "/tmp/post_office_ctrl.sock";
 
-static int g_listen_fd = -1;
-static volatile sig_atomic_t g_bridge_running = 0;
+static volatile int g_bridge_running = 0;
+static poller_t *g_poller = NULL;
 
 static void handle_client_fd(int client_fd) {
+    // For now, we still use stdio streams for line parsing simplicity in this bridge.
+    // In a full implementation, we would use the poller for reading too.
+    // But to respect the "detached thread" model or simple inline handling:
+    
+    // Set to blocking for stdio usage (po_socket_accept returns non-blocking)
+    int flags = fcntl(client_fd, F_GETFL, 0);
+    fcntl(client_fd, F_SETFL, flags & ~O_NONBLOCK);
+
     FILE* f = fdopen(client_fd, "r+");
     if (!f) {
-        close(client_fd);
+        po_socket_close(client_fd);
         return;
     }
 
     char line[512];
     while (fgets(line, sizeof(line), f)) {
-        /* Trim newline */
         size_t n = strlen(line);
         if (n && line[n-1] == '\n') line[n-1] = '\0';
 
-        /* Basic dispatch: for now just log and reply OK */
-        fprintf(stdout, "ctrl-bridge: received command: %s\n", line);
-        fflush(stdout);
+        LOG_INFO("ctrl-bridge: received command: %s", line);
+        po_perf_counter_inc("director.bridge.commands");
 
-        /* TODO: integrate with Director APIs (spawn users, query stats, etc.) */
+        /* TODO: integrate with Director APIs */
 
         fprintf(f, "OK\n");
         fflush(f);
     }
 
-    fclose(f); /* closes client_fd */
-}
-
-static void* client_thread_main(void* arg) {
-    int client_fd = *(int*)arg;
-    free(arg);
-    handle_client_fd(client_fd);
-    return NULL;
+    fclose(f); // closes client_fd
 }
 
 int bridge_mainloop_init(void) {
-    struct sockaddr_un addr;
-
-    /* Remove existing socket if present */
+    // Cleanup old socket
     unlink(ctrl_socket_path);
 
-    g_listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (g_listen_fd < 0) {
-        fprintf(stderr, "bridge: socket() failed: %s\n", strerror(errno));
-        return -1;
-    }
-
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, ctrl_socket_path, sizeof(addr.sun_path) - 1);
-
-    if (bind(g_listen_fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
-        fprintf(stderr, "bridge: bind() failed: %s\n", strerror(errno));
-        close(g_listen_fd);
-        g_listen_fd = -1;
-        return -1;
-    }
-
-    if (listen(g_listen_fd, 4) != 0) {
-        fprintf(stderr, "bridge: listen() failed: %s\n", strerror(errno));
-        close(g_listen_fd);
-        g_listen_fd = -1;
-        unlink(ctrl_socket_path);
-        return -1;
-    }
-
-    /* Best-effort permissions: owner-only */
-    chmod(ctrl_socket_path, 0600);
+    // Initialize metrics
+    po_perf_counter_create("director.bridge.connections");
+    po_perf_counter_create("director.bridge.commands");
 
     return 0;
 }
 
 int bridge_mainloop_run(void) {
-    if (g_listen_fd < 0) {
-        fprintf(stderr, "bridge: not initialized\n");
+    // 1. Create Listening Socket
+    int listen_fd = po_socket_listen_unix(ctrl_socket_path, 4);
+    if (listen_fd < 0) {
+        LOG_ERROR("bridge: listen failed: %s", strerror(errno));
+        return -1;
+    }
+    
+    // Best effort permissions
+    chmod(ctrl_socket_path, 0600);
+
+    // 2. Create Poller
+    g_poller = poller_create();
+    if (!g_poller) {
+        LOG_ERROR("bridge: poller create failed");
+        po_socket_close(listen_fd);
+        return -1;
+    }
+
+    // 3. Register Listener
+    if (poller_add(g_poller, listen_fd, EPOLLIN) != 0) {
+        LOG_ERROR("bridge: poller add failed");
+        poller_destroy(g_poller);
+        g_poller = NULL;
+        po_socket_close(listen_fd);
         return -1;
     }
 
     g_bridge_running = 1;
-    fprintf(stdout, "bridge: listening on %s\n", ctrl_socket_path);
+    LOG_INFO("bridge: listening on %s", ctrl_socket_path);
 
+    struct epoll_event events[16];
+    
     while (g_bridge_running) {
-        int client_fd = accept(g_listen_fd, NULL, NULL);
-        if (client_fd < 0) {
+        // Wait for events (1s timeout to check g_bridge_running)
+        int n = poller_wait(g_poller, events, 16, 1000);
+        if (n < 0) {
             if (errno == EINTR) continue;
-            /* If stopping, accept may fail after close; break cleanly */
-            if (!g_bridge_running) break;
-            fprintf(stderr, "bridge: accept() failed: %s\n", strerror(errno));
-            /* sleep briefly to avoid busy loop on repeated errors */
-            sleep(1);
-            continue;
+            LOG_ERROR("bridge: poller_wait failed: %s", strerror(errno));
+            break; // Fatal error
         }
 
-        /* For simplicity handle connection in a detached thread so bridge
-         * remains responsive. Connections are expected to be short-lived. */
-        pthread_t t;
-        int* pfd = malloc(sizeof(int));
-        if (!pfd) {
-            close(client_fd);
-            continue;
-        }
-        *pfd = client_fd;
-
-        int rc = pthread_create(&t, NULL, client_thread_main, pfd);
-        if (rc != 0) {
-            /* Fallback: handle inline */
-            free(pfd);
-            handle_client_fd(client_fd);
-        } else {
-            /* Detach thread: it will close the fd when done. */
-            pthread_detach(t);
+        for (int i = 0; i < n; i++) {
+            if (events[i].data.fd == listen_fd) {
+                // Accept new connections
+                char addr_buf[64]; // Not used for unix sockets really
+                int client_fd = po_socket_accept(listen_fd, addr_buf, sizeof(addr_buf));
+                
+                if (client_fd >= 0) {
+                    po_perf_counter_inc("director.bridge.connections");
+                    // Handle client (blocking for now in separate thread or inline)
+                    // We'll spawn a thread to keep the main loop responsive to new connections
+                    pthread_t t;
+                    int *pfd = malloc(sizeof(int));
+                    if (pfd) {
+                        *pfd = client_fd;
+                        void* client_thread(void* arg) {
+                            int cfd = *(int*)arg;
+                            free(arg);
+                            handle_client_fd(cfd);
+                            return NULL;
+                        }
+                        if (pthread_create(&t, NULL, client_thread, pfd) == 0) {
+                            pthread_detach(t);
+                        } else {
+                            free(pfd);
+                            po_socket_close(client_fd);
+                        }
+                    } else {
+                        po_socket_close(client_fd);
+                    }
+                }
+            }
         }
     }
 
+    poller_destroy(g_poller);
+    g_poller = NULL;
+    po_socket_close(listen_fd);
+    unlink(ctrl_socket_path);
     return 0;
 }
 
 void bridge_mainloop_stop(void) {
     g_bridge_running = 0;
-    if (g_listen_fd >= 0) {
-        close(g_listen_fd);
-        g_listen_fd = -1;
+    if (g_poller) {
+        poller_wake(g_poller);
     }
-    unlink(ctrl_socket_path);
 }

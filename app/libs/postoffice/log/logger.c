@@ -271,7 +271,9 @@ int po_logger_init(const po_logger_config_t *cfg) {
 
     size_t cacheline = cfg->cacheline_bytes;
     perf_ringbuf_set_cacheline(cacheline);
-    g_ring = perf_ringbuf_create(cfg->ring_capacity);
+    
+    // Create ring with metrics enabled
+    g_ring = perf_ringbuf_create(cfg->ring_capacity, PERF_RINGBUF_METRICS);
     if (!g_ring)
         return -1;
 
@@ -282,7 +284,11 @@ int po_logger_init(const po_logger_config_t *cfg) {
         return -1;
     }
 
-    g_free = perf_ringbuf_create(cfg->ring_capacity);
+    // Free list also gets metrics enabled?
+    // Actually the logger logic handles "no_free_record" metrics manually.
+    // But ringbuf metrics will track generic enqueue/dequeue.
+    // Let's enable it for full "autonomous" compliance.
+    g_free = perf_ringbuf_create(cfg->ring_capacity, PERF_RINGBUF_METRICS);
     if (!g_free) {
         free(g_pool);
         g_pool = NULL;
@@ -291,7 +297,7 @@ int po_logger_init(const po_logger_config_t *cfg) {
         return -1;
     }
 
-    g_batcher = perf_batcher_create(g_ring, 256);
+    g_batcher = perf_batcher_create(g_ring, 256, PERF_BATCHER_METRICS);
     if (!g_batcher) {
         perf_ringbuf_destroy(&g_free);
         g_free = NULL;
@@ -320,6 +326,11 @@ int po_logger_init(const po_logger_config_t *cfg) {
     atomic_store_explicit(&g_running, 1, memory_order_relaxed);
     for (unsigned i = 0; i < g_nworkers; i++)
         pthread_create(&g_workers[i], NULL, worker_main, NULL);
+
+    // Initialize metrics for all log levels so they appear in reports even if 0
+    for (int i = LOG_TRACE; i <= LOG_FATAL; i++) {
+        PO_METRIC_COUNTER_CREATE(level_metrics[i]);
+    }
 
     PO_METRIC_COUNTER_INC("logger.init");
     return rc_ret;

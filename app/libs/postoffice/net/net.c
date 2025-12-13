@@ -1,8 +1,3 @@
-/**
- * @file net.c
- * @brief High-level networking API built on protocol and framing.
- */
-
 #include "net/net.h"
 
 #include <errno.h>
@@ -39,7 +34,7 @@ int net_init_zerocopy(size_t tx_buffers, size_t rx_buffers, size_t buf_size) {
     pthread_mutex_lock(&g_zcpool_create_lock);
 
     if (!g_tx_pool) {
-        g_tx_pool = perf_zcpool_create(tx_buffers, buf_size);
+        g_tx_pool = perf_zcpool_create(tx_buffers, buf_size, PERF_ZCPOOL_METRICS);
         if (!g_tx_pool) {
             PO_METRIC_COUNTER_INC("net.zcpool.tx.create.fail");
             pthread_mutex_unlock(&g_zcpool_create_lock);
@@ -51,7 +46,7 @@ int net_init_zerocopy(size_t tx_buffers, size_t rx_buffers, size_t buf_size) {
     }
 
     if (!g_rx_pool) {
-        g_rx_pool = perf_zcpool_create(rx_buffers, buf_size);
+        g_rx_pool = perf_zcpool_create(rx_buffers, buf_size, PERF_ZCPOOL_METRICS);
         if (!g_rx_pool) {
             PO_METRIC_COUNTER_INC("net.zcpool.rx.create.fail");
             /* If TX created above, keep it; caller can shutdown later. */

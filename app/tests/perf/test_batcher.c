@@ -13,9 +13,9 @@ static po_perf_ringbuf_t *ringbuf;
 
 TEST_SETUP(BATCHER) {
     // create a ring with capacity 8 and batcher size 4
-    ringbuf = perf_ringbuf_create(8);
+    ringbuf = perf_ringbuf_create(8, PERF_RINGBUF_NOFLAGS);
     TEST_ASSERT_NOT_NULL(ringbuf);
-    batcher = perf_batcher_create(ringbuf, 4);
+    batcher = perf_batcher_create(ringbuf, 4, PERF_BATCHER_NOFLAGS);
     TEST_ASSERT_NOT_NULL(batcher);
 }
 
@@ -26,9 +26,9 @@ TEST_TEAR_DOWN(BATCHER) {
 
 TEST(BATCHER, INVALID_CREATE) {
     // zero batch size
-    po_perf_ringbuf_t *rb = perf_ringbuf_create(8);
+    po_perf_ringbuf_t *rb = perf_ringbuf_create(8, PERF_RINGBUF_NOFLAGS);
     TEST_ASSERT_NOT_NULL(rb);
-    const po_perf_batcher_t *b2 = perf_batcher_create(rb, 0);
+    const po_perf_batcher_t *b2 = perf_batcher_create(rb, 0, PERF_BATCHER_NOFLAGS);
     TEST_ASSERT_NULL(b2);
     TEST_ASSERT_EQUAL_INT(EINVAL, errno);
     perf_ringbuf_destroy(&rb);

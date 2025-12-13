@@ -1,50 +1,59 @@
 /** \file task_queue.h
  *  \ingroup director
- *  \brief Lock-free multi-producer single-consumer (MPSC) intrusive task
- *         queue supporting the Director scheduler.
- *
- *  Purpose
- *  -------
- *  Provide a minimal allocation-free conduit for heterogeneous tasks
- *  (function pointer + context) emitted by various Director subsystems
- *  (IPC bridge, telemetry, runtime state transitions) and executed on the
- *  Director main thread.
- *
- *  Design
- *  ------
- *  - Singly-linked list with atomic head (push) and plain tail (consumer).
- *  - Producers use atomic exchange to insert at head; consumer reverses list
- *    to restore FIFO ordering or performs batch pop with stack behavior if
- *    fairness is not critical (TBD based on workload characteristics).
- *  - Optional fixed-size pool for task node reuse to avoid malloc.
- *
- *  Memory Ordering
- *  ---------------
- *  Producers publish a fully initialized node then atomic-exchange head with
- *  release semantics. Consumer loads head with acquire semantics ensuring
- *  visibility of node contents.
- *
- *  Backpressure
- *  ------------
- *  If a bounded pool is exhausted the enqueue operation fails (-1 / NULL)
- *  allowing callers to decide (drop, retry, escalate). Unbounded mode simply
- *  malloc's (with ENOMEM propagation).
- *
- *  Error Handling
- *  --------------
- *  - Allocation failures set errno=ENOMEM.
- *  - Enqueue on full bounded pool sets errno=EAGAIN.
- *  - Consumer APIs return 0 / -1 for success / empty semantics.
- *
- *  @see scheduler.h for higher-level scheduling semantics.
+ *  \brief Task queue supporting MPSC operations via SPSC ringbuf + spinlock.
  */
 #ifndef PO_DIRECTOR_TASK_QUEUE_H
 #define PO_DIRECTOR_TASK_QUEUE_H
 
-/* Interface under active design; expect functions like:
- *   int po_task_queue_init(po_task_queue_t*, size_t max_nodes);
- *   int po_task_enqueue(po_task_queue_t*, void (*fn)(void*), void *ctx);
- *   size_t po_task_drain(po_task_queue_t*, po_task_record_t *out, size_t max);
+#include <pthread.h>
+#include <postoffice/perf/ringbuf.h>
+#include <postoffice/perf/zerocopy.h>
+
+/**
+ * \brief A generic task is a function pointer + context.
  */
+typedef void (*po_task_fn)(void *ctx);
+
+/**
+ * \brief Task queue structure.
+ * Wraps a perf_ringbuf_t with a spinlock to allow multiple producers.
+ * Uses a perf_zcpool_t to allocate task nodes without malloc.
+ */
+typedef struct {
+    po_perf_ringbuf_t *ring;
+    perf_zcpool_t *pool;
+    pthread_spinlock_t lock;
+} po_task_queue_t;
+
+/**
+ * \brief Initialize the task queue.
+ * \param queue Pointer to the queue structure.
+ * \param capacity Queue capacity (must be power of two).
+ * \return 0 on success, -1 on failure.
+ */
+int po_task_queue_init(po_task_queue_t *queue, size_t capacity);
+
+/**
+ * \brief Enqueue a task (Thread-safe, Supports Multiple Producers).
+ * Uses a spinlock to serialize writes to the underlying SPSC ring.
+ * \param queue Pointer to the queue.
+ * \param fn Function to execute.
+ * \param ctx Context pointer for the function.
+ * \return 0 on success, -1 if full.
+ */
+int po_task_enqueue(po_task_queue_t *queue, po_task_fn fn, void *ctx);
+
+/**
+ * \brief Drain tasks from the queue (Single Consumer only).
+ * \param queue Pointer to the queue.
+ * \param max_tasks Maximum number of tasks to process.
+ * \return Number of tasks processed.
+ */
+size_t po_task_drain(po_task_queue_t *queue, size_t max_tasks);
+
+/**
+ * \brief Clean up queue resources.
+ */
+void po_task_queue_destroy(po_task_queue_t *queue);
 
 #endif /* PO_DIRECTOR_TASK_QUEUE_H */

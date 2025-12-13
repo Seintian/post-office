@@ -228,6 +228,12 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // Initialize metrics (BEFORE logger)
+    if (initialize_metrics() != 0) {
+        po_args_destroy(&args);
+        return 1;
+    }
+
     // Initialize logger
     if (initialize_logger(args.loglevel) != 0) {
         po_args_destroy(&args);
@@ -256,12 +262,7 @@ int main(int argc, char *argv[]) {
 
     LOG_INFO("Simulation lifecycle initialized (config=%s)", args.config_file ? args.config_file : "<none>");
 
-    // Initialize metrics
-    if (initialize_metrics() != 0) {
-        po_logger_shutdown();
-        po_args_destroy(&args);
-        return 1;
-    }
+
 
     LOG_DEBUG("Metrics subsystem initialized");
 

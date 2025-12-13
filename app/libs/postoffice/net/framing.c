@@ -3,9 +3,7 @@
  * @brief Length-prefixed framing implementation with zero-copy support.
  */
 
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
+
 
 #include "net/framing.h"
 

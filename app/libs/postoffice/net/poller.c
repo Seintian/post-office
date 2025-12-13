@@ -4,6 +4,7 @@
  */
 
 #include "net/net.h"
+#include <postoffice/net/poller.h>
 
 #include <errno.h>
 #include <stdlib.h>
@@ -13,10 +14,6 @@
 #include <unistd.h>
 
 #include "metrics/metrics.h"
-
-#ifndef CLOCK_REALTIME
-#define CLOCK_REALTIME ((clockid_t)0)
-#endif
 
 struct poller {
     int epfd;

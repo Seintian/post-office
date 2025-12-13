@@ -113,6 +113,10 @@ static inline uint64_t po_metric_now_ns(void) {
 
 #ifdef PO_METRICS_DISABLED
 // Compile-time disabled: expand to empty
+#define PO_METRIC_COUNTER_CREATE(name)                                                             \
+    do {                                                                                           \
+        (void)(name);                                                                              \
+    } while (0)
 #define PO_METRIC_COUNTER_INC(name)                                                                \
     do {                                                                                           \
         (void)(name);                                                                              \
@@ -147,6 +151,7 @@ static inline uint64_t po_metric_now_ns(void) {
     } while (0)
 #else
 // Active implementation delegates to perf.*
+#define PO_METRIC_COUNTER_CREATE(name) po_perf_counter_create((name))
 #define PO_METRIC_COUNTER_INC(name) po_perf_counter_inc((name))
 #define PO_METRIC_COUNTER_ADD(name, d) po_perf_counter_add((name), (uint64_t)(d))
 #define PO_METRIC_TIMER_CREATE(name) po_perf_timer_create((name))

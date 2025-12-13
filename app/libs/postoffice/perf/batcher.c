@@ -1,7 +1,3 @@
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
-
 #include "perf/batcher.h"
 
 #include <errno.h>
@@ -16,14 +12,16 @@
 #include <unistd.h>
 
 #include "perf/ringbuf.h"
+#include "metrics/metrics.h"
 
 struct perf_batcher {
     po_perf_ringbuf_t *rb;
     int efd;
     size_t batch_size;
+    perf_batcher_flags_t flags;
 };
 
-po_perf_batcher_t *perf_batcher_create(po_perf_ringbuf_t *rb, size_t batch_size) {
+po_perf_batcher_t *perf_batcher_create(po_perf_ringbuf_t *rb, size_t batch_size, perf_batcher_flags_t flags) {
     if (batch_size == 0) {
         errno = EINVAL;
         return NULL;
@@ -35,12 +33,22 @@ po_perf_batcher_t *perf_batcher_create(po_perf_ringbuf_t *rb, size_t batch_size)
 
     b->rb = rb;
     b->batch_size = batch_size;
+    b->flags = flags;
 
     // Create an eventfd for producer->consumer signaling
     b->efd = eventfd(0, EFD_CLOEXEC | EFD_SEMAPHORE);
     if (b->efd < 0) {
         free(b);
         return NULL;
+    }
+
+    if (flags & PERF_BATCHER_METRICS) {
+        PO_METRIC_COUNTER_CREATE("batcher.create");
+        PO_METRIC_COUNTER_INC("batcher.create");
+        PO_METRIC_COUNTER_CREATE("batcher.enqueue");
+        PO_METRIC_COUNTER_CREATE("batcher.full");
+        PO_METRIC_COUNTER_CREATE("batcher.flush");
+        PO_METRIC_COUNTER_CREATE("batcher.next");
     }
 
     return b;
@@ -58,6 +66,9 @@ void perf_batcher_destroy(po_perf_batcher_t **b) {
     }
 
     // The user must free the ring buffer separately
+    
+    if (batcher->flags & PERF_BATCHER_METRICS)
+        PO_METRIC_COUNTER_INC("batcher.destroy");
 
     free(batcher);
     *b = NULL;
@@ -71,6 +82,8 @@ int perf_batcher_enqueue(po_perf_batcher_t *b, void *item) {
 
     // Enqueue into ring
     if (perf_ringbuf_enqueue(b->rb, item) < 0) {
+        if (b->flags & PERF_BATCHER_METRICS)
+             PO_METRIC_COUNTER_INC("batcher.full");
         errno = EAGAIN; // full
         return -1;
     }
@@ -82,6 +95,9 @@ int perf_batcher_enqueue(po_perf_batcher_t *b, void *item) {
         errno = EIO;
         return -1;
     }
+
+    if (b->flags & PERF_BATCHER_METRICS)
+        PO_METRIC_COUNTER_INC("batcher.enqueue");
 
     return 0;
 }
@@ -95,6 +111,9 @@ int perf_batcher_flush(po_perf_batcher_t *b, int fd) {
     size_t count = perf_ringbuf_count(b->rb);
     if (count == 0)
         return 0;
+
+    if (b->flags & PERF_BATCHER_METRICS)
+        PO_METRIC_COUNTER_INC("batcher.flush");
 
     if (count > IOV_MAX)
         count = IOV_MAX;
@@ -157,6 +176,12 @@ ssize_t perf_batcher_next(po_perf_batcher_t *b, void **out) {
             break; // empty
 
         out[n] = item;
+    }
+
+    if (b->flags & PERF_BATCHER_METRICS) {
+        PO_METRIC_COUNTER_INC("batcher.next");
+        if (n > 0)
+            PO_METRIC_COUNTER_ADD("batcher.items", n);
     }
 
     return (ssize_t)n;

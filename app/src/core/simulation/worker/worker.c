@@ -1,4 +1,5 @@
+#include "runtime/worker_loop.h"
 
 int main() {
-    return 0;
+    return worker_run();
 }

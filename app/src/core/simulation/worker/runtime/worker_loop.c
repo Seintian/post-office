@@ -9,6 +9,13 @@
 #include <signal.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+
+#include "worker_loop.h"
+#include <postoffice/log/logger.h>
+#include <postoffice/metrics/metrics.h>
+#include <postoffice/perf/perf.h>
 
 static volatile sig_atomic_t g_worker_running = 0;
 
@@ -19,6 +26,25 @@ static void worker_handle_signal(int sig) {
 
 /* Initialize runtime resources for worker (placeholder). */
 int worker_init(void) {
+    if (po_perf_init(16, 8, 4) != 0) {
+        fprintf(stderr, "worker: perf init failed\n");
+    }
+    if (po_metrics_init() != 0) {
+        fprintf(stderr, "worker: metrics init failed\n");
+    }
+
+    po_logger_config_t log_cfg = {
+        .level = LOG_INFO,
+        .ring_capacity = 4096,
+        .consumers = 1,
+        .policy = LOGGER_OVERWRITE_OLDEST
+    };
+    if (po_logger_init(&log_cfg) != 0) {
+        fprintf(stderr, "worker: logger init failed\n");
+        return -1;
+    }
+    po_logger_add_sink_console(true);
+
 	/* TODO: init IPC, state, metrics, etc. */
 	return 0;
 }
@@ -39,7 +65,7 @@ int worker_run(void) {
 	}
 
 	g_worker_running = 1;
-	fprintf(stdout, "worker: entering run loop\n");
+	LOG_INFO("worker: entering run loop");
 
 	while (g_worker_running) {
 		/* Placeholder: poll for work, handle IPC, process tickets, etc. */
@@ -47,8 +73,9 @@ int worker_run(void) {
 	}
 
 	/* Graceful shutdown */
-	fprintf(stdout, "worker: shutting down\n");
-	/* TODO: cleanup IPC, flush metrics, release resources */
+	LOG_INFO("worker: shutting down");
+    po_metrics_shutdown();
+    po_perf_shutdown(stdout);
+    po_logger_shutdown();
 	return EXIT_SUCCESS;
 }
-

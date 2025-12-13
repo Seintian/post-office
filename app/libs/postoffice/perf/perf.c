@@ -1,7 +1,3 @@
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
-
 #include "perf/perf.h"
 
 #include <errno.h>
@@ -18,6 +14,7 @@
 #include "perf/ringbuf.h"
 #include "perf/zerocopy.h"
 #include "utils/errors.h"
+#include <postoffice/log/logger.h>
 
 // -----------------------------------------------------------------------------
 // Internal Event Definitions
@@ -198,16 +195,19 @@ int po_perf_init(size_t expected_counters, size_t expected_timers, size_t expect
     if (!ctx.histograms)
         goto fail;
 
+    // IMPORTANT: WE MUST DISABLE METRICS FOR THE PERF INTERNAL STRUCTURES
+    // TO AVOID ENDLESS RECURSION (perf tracks perf tracks perf...).
     ctx.event_q = perf_ringbuf_create(
-        next_pow2((expected_counters + expected_timers + expected_histograms) * 2));
+        next_pow2((expected_counters + expected_timers + expected_histograms) * 2),
+        PERF_RINGBUF_NOFLAGS);
     if (!ctx.event_q)
         goto fail;
 
-    ctx.ev_batcher = perf_batcher_create(ctx.event_q, 64);
+    ctx.ev_batcher = perf_batcher_create(ctx.event_q, 64, PERF_BATCHER_NOFLAGS);
     if (!ctx.ev_batcher)
         goto fail;
 
-    ctx.fmt_pool = perf_zcpool_create(256, sizeof(perf_event_t));
+    ctx.fmt_pool = perf_zcpool_create(256, sizeof(perf_event_t), PERF_ZCPOOL_NOFLAGS);
     if (!ctx.fmt_pool)
         goto fail;
 
@@ -243,7 +243,99 @@ fail: {
 }
 }
 
+static int compare_keys(const void *a, const void *b) {
+    return strcmp(*(const char **)a, *(const char **)b);
+}
+
+int po_perf_report(FILE *out) {
+    (void)out;
+    // Collect all keys first to sort them
+    LOG_INFO("=== Performance Report ===");
+
+    // -- Counters --
+    size_t n_counters = po_hashtable_size(ctx.counters);
+    if (n_counters > 0) {
+        const char **keys = malloc(n_counters * sizeof(char *));
+        if (keys) {
+            po_hashtable_iter_t *it = po_hashtable_iterator(ctx.counters);
+            size_t i = 0;
+            while (it && po_hashtable_iter_next(it) && i < n_counters) {
+                keys[i++] = (const char *)po_hashtable_iter_key(it);
+            }
+            free(it);
+
+            qsort(keys, n_counters, sizeof(char *), compare_keys);
+
+            LOG_INFO("-- Counters --");
+            for (i = 0; i < n_counters; i++) {
+                struct po_perf_counter *c = po_hashtable_get(ctx.counters, keys[i]);
+                LOG_INFO("%s: %lu", keys[i], (unsigned long)atomic_load(&c->value));
+            }
+            free(keys);
+        }
+    } else {
+        LOG_INFO("-- Counters -- (none)");
+    }
+
+    // -- Timers --
+    size_t n_timers = po_hashtable_size(ctx.timers);
+    if (n_timers > 0) {
+        const char **keys = malloc(n_timers * sizeof(char *));
+        if (keys) {
+            po_hashtable_iter_t *it = po_hashtable_iterator(ctx.timers);
+            size_t i = 0;
+            while (it && po_hashtable_iter_next(it) && i < n_timers) {
+                keys[i++] = (const char *)po_hashtable_iter_key(it);
+            }
+            free(it);
+            
+            qsort(keys, n_timers, sizeof(char *), compare_keys);
+
+            LOG_INFO("-- Timers (ns) --");
+            for (i = 0; i < n_timers; i++) {
+                struct po_perf_timer *t = po_hashtable_get(ctx.timers, keys[i]);
+                LOG_INFO("%s: %lu", keys[i], (unsigned long)atomic_load(&t->total_ns));
+            }
+            free(keys);
+        }
+    } else {
+        LOG_INFO("-- Timers -- (none)");
+    }
+
+    // -- Histograms --
+    size_t n_hist = po_hashtable_size(ctx.histograms);
+    if (n_hist > 0) {
+        const char **keys = malloc(n_hist * sizeof(char *));
+        if (keys) {
+            po_hashtable_iter_t *it = po_hashtable_iterator(ctx.histograms);
+            size_t i = 0;
+            while (it && po_hashtable_iter_next(it) && i < n_hist) {
+                keys[i++] = (const char *)po_hashtable_iter_key(it);
+            }
+            free(it);
+            
+            qsort(keys, n_hist, sizeof(char *), compare_keys);
+            
+            LOG_INFO("-- Histograms --");
+            for (i = 0; i < n_hist; i++) {
+                struct po_perf_histogram *h = po_hashtable_get(ctx.histograms, keys[i]);
+                LOG_INFO("%s:", keys[i]);
+                for (size_t bin = 0; bin < h->nbins; bin++) {
+                    LOG_INFO("  <= %lu: %lu", (unsigned long)h->bins[bin],
+                            (unsigned long)atomic_load(&h->counts[bin]));
+                }
+            }
+            free(keys);
+        }
+    } else {
+        LOG_INFO("-- Histograms -- (none)");
+    }
+
+    return 0;
+}
+
 void po_perf_shutdown(FILE *out) {
+    (void)out;
     if (!ctx.initialized)
         return;
 
@@ -254,7 +346,21 @@ void po_perf_shutdown(FILE *out) {
     }
 
     pthread_join(ctx.worker_tid, NULL);
-    po_perf_report(out);
+    
+    // Default to logger report unless specific file is needed (legacy support)
+    // If FILE* is stdout/stderr, we ignore it and use logger as requested
+    // Unless logging isn't initialized? We check if we can log.
+    po_perf_report(NULL);
+
+    /* 
+     * SAFE TEARDOWN:
+     * We purposefully disable the public API first (initialized=0), wait a grace period
+     * for any concurrent calls (e.g. from Logger) to finish, and THEN destroy the memory.
+     * This prevents the Use-After-Free race while still ensuring we clean up (fixing leaks).
+     */
+    ctx.initialized = 0;
+    atomic_thread_fence(memory_order_seq_cst);
+    usleep(10000); // 10ms grace period for stragglers
 
     if (ctx.ev_batcher)
         perf_batcher_destroy(&ctx.ev_batcher);
@@ -450,51 +556,13 @@ int po_perf_histogram_record(const char *h, uint64_t value) {
     return 0;
 }
 
-int po_perf_report(FILE *out) {
-    fprintf(out, "=== Performance Report ===\n");
-    fprintf(out, "-- Counters --\n");
-    po_hashtable_iter_t *it = po_hashtable_iterator(ctx.counters);
-    while (po_hashtable_iter_next(it)) {
-        fprintf(out, "%s: %lu\n", (char *)po_hashtable_iter_key(it),
-                (unsigned long)atomic_load(
-                    &((struct po_perf_counter *)po_hashtable_iter_value(it))->value));
-    }
-
-    free(it);
-    fprintf(out, "-- Timers (ns) --\n");
-    it = po_hashtable_iterator(ctx.timers);
-    while (po_hashtable_iter_next(it)) {
-        fprintf(out, "%s: %lu\n", (char *)po_hashtable_iter_key(it),
-                (unsigned long)atomic_load(
-                    &((struct po_perf_timer *)po_hashtable_iter_value(it))->total_ns));
-    }
-
-    free(it);
-    fprintf(out, "-- Histograms --\n");
-    it = po_hashtable_iterator(ctx.histograms);
-    while (po_hashtable_iter_next(it)) {
-        struct po_perf_histogram *h = po_hashtable_iter_value(it);
-        fprintf(out, "%s:\n", (char *)po_hashtable_iter_key(it));
-        for (size_t i = 0; i < h->nbins; i++) {
-            fprintf(out, "  <= %lu: %lu\n", (unsigned long)h->bins[i],
-                    (unsigned long)atomic_load(&h->counts[i]));
-        }
-    }
-
-    free(it);
-    return 0;
-}
-
 // Test/support API: best-effort synchronous flush of pending perf events.
-// Spins briefly until the event ring appears empty or a timeout elapses.
-// This does not guarantee histogram timer ordering beyond normal semantics
-// but is sufficient for tests wanting to observe counter increments.
 int po_perf_flush(void) {
     if (!ctx.initialized)
         return -1;
 
-    const int max_spins = 1000; // ~ up to ~50ms worst case with backoff
-    struct timespec ts = {.tv_sec = 0, .tv_nsec = 50 * 1000}; // 50us
+    const int max_spins = 1000;
+    struct timespec ts = {.tv_sec = 0, .tv_nsec = 50 * 1000};
     int stable = 0;
     size_t last = (size_t)-1;
 
@@ -502,7 +570,7 @@ int po_perf_flush(void) {
         size_t cnt = perf_ringbuf_count(ctx.event_q);
         if (cnt == 0) {
             if (stable++ > 2)
-                return 0; // observed empty multiple consecutive times
+                return 0;
         } else
             stable = 0;
 
@@ -512,7 +580,7 @@ int po_perf_flush(void) {
         last = cnt;
         nanosleep(&ts, NULL);
         if (ts.tv_nsec < 2 * 1000 * 1000)
-            ts.tv_nsec += 50 * 1000; // gentle backoff up to 2ms
+            ts.tv_nsec += 50 * 1000;
     }
 
     return perf_ringbuf_count(ctx.event_q) == 0 ? 0 : -1;

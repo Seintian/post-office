@@ -3,14 +3,8 @@
  * @brief TCP and UNIX-domain socket helpers (non-blocking, CLOEXEC).
  */
 
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
-
 #include "net/socket.h"
-/* Metrics are intentionally not recorded at this low layer anymore; higher
- * layers (net, framing) perform instrumentation to avoid duplicate counters.
- */
+#include "metrics/metrics.h"
 
 #include <errno.h>
 #include <netinet/tcp.h>
@@ -98,6 +92,9 @@ int po_socket_listen(const char *address, const char *port, int backlog) {
         errno = EINVAL;
         return -1;
     }
+    
+    PO_METRIC_COUNTER_CREATE("socket.listen");
+    PO_METRIC_COUNTER_CREATE("socket.listen.fail");
 
     int listen_fd = -1;
     for (struct addrinfo *ai = res; ai; ai = ai->ai_next) {
@@ -122,6 +119,12 @@ int po_socket_listen(const char *address, const char *port, int backlog) {
     }
 
     freeaddrinfo(res);
+    
+    if (listen_fd >= 0)
+        PO_METRIC_COUNTER_INC("socket.listen");
+    else
+        PO_METRIC_COUNTER_INC("socket.listen.fail");
+        
     return listen_fd; // -1 if something didn't work
 }
 
@@ -130,11 +133,15 @@ int po_socket_connect(const char *address, const char *port) {
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
+    
+    PO_METRIC_COUNTER_CREATE("socket.connect");
+    PO_METRIC_COUNTER_CREATE("socket.connect.fail");
 
     struct addrinfo *res = NULL;
     int gai = getaddrinfo(address, port, &hints, &res);
     if (gai != 0) {
         errno = EINVAL;
+        PO_METRIC_COUNTER_INC("socket.connect.fail");
         return -1;
     }
 
@@ -154,6 +161,12 @@ int po_socket_connect(const char *address, const char *port) {
     }
 
     freeaddrinfo(res);
+    
+    if (fd_out >= 0)
+        PO_METRIC_COUNTER_INC("socket.connect");
+    else
+        PO_METRIC_COUNTER_INC("socket.connect.fail");
+        
     return fd_out;
 }
 
@@ -165,6 +178,8 @@ int po_socket_accept(int listen_fd, char *out_addr_buf, size_t addr_buf_len) {
 
     struct sockaddr_storage ss;
     socklen_t slen = sizeof(ss);
+    
+    PO_METRIC_COUNTER_CREATE("socket.accept");
 
 #ifdef SOCK_NONBLOCK
     int fd = accept4(listen_fd, (struct sockaddr *)&ss, &slen, SOCK_NONBLOCK | SOCK_CLOEXEC);
@@ -190,6 +205,8 @@ int po_socket_accept(int listen_fd, char *out_addr_buf, size_t addr_buf_len) {
     }
 
 #endif
+    
+    PO_METRIC_COUNTER_INC("socket.accept");
 
     if (out_addr_buf && addr_buf_len) {
         char host[NI_MAXHOST];
@@ -209,6 +226,8 @@ int po_socket_listen_unix(const char *path, int backlog) {
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (fd < 0)
         return -1;
+
+    PO_METRIC_COUNTER_CREATE("socket.listen.unix");
 
     struct sockaddr_un sun;
     memset(&sun, 0, sizeof(sun));
@@ -241,6 +260,7 @@ int po_socket_listen_unix(const char *path, int backlog) {
         return -1;
     }
 
+    PO_METRIC_COUNTER_INC("socket.listen.unix");
     return fd;
 }
 
@@ -248,6 +268,8 @@ int po_socket_connect_unix(const char *path) {
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (fd < 0)
         return -1;
+    
+    PO_METRIC_COUNTER_CREATE("socket.connect.unix");
 
     struct sockaddr_un sun;
     memset(&sun, 0, sizeof(sun));
@@ -267,11 +289,15 @@ int po_socket_connect_unix(const char *path) {
     }
 
     socklen_t slen = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + len);
-    if (connect(fd, (struct sockaddr *)&sun, slen) == 0)
+    if (connect(fd, (struct sockaddr *)&sun, slen) == 0) {
+        PO_METRIC_COUNTER_INC("socket.connect.unix");
         return fd;
+    }
 
-    if (errno == EINPROGRESS)
+    if (errno == EINPROGRESS) {
+        PO_METRIC_COUNTER_INC("socket.connect.unix");
         return fd;
+    }
 
     close(fd);
     return -1;
@@ -283,17 +309,19 @@ void po_socket_close(int fd) {
             ; // retry
 }
 
-/* The following previously exported wrappers (create/bind/listen/connect/accept/close
- * with metrics) have been removed. Metrics collection now occurs exclusively in
- * higher layers to avoid double counting and API duplication. */
-
+/* Metrics recorded unconditionally as requested */
 ssize_t po_socket_send(int fd, const void *buf, size_t len, int flags) {
     ssize_t n = send(fd, buf, len, flags);
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK)
             return PO_SOCKET_WOULDBLOCK;
+            
+        PO_METRIC_COUNTER_INC("socket.send.fail");
         return -1;
     }
+    
+    PO_METRIC_COUNTER_INC("socket.send");
+    PO_METRIC_COUNTER_ADD("socket.send.bytes", (uint64_t)n);
     return n;
 }
 
@@ -302,7 +330,13 @@ ssize_t po_socket_recv(int fd, void *buf, size_t len, int flags) {
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK)
             return PO_SOCKET_WOULDBLOCK;
+            
+        PO_METRIC_COUNTER_INC("socket.recv.fail");
         return -1;
     }
-    return n; /* may be 0 (EOF) */
+    
+    PO_METRIC_COUNTER_INC("socket.recv");
+    if (n > 0)
+       PO_METRIC_COUNTER_ADD("socket.recv.bytes", (uint64_t)n);
+    return n;
 }

@@ -13,6 +13,7 @@
 #include "perf/perf.h"
 #include "perf/ringbuf.h"
 #include "perf/zerocopy.h"
+#include "tui/ansi.h"
 
 #include <ncurses.h>
 #include <locale.h>
@@ -96,7 +97,7 @@ bool tui_init(void) {
     
     // Mouse support
     mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
-    printf("\033[?1003h\n"); // Enable mouse movement reporting
+    printf("%s\n", TUI_ANSI_MOUSE_TRACKING_ENABLE); // Enable mouse movement reporting
 
     // Signal handlers
     struct sigaction sa;
@@ -104,9 +105,9 @@ bool tui_init(void) {
     sa.sa_handler = handle_winch;
     sigaction(SIGWINCH, &sa, NULL);
 
-    // Initialize perf resources
-    g_tui.event_q = perf_ringbuf_create(256);
-    g_tui.event_pool = perf_zcpool_create(256, sizeof(tui_event_t));
+    // Initialize perf resources with metrics enabled
+    g_tui.event_q = perf_ringbuf_create(256, PERF_RINGBUF_METRICS);
+    g_tui.event_pool = perf_zcpool_create(256, sizeof(tui_event_t), PERF_ZCPOOL_METRICS);
     if (!g_tui.event_q || !g_tui.event_pool) {
         endwin();
         return false;
@@ -137,7 +138,7 @@ bool tui_init(void) {
 void tui_cleanup(void) {
     if (!g_tui.initialized) return;
 
-    printf("\033[?1003l\n"); // Disable mouse movement reporting
+    printf("%s\n", TUI_ANSI_MOUSE_TRACKING_DISABLE); // Disable mouse movement reporting
     endwin();
     
     if (g_tui.event_q) perf_ringbuf_destroy(&g_tui.event_q);

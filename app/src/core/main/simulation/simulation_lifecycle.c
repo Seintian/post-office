@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 #include <spawn.h>
 #include <string.h>
+#include <postoffice/log/logger.h>
 
 extern char **environ;
 
@@ -24,14 +25,14 @@ void simulation_init(const char* config_path) {
 void simulation_start(bool tui_mode) {
     if (g_director_pid > 0) return; // Already running
 
-    printf("Starting simulation (Director)...\n");
+    LOG_INFO("Starting simulation (Director)...");
 
     // Path to director executable. Assuming strictly 'bin/post_office_director'
     // This assumes the CWD is the project root, which matches 'make start' behavior.
     const char* exe_path = "bin/post_office_director";
 
     if (access(exe_path, X_OK) != 0) {
-        fprintf(stderr, "Error: Cannot find director executable at '%s'. Make sure to build it first.\n", exe_path);
+        LOG_ERROR("Error: Cannot find director executable at '%s'. Make sure to build it first.", exe_path);
         return;
     }
 
@@ -57,23 +58,23 @@ void simulation_start(bool tui_mode) {
     posix_spawn_file_actions_destroy(&actions);
 
     if (status != 0) {
-        fprintf(stderr, "Error: posix_spawn failed: %s\n", strerror(status));
+        LOG_ERROR("Error: posix_spawn failed: %s", strerror(status));
         g_director_pid = -1;
     } else {
-        printf("Director started (PID: %d)\n", g_director_pid);
+        LOG_INFO("Director started (PID: %d)", g_director_pid);
     }
 }
 
 void simulation_stop(void) {
     if (g_director_pid > 0) {
-        printf("Stopping Director (PID: %d)...\n", g_director_pid);
+        LOG_INFO("Stopping Director (PID: %d)...", g_director_pid);
         kill(g_director_pid, SIGTERM);
 
         int status;
         waitpid(g_director_pid, &status, 0);
 
         g_director_pid = -1;
-        printf("Director stopped.\n");
+        LOG_INFO("Director stopped.");
     }
 }
 
@@ -97,14 +98,14 @@ void simulation_run_headless(void) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
-    printf("Running in headless mode. Press Ctrl+C to stop.\n");
+    LOG_INFO("Running in headless mode. Press Ctrl+C to stop.");
 
     while (g_running) {
         // Check if director is still alive
         int status;
         pid_t result = waitpid(g_director_pid, &status, WNOHANG);
         if (result == g_director_pid) {
-            printf("Director exited unexpectedly.\n");
+            LOG_ERROR("Director exited unexpectedly. Status: %d", WEXITSTATUS(status));
             g_director_pid = -1;
             break;
         } else if (result < 0) {

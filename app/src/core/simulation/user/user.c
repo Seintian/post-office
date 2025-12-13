@@ -1,4 +1,5 @@
+#include "runtime/user_loop.h"
 
 int main() {
-    return 0;
+    return user_run();
 }

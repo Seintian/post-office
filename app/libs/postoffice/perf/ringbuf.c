@@ -1,7 +1,3 @@
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
-
 #include "perf/ringbuf.h"
 
 #include <assert.h>
@@ -9,6 +5,8 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "metrics/metrics.h"
 
 /*
     head (read index)  and  tail (write index)  are each allocated
@@ -20,6 +18,7 @@ struct perf_ringbuf {
     size_t cap;          // must be power‐of‐two
     size_t mask;         // cap - 1
     void **slots;        // array[cap]
+    perf_ringbuf_flags_t flags;
 };
 
 static size_t _cacheline = 64;
@@ -32,7 +31,7 @@ void perf_ringbuf_set_cacheline(size_t cacheline_bytes) {
         _cacheline = 64; // default
 }
 
-po_perf_ringbuf_t *perf_ringbuf_create(size_t capacity) {
+po_perf_ringbuf_t *perf_ringbuf_create(size_t capacity, perf_ringbuf_flags_t flags) {
     if (capacity == 0 || (capacity & (capacity - 1)) != 0) {
         errno = EINVAL;
         return NULL;
@@ -44,6 +43,7 @@ po_perf_ringbuf_t *perf_ringbuf_create(size_t capacity) {
 
     rb->cap = capacity;
     rb->mask = capacity - 1;
+    rb->flags = flags;
     rb->slots = calloc(capacity, sizeof(void *));
     if (!rb->slots) {
         free(rb);
@@ -60,6 +60,15 @@ po_perf_ringbuf_t *perf_ringbuf_create(size_t capacity) {
 
     atomic_init(rb->head, 0);
     atomic_init(rb->tail, 0);
+
+    if (flags & PERF_RINGBUF_METRICS) {
+        PO_METRIC_COUNTER_CREATE("ringbuf.create");
+        PO_METRIC_COUNTER_INC("ringbuf.create");
+        PO_METRIC_COUNTER_CREATE("ringbuf.enqueue");
+        PO_METRIC_COUNTER_CREATE("ringbuf.dequeue");
+        PO_METRIC_COUNTER_CREATE("ringbuf.full");
+    }
+
     return rb;
 }
 
@@ -68,6 +77,10 @@ void perf_ringbuf_destroy(po_perf_ringbuf_t **prb) {
         return;
 
     po_perf_ringbuf_t *rb = *prb;
+    if (rb->flags & PERF_RINGBUF_METRICS) {
+        PO_METRIC_COUNTER_INC("ringbuf.destroy");
+    }
+
     free(rb->slots);
     free(rb->head);
     free(rb->tail);
@@ -80,6 +93,8 @@ int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item) {
     size_t tail = atomic_load_explicit(rb->tail, memory_order_relaxed);
     // full if writing would catch the reader
     if ((tail + 1 - head) > rb->mask) {
+        if (rb->flags & PERF_RINGBUF_METRICS)
+            PO_METRIC_COUNTER_INC("ringbuf.full");
         errno = EAGAIN;
         return -1;
     }
@@ -89,6 +104,10 @@ int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item) {
     // Make sure the item is written before updating the tail
     atomic_signal_fence(memory_order_release);
     atomic_store_explicit(rb->tail, tail + 1, memory_order_release);
+
+    if (rb->flags & PERF_RINGBUF_METRICS)
+        PO_METRIC_COUNTER_INC("ringbuf.enqueue");
+
     return 0;
 }
 
@@ -106,6 +125,9 @@ int perf_ringbuf_dequeue(po_perf_ringbuf_t *rb, void **out) {
     // Make sure the item is read before updating the head
     atomic_signal_fence(memory_order_acquire);
     atomic_store_explicit(rb->head, head + 1, memory_order_release);
+
+    if (rb->flags & PERF_RINGBUF_METRICS)
+        PO_METRIC_COUNTER_INC("ringbuf.dequeue");
 
     return 0;
 }

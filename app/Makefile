@@ -222,6 +222,9 @@ DIRECTOR_APP_SRC      = $(wildcard $(DIRECTOR_DIR)/*.c)
 # Director control bridge (nested) sources (kept separate to preserve directory layout)
 DIRECTOR_BRIDGE_DIR   = $(DIRECTOR_DIR)/ctrl_bridge
 DIRECTOR_BRIDGE_SRC   = $(wildcard $(DIRECTOR_BRIDGE_DIR)/*.c)
+# Director scheduler (nested) sources
+DIRECTOR_SCHED_DIR   = $(DIRECTOR_DIR)/schedule
+DIRECTOR_SCHED_SRC   = $(wildcard $(DIRECTOR_SCHED_DIR)/*.c)
 TICKET_ISSUER_APP_SRC = $(shell find $(TICKET_ISSUER_DIR) -name '*.c')
 USERS_MANAGER_APP_SRC = $(shell find $(USERS_MANAGER_DIR) -name '*.c')
 WORKER_APP_SRC        = $(shell find $(WORKER_DIR) -name '*.c')
@@ -274,6 +277,7 @@ TUI_OBJS              = $(patsubst $(TUI_DIR)/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SRC
 APP_MAIN_TUI_OBJS     = $(patsubst $(APP_MAIN_TUI_DIR)/%.c,$(BUILD_DIR)/app_tui/%.o,$(APP_MAIN_TUI_SRC))
 DIRECTOR_APP_OBJS 		= $(patsubst $(DIRECTOR_DIR)/%.c,$(BUILD_DIR)/director/%.o,$(DIRECTOR_APP_SRC))
 DIRECTOR_BRIDGE_OBJS     = $(patsubst $(DIRECTOR_BRIDGE_DIR)/%.c,$(BUILD_DIR)/director/ctrl_bridge/%.o,$(DIRECTOR_BRIDGE_SRC))
+DIRECTOR_SCHED_OBJS      = $(patsubst $(DIRECTOR_SCHED_DIR)/%.c,$(BUILD_DIR)/director/schedule/%.o,$(DIRECTOR_SCHED_SRC))
 TICKET_ISSUER_APP_OBJS 	= $(patsubst $(TICKET_ISSUER_DIR)/%.c,$(BUILD_DIR)/ticket_issuer/%.o,$(TICKET_ISSUER_APP_SRC))
 USERS_MANAGER_APP_OBJS 	= $(patsubst $(USERS_MANAGER_DIR)/%.c,$(BUILD_DIR)/users_manager/%.o,$(USERS_MANAGER_APP_SRC))
 WORKER_APP_OBJS 		= $(patsubst $(WORKER_DIR)/%.c,$(BUILD_DIR)/worker/%.o,$(WORKER_APP_SRC))
@@ -283,13 +287,13 @@ TEST_OBJS              = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TE
 
 # Full dependency list for each final executable
 MAIN_OBJS           = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
-DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
+DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DIRECTOR_SCHED_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 USERS_MANAGER_OBJS 	= $(USERS_MANAGER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 WORKER_OBJS 		= $(WORKER_APP_OBJS) $(DEFAULTS_OBJS)
 USER_OBJS 			= $(USER_APP_OBJS) $(DEFAULTS_OBJS)
 # Application objects (except entrypoints) to link into tests
-APP_ALL_OBJS       = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) \
+APP_ALL_OBJS       = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DIRECTOR_SCHED_OBJS) \
                      $(TICKET_ISSUER_APP_OBJS) $(USERS_MANAGER_APP_OBJS) $(WORKER_APP_OBJS) $(USER_APP_OBJS)
 APP_ENTRYPOINT_OBJS = $(BUILD_DIR)/main/main.o $(BUILD_DIR)/director/director.o $(BUILD_DIR)/ticket_issuer/ticket_issuer.o \
                       $(BUILD_DIR)/users_manager/users_manager.o $(BUILD_DIR)/worker/worker.o $(BUILD_DIR)/user/user.o
@@ -509,6 +513,11 @@ $(BUILD_DIR)/director/%.o: $(DIRECTOR_DIR)/%.c
 
 # Rule for director control bridge objects
 $(BUILD_DIR)/director/ctrl_bridge/%.o: $(DIRECTOR_BRIDGE_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
+
+# Rule for director scheduler objects
+$(BUILD_DIR)/director/schedule/%.o: $(DIRECTOR_SCHED_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
