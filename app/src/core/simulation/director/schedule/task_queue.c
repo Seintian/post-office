@@ -42,9 +42,9 @@ int po_task_queue_init(po_task_queue_t *queue, size_t capacity) {
     }
 
     // Register metrics
-    po_perf_counter_create("director.queue.full");
-    po_perf_counter_create("director.queue.drop");
-    po_perf_counter_create("director.queue.pool_exhausted");
+    PO_METRIC_COUNTER_CREATE("director.queue.full");
+    PO_METRIC_COUNTER_CREATE("director.queue.drop");
+    PO_METRIC_COUNTER_CREATE("director.queue.pool_exhausted");
 
     return 0;
 }
@@ -57,8 +57,8 @@ int po_task_enqueue(po_task_queue_t *queue, po_task_fn fn, void *ctx) {
 
     task_node_t *node = (task_node_t *)perf_zcpool_acquire(queue->pool);
     if (!node) {
-        po_perf_counter_inc("director.queue.pool_exhausted");
-        po_perf_counter_inc("director.queue.drop");
+        PO_METRIC_COUNTER_INC("director.queue.pool_exhausted");
+        PO_METRIC_COUNTER_INC("director.queue.drop");
         pthread_spin_unlock(&queue->lock);
         return -1;
     }
@@ -70,8 +70,8 @@ int po_task_enqueue(po_task_queue_t *queue, po_task_fn fn, void *ctx) {
     if (rc != 0) {
         // Queue full. Return node to pool immediately while under lock.
         perf_zcpool_release(queue->pool, node);
-        po_perf_counter_inc("director.queue.full");
-        po_perf_counter_inc("director.queue.drop");
+        PO_METRIC_COUNTER_INC("director.queue.full");
+        PO_METRIC_COUNTER_INC("director.queue.drop");
         pthread_spin_unlock(&queue->lock);
         return -1;
     }

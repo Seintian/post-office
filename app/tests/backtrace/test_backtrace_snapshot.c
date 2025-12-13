@@ -59,6 +59,13 @@ TEST(BACKTRACE, GeneratesSnapshot) {
 
     if (pid == 0) {
         // Child process
+        // Suppress stderr to keep test output clean
+        int nullfd = open("/dev/null", O_WRONLY);
+        if (nullfd >= 0) {
+            dup2(nullfd, STDERR_FILENO);
+            close(nullfd);
+        }
+
         backtrace_init(dump_dir);
 
         // Put something distinctive in a register for verification

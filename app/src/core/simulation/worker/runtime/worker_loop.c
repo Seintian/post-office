@@ -26,9 +26,6 @@ static void worker_handle_signal(int sig) {
 
 /* Initialize runtime resources for worker (placeholder). */
 int worker_init(void) {
-    if (po_perf_init(16, 8, 4) != 0) {
-        fprintf(stderr, "worker: perf init failed\n");
-    }
     if (po_metrics_init() != 0) {
         fprintf(stderr, "worker: metrics init failed\n");
     }

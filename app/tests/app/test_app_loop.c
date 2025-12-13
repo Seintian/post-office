@@ -11,7 +11,9 @@
 #include <unistd.h>
 
 #include "net/net.h"
+#include "net/poller.h"
 #include "net/framing.h"
+#include "metrics/metrics.h"
 #include "perf/perf.h"
 #include "storage/db_lmdb.h"
 #include "unity/unity_fixture.h"
@@ -59,7 +61,7 @@ TEST_SETUP(APP) {
     TEST_ASSERT_NOT_NULL(poller);
 
     // Create a perf counter we'll bump upon processing
-    TEST_ASSERT_NOT_EQUAL(-1, po_perf_counter_create("processed"));
+    TEST_ASSERT_NOT_EQUAL(-1, PO_METRIC_COUNTER_CREATE("processed"));
 }
 
 TEST_TEAR_DOWN(APP) {
@@ -123,7 +125,7 @@ TEST(APP, MAIN_LOOP_END_TO_END) {
     TEST_ASSERT_EQUAL_INT(0, db_put(bucket, key, strlen(key) + 1, val, strlen(val) + 1));
 
     // Update perf counter and allow worker to flush
-    po_perf_counter_inc("processed");
+    PO_METRIC_COUNTER_INC("processed");
     struct timespec ts = {0, 15 * 1000 * 1000}; // 5ms
     nanosleep(&ts, NULL);
 

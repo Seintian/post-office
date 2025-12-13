@@ -37,11 +37,7 @@ static void register_signals(void) {
 }
 
 int main(void) {
-    // 1. Initialize Performance & Metrics Subsystems (BEFORE Logger)
-    if (po_perf_init(16, 8, 4) != 0) {
-        fprintf(stderr, "director: perf init failed: %s\n", po_strerror(errno));
-    }
-
+    // 1. Initialize Metrics Subsystem (which initializes perf internally)
     if (po_metrics_init() != 0) {
         fprintf(stderr, "director: metrics init failed: %s\n", po_strerror(errno));
     }
@@ -90,31 +86,31 @@ int main(void) {
     }
 
     // 5. Instrumentation Setup
-    po_perf_counter_create("director.lifetime.loops");
-    po_perf_counter_create("director.lifetime.tasks");
+    PO_METRIC_COUNTER_CREATE("director.lifetime.loops");
+    PO_METRIC_COUNTER_CREATE("director.lifetime.tasks");
     
     const uint64_t loop_bins[] = { 10, 100, 1000, 10000 }; // microseconds cases
-    po_perf_histogram_create("director.loop_us", loop_bins, 4);
+    PO_METRIC_HISTO_CREATE("director.loop_us", loop_bins, 4);
 
     LOG_INFO("Director started (PID: %d)", getpid());
 
     // 6. Main Loop
-    po_perf_timer_create("director.loop_tick");
+    PO_METRIC_TIMER_CREATE("director.loop_tick");
 
     while (g_running) {
-        po_perf_timer_start("director.loop_tick");
+        PO_METRIC_TIMER_START("director.loop_tick");
         
         // A. Drain Tasks
         size_t processed = po_task_drain(&task_queue, 32);
         if (processed > 0) {
-            po_perf_counter_add("director.lifetime.tasks", processed);
+            PO_METRIC_COUNTER_ADD("director.lifetime.tasks", processed);
         }
 
         // B. Simulation Tick (Placeholder)
         // simulation_update();
 
-        po_perf_timer_stop("director.loop_tick");
-        po_perf_counter_inc("director.lifetime.loops");
+        PO_METRIC_TIMER_STOP("director.loop_tick");
+        PO_METRIC_COUNTER_INC("director.lifetime.loops");
 
         // C. Idle / Sleep
         usleep(10000); 

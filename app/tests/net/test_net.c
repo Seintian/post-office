@@ -6,6 +6,7 @@
 
 #include "net/framing.h"
 #include "net/net.h"
+#include "net/poller.h"
 #include "net/protocol.h"
 #include "net/socket.h"
 #include "unity/unity_fixture.h"

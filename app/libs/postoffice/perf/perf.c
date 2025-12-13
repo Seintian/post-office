@@ -1,587 +1,496 @@
 #include "perf/perf.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
-#include "hashtable/hashtable.h"
-#include "perf/batcher.h"
-#include "perf/ringbuf.h"
-#include "perf/zerocopy.h"
-#include "utils/errors.h"
 #include <postoffice/log/logger.h>
 
 // -----------------------------------------------------------------------------
-// Internal Event Definitions
+// Constants & Configuration
 // -----------------------------------------------------------------------------
-typedef enum {
-    EV_COUNTER_ADD,
-    EV_TIMER_START,
-    EV_TIMER_STOP,
-    EV_HISTOGRAM_RECORD,
-    EV_SHUTDOWN
-} perf_ev_type_t;
+#define SHM_NAME "/postoffice_metrics_shm"
+#define MAX_METRIC_NAME 64
+#define MAX_COUNTERS 2048
+#define MAX_TIMERS 512
+#define MAX_HISTOGRAMS 128
+#define MAX_HIST_BINS 32
+
+// -----------------------------------------------------------------------------
+// Shared Memory Structures
+// -----------------------------------------------------------------------------
 
 typedef struct {
-    perf_ev_type_t type;
-    const char *name;
-    uint64_t arg; // delta for counters, value for histogram
-} perf_event_t;
-
-// -----------------------------------------------------------------------------
-// Internal Structures & Global Context
-// -----------------------------------------------------------------------------
-struct po_perf_counter {
+    char name[MAX_METRIC_NAME];
     atomic_uint_fast64_t value;
-};
-struct po_perf_timer {
-    struct timespec start;
+} shm_counter_t;
+
+typedef struct {
+    char name[MAX_METRIC_NAME];
+    struct timespec start; // "Last start" timestamp (caveat: thread-safety on start is caller responsibility)
     atomic_uint_fast64_t total_ns;
-};
-struct po_perf_histogram {
-    atomic_uint_fast64_t *bins;
-    atomic_uint_fast64_t *counts;
+} shm_timer_t;
+
+typedef struct {
+    char name[MAX_METRIC_NAME];
     size_t nbins;
-};
+    uint64_t bins[MAX_HIST_BINS];
+    atomic_uint_fast64_t counts[MAX_HIST_BINS];
+} shm_histogram_t;
 
+typedef struct {
+    pthread_mutex_t lock; // Protects allocation/registration
+    bool initialized;     // True if the creator has finished initializing
+
+    atomic_size_t num_counters;
+    shm_counter_t counters[MAX_COUNTERS];
+
+    atomic_size_t num_timers;
+    shm_timer_t timers[MAX_TIMERS];
+
+    atomic_size_t num_histograms;
+    shm_histogram_t histograms[MAX_HISTOGRAMS];
+} perf_shm_t;
+
+// -----------------------------------------------------------------------------
+// Global Context
+// -----------------------------------------------------------------------------
 static struct {
-    po_hashtable_t *counters;
-    po_hashtable_t *timers;
-    po_hashtable_t *histograms;
-    int initialized;
-
-    // async infrastructure
-    po_perf_ringbuf_t *event_q;
-    po_perf_batcher_t *ev_batcher;
-    perf_zcpool_t *fmt_pool;
-    pthread_t worker_tid;
-} ctx = {0};
+    int shm_fd;
+    perf_shm_t *shm; // Mapped pointer
+    bool is_initialized;
+    bool is_creator;
+} ctx = { .shm_fd = -1, .shm = NULL, .is_initialized = false, .is_creator = false };
 
 // -----------------------------------------------------------------------------
-// Utility: hash & compare strings
+// Internal Helpers
 // -----------------------------------------------------------------------------
-static unsigned long hash_string(const void *k) {
-    const unsigned char *s = k;
-    unsigned long h = 5381;
-    for (unsigned char c; (c = *s++);)
-        h = ((h << 5) + h) + c;
-    return h;
-}
-static int compare_strings(const void *a, const void *b) {
-    return strcmp((const char *)a, (const char *)b);
-}
 
-// -----------------------------------------------------------------------------
-// Worker Thread: drain events and dispatch into hash tables
-// -----------------------------------------------------------------------------
-static void dispatch_event(const perf_event_t *e) {
-    switch (e->type) {
-    case EV_COUNTER_ADD: {
-        struct po_perf_counter *ctr = po_hashtable_get(ctx.counters, e->name);
-        if (!ctr) {
-            ctr = calloc(1, sizeof(*ctr));
-            atomic_init(&ctr->value, 0);
-            po_hashtable_put(ctx.counters, strdup(e->name), ctr);
-        }
-
-        atomic_fetch_add(&ctr->value, e->arg);
-        break;
-    }
-    case EV_TIMER_START: {
-        struct po_perf_timer *tmr = NULL;
-        if (e->name)
-            tmr = po_hashtable_get(ctx.timers, e->name);
-
-        if (tmr)
-            clock_gettime(CLOCK_MONOTONIC, &tmr->start);
-
-        break;
-    }
-    case EV_TIMER_STOP: {
-        struct po_perf_timer *tmr = NULL;
-        if (e->name)
-            tmr = po_hashtable_get(ctx.timers, e->name);
-
-        if (!tmr)
-            break;
-
-        struct timespec end;
-        clock_gettime(CLOCK_MONOTONIC, &end);
-
-        uint64_t start_ns =
-            (uint64_t)tmr->start.tv_sec * 1000000000U + (uint64_t)tmr->start.tv_nsec;
-        uint64_t end_ns = (uint64_t)end.tv_sec * 1000000000U + (uint64_t)end.tv_nsec;
-        atomic_fetch_add(&tmr->total_ns, end_ns - start_ns);
-
-        break;
-    }
-    case EV_HISTOGRAM_RECORD: {
-        struct po_perf_histogram *hg = NULL;
-        if (e->name)
-            hg = po_hashtable_get(ctx.histograms, e->name);
-
-        if (!hg)
-            break;
-
-        for (size_t i = 0; i < hg->nbins; i++) {
-            if (e->arg <= hg->bins[i]) {
-                atomic_fetch_add(&hg->counts[i], 1);
-                return;
-            }
-        }
-
-        atomic_fetch_add(&hg->counts[hg->nbins - 1], 1);
-        break;
-    }
-    case EV_SHUTDOWN:
-        break;
-    }
-}
-
-static void *perf_worker(void *_) {
-    (void)_;
-    void *batch[64];
-
-    while (1) {
-        ssize_t n = perf_batcher_next(ctx.ev_batcher, batch);
-        if (n < 0)
-            break;
-
-        for (ssize_t i = 0; i < n; i++) {
-            perf_event_t *e = batch[i];
-            if (e->type == EV_SHUTDOWN)
-                return NULL;
-
-            dispatch_event(e);
-            perf_zcpool_release(ctx.fmt_pool, e);
+static int find_or_alloc_counter(const char *name) {
+    if (!ctx.shm) return -1;
+    // 1. Optimistic linear search (lock-free read)
+    size_t count = atomic_load(&ctx.shm->num_counters);
+    for (size_t i = 0; i < count; i++) {
+        if (strncmp(ctx.shm->counters[i].name, name, MAX_METRIC_NAME) == 0) {
+            return (int)i;
         }
     }
 
-    return NULL;
-}
+    // 2. Allocate new (with lock)
+    pthread_mutex_lock(&ctx.shm->lock);
+    // Reload count in case it changed
+    count = atomic_load(&ctx.shm->num_counters);
+    
+    // Check again
+    for (size_t i = 0; i < count; i++) {
+        if (strncmp(ctx.shm->counters[i].name, name, MAX_METRIC_NAME) == 0) {
+            pthread_mutex_unlock(&ctx.shm->lock);
+            return (int)i;
+        }
+    }
 
-static size_t next_pow2(size_t x) {
-    size_t p = 1;
-    while (p < x)
-        p <<= 1;
-
-    return p;
-}
-
-// -----------------------------------------------------------------------------
-// Public API
-// -----------------------------------------------------------------------------
-int po_perf_init(size_t expected_counters, size_t expected_timers, size_t expected_histograms) {
-    if (ctx.initialized) {
-        errno = PERF_EALREADY;
+    if (count >= MAX_COUNTERS) {
+        pthread_mutex_unlock(&ctx.shm->lock);
         return -1;
     }
 
-    memset(&ctx, 0, sizeof(ctx));
-    ctx.counters = po_hashtable_create_sized(compare_strings, hash_string, expected_counters);
-    if (!ctx.counters)
-        goto fail;
+    // Initialize new slot
+    shm_counter_t *c = &ctx.shm->counters[count];
+    strncpy(c->name, name, MAX_METRIC_NAME - 1);
+    c->name[MAX_METRIC_NAME - 1] = '\0';
+    atomic_init(&c->value, 0);
 
-    ctx.timers = po_hashtable_create_sized(compare_strings, hash_string, expected_timers);
-    if (!ctx.timers)
-        goto fail;
+    // Commit
+    atomic_store(&ctx.shm->num_counters, count + 1);
+    
+    pthread_mutex_unlock(&ctx.shm->lock);
+    return (int)count;
+}
 
-    ctx.histograms = po_hashtable_create_sized(compare_strings, hash_string, expected_histograms);
-    if (!ctx.histograms)
-        goto fail;
+static int find_or_alloc_timer(const char *name) {
+    if (!ctx.shm) return -1;
+    size_t count = atomic_load(&ctx.shm->num_timers);
+    for (size_t i = 0; i < count; i++) {
+        if (strncmp(ctx.shm->timers[i].name, name, MAX_METRIC_NAME) == 0) return (int)i;
+    }
 
-    // IMPORTANT: WE MUST DISABLE METRICS FOR THE PERF INTERNAL STRUCTURES
-    // TO AVOID ENDLESS RECURSION (perf tracks perf tracks perf...).
-    ctx.event_q = perf_ringbuf_create(
-        next_pow2((expected_counters + expected_timers + expected_histograms) * 2),
-        PERF_RINGBUF_NOFLAGS);
-    if (!ctx.event_q)
-        goto fail;
+    pthread_mutex_lock(&ctx.shm->lock);
+    count = atomic_load(&ctx.shm->num_timers);
+    for (size_t i = 0; i < count; i++) {
+        if (strncmp(ctx.shm->timers[i].name, name, MAX_METRIC_NAME) == 0) {
+            pthread_mutex_unlock(&ctx.shm->lock);
+            return (int)i;
+        }
+    }
 
-    ctx.ev_batcher = perf_batcher_create(ctx.event_q, 64, PERF_BATCHER_NOFLAGS);
-    if (!ctx.ev_batcher)
-        goto fail;
+    if (count >= MAX_TIMERS) {
+        pthread_mutex_unlock(&ctx.shm->lock);
+        return -1;
+    }
 
-    ctx.fmt_pool = perf_zcpool_create(256, sizeof(perf_event_t), PERF_ZCPOOL_NOFLAGS);
-    if (!ctx.fmt_pool)
-        goto fail;
+    shm_timer_t *t = &ctx.shm->timers[count];
+    strncpy(t->name, name, MAX_METRIC_NAME - 1);
+    t->name[MAX_METRIC_NAME - 1] = '\0';
+    atomic_init(&t->total_ns, 0);
+    // t->start is undefined until START is called
 
-    if (pthread_create(&ctx.worker_tid, NULL, perf_worker, NULL) != 0)
-        goto fail;
+    atomic_store(&ctx.shm->num_timers, count + 1);
+    pthread_mutex_unlock(&ctx.shm->lock);
+    return (int)count;
+}
 
-    ctx.initialized = 1;
-    return 0;
-
-fail: {
-    int last_errno = errno;
-    if (ctx.fmt_pool)
-        perf_zcpool_destroy(&ctx.fmt_pool);
-
-    if (ctx.ev_batcher)
-        perf_batcher_destroy(&ctx.ev_batcher);
-
-    if (ctx.event_q)
-        perf_ringbuf_destroy(&ctx.event_q);
-
-    if (ctx.counters)
-        po_hashtable_destroy(&ctx.counters);
-
-    if (ctx.timers)
-        po_hashtable_destroy(&ctx.timers);
-
-    if (ctx.histograms)
-        po_hashtable_destroy(&ctx.histograms);
-
-    memset(&ctx, 0, sizeof(ctx));
-    errno = last_errno;
+static int get_histogram_index(const char *name) {
+    if (!ctx.shm) return -1;
+    size_t count = atomic_load(&ctx.shm->num_histograms);
+    for (size_t i = 0; i < count; i++) {
+        if (strncmp(ctx.shm->histograms[i].name, name, MAX_METRIC_NAME) == 0) return (int)i;
+    }
     return -1;
 }
-}
 
-static int compare_keys(const void *a, const void *b) {
-    return strcmp(*(const char **)a, *(const char **)b);
-}
+// -----------------------------------------------------------------------------
+// Public Initialization
+// -----------------------------------------------------------------------------
 
-int po_perf_report(FILE *out) {
-    (void)out;
-    // Collect all keys first to sort them
-    LOG_INFO("=== Performance Report ===");
+int po_perf_init(size_t expected_counters, size_t expected_timers, size_t expected_histograms) {
+    (void)expected_counters; // Ignored: using fixed SHM size
+    (void)expected_timers;
+    (void)expected_histograms;
 
-    // -- Counters --
-    size_t n_counters = po_hashtable_size(ctx.counters);
-    if (n_counters > 0) {
-        const char **keys = malloc(n_counters * sizeof(char *));
-        if (keys) {
-            po_hashtable_iter_t *it = po_hashtable_iterator(ctx.counters);
-            size_t i = 0;
-            while (it && po_hashtable_iter_next(it) && i < n_counters) {
-                keys[i++] = (const char *)po_hashtable_iter_key(it);
-            }
-            free(it);
+    if (ctx.is_initialized) return 0; // Already initialized in this process
 
-            qsort(keys, n_counters, sizeof(char *), compare_keys);
-
-            LOG_INFO("-- Counters --");
-            for (i = 0; i < n_counters; i++) {
-                struct po_perf_counter *c = po_hashtable_get(ctx.counters, keys[i]);
-                LOG_INFO("%s: %lu", keys[i], (unsigned long)atomic_load(&c->value));
-            }
-            free(keys);
-        }
-    } else {
-        LOG_INFO("-- Counters -- (none)");
+    // Open with create permission (always)
+    ctx.shm_fd = shm_open(SHM_NAME, O_RDWR | O_CREAT, 0666);
+    if (ctx.shm_fd < 0) {
+        return -1;
     }
 
-    // -- Timers --
-    size_t n_timers = po_hashtable_size(ctx.timers);
-    if (n_timers > 0) {
-        const char **keys = malloc(n_timers * sizeof(char *));
-        if (keys) {
-            po_hashtable_iter_t *it = po_hashtable_iterator(ctx.timers);
-            size_t i = 0;
-            while (it && po_hashtable_iter_next(it) && i < n_timers) {
-                keys[i++] = (const char *)po_hashtable_iter_key(it);
-            }
-            free(it);
-            
-            qsort(keys, n_timers, sizeof(char *), compare_keys);
-
-            LOG_INFO("-- Timers (ns) --");
-            for (i = 0; i < n_timers; i++) {
-                struct po_perf_timer *t = po_hashtable_get(ctx.timers, keys[i]);
-                LOG_INFO("%s: %lu", keys[i], (unsigned long)atomic_load(&t->total_ns));
-            }
-            free(keys);
-        }
+    // Try to acquire exclusive lock to determine ownership (Creator)
+    bool is_creator = false;
+    if (flock(ctx.shm_fd, LOCK_EX | LOCK_NB) == 0) {
+        is_creator = true;
     } else {
-        LOG_INFO("-- Timers -- (none)");
+        if (errno != EWOULDBLOCK) {
+            // Unexpected locking error
+            close(ctx.shm_fd);
+            ctx.shm_fd = -1;
+            return -1;
+        }
+        // EWOULDBLOCK means someone else holds the lock -> We are Attacher
     }
 
-    // -- Histograms --
-    size_t n_hist = po_hashtable_size(ctx.histograms);
-    if (n_hist > 0) {
-        const char **keys = malloc(n_hist * sizeof(char *));
-        if (keys) {
-            po_hashtable_iter_t *it = po_hashtable_iterator(ctx.histograms);
-            size_t i = 0;
-            while (it && po_hashtable_iter_next(it) && i < n_hist) {
-                keys[i++] = (const char *)po_hashtable_iter_key(it);
-            }
-            free(it);
-            
-            qsort(keys, n_hist, sizeof(char *), compare_keys);
-            
-            LOG_INFO("-- Histograms --");
-            for (i = 0; i < n_hist; i++) {
-                struct po_perf_histogram *h = po_hashtable_get(ctx.histograms, keys[i]);
-                LOG_INFO("%s:", keys[i]);
-                for (size_t bin = 0; bin < h->nbins; bin++) {
-                    LOG_INFO("  <= %lu: %lu", (unsigned long)h->bins[bin],
-                            (unsigned long)atomic_load(&h->counts[bin]));
-                }
-            }
-            free(keys);
+    if (is_creator) {
+        // Set size & Reset memory
+        if (ftruncate(ctx.shm_fd, sizeof(perf_shm_t)) == -1) {
+            if (is_creator) shm_unlink(SHM_NAME); // Clean up if we own it
+            close(ctx.shm_fd);
+            ctx.shm_fd = -1;
+            return -1;
         }
+        
+        // Map as creator
+        ctx.shm = mmap(NULL, sizeof(perf_shm_t), PROT_READ | PROT_WRITE, MAP_SHARED, ctx.shm_fd, 0);
+        if (ctx.shm == MAP_FAILED) {
+            shm_unlink(SHM_NAME);
+            close(ctx.shm_fd);
+            ctx.shm_fd = -1;
+            return -1;
+        }
+
+        // Zero out memory to ensure fresh start (handle stale data from crash)
+        memset(ctx.shm, 0, sizeof(perf_shm_t));
+
+        // Init process-shared mutex
+        pthread_mutexattr_t mattr;
+        pthread_mutexattr_init(&mattr);
+        pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
+        pthread_mutex_init(&ctx.shm->lock, &mattr);
+        pthread_mutexattr_destroy(&mattr);
+
+        atomic_init(&ctx.shm->num_counters, 0);
+        atomic_init(&ctx.shm->num_timers, 0);
+        atomic_init(&ctx.shm->num_histograms, 0);
+        
+        // Mark as initialized so attachers can proceed
+        ctx.shm->initialized = true; 
     } else {
-        LOG_INFO("-- Histograms -- (none)");
+        // Attacher path
+        ctx.shm = mmap(NULL, sizeof(perf_shm_t), PROT_READ | PROT_WRITE, MAP_SHARED, ctx.shm_fd, 0);
+        if (ctx.shm == MAP_FAILED) {
+            close(ctx.shm_fd);
+            ctx.shm_fd = -1;
+            return -1;
+        }
+
+        // Wait for creator to finish init
+        int spins = 0;
+        while (!ctx.shm->initialized) {
+            usleep(1000);
+            if (++spins > 1000) { // 1 sec timeout
+                errno = ETIMEDOUT; // Connection timed out
+                return -1;
+            }
+        }
     }
 
+    ctx.is_initialized = true;
+    ctx.is_creator = is_creator;
     return 0;
 }
 
 void po_perf_shutdown(FILE *out) {
-    (void)out;
-    if (!ctx.initialized)
-        return;
+    if (!ctx.is_initialized) return;
 
-    perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
-    if (e) {
-        e->type = EV_SHUTDOWN;
-        perf_batcher_enqueue(ctx.ev_batcher, e);
+    if (out) {
+        po_perf_report(out);
+    } else {
+        // Default to logging if no file provided
+        po_perf_report(NULL);
     }
 
-    pthread_join(ctx.worker_tid, NULL);
+    // We do NOT unmap SHM here, because the logger worker thread might still be running
+    // and processing the logs generated by po_perf_report above. If we unmap now,
+    // the worker will crash when trying to increment 'logger.processed' or similar metrics.
+    // The OS will clean up the mapping on process exit.
     
-    // Default to logger report unless specific file is needed (legacy support)
-    // If FILE* is stdout/stderr, we ignore it and use logger as requested
-    // Unless logging isn't initialized? We check if we can log.
-    po_perf_report(NULL);
-
-    /* 
-     * SAFE TEARDOWN:
-     * We purposefully disable the public API first (initialized=0), wait a grace period
-     * for any concurrent calls (e.g. from Logger) to finish, and THEN destroy the memory.
-     * This prevents the Use-After-Free race while still ensuring we clean up (fixing leaks).
-     */
-    ctx.initialized = 0;
-    atomic_thread_fence(memory_order_seq_cst);
-    usleep(10000); // 10ms grace period for stragglers
-
-    if (ctx.ev_batcher)
-        perf_batcher_destroy(&ctx.ev_batcher);
-
-    if (ctx.event_q)
-        perf_ringbuf_destroy(&ctx.event_q);
-
-    if (ctx.fmt_pool)
-        perf_zcpool_destroy(&ctx.fmt_pool);
-
-    po_hashtable_iter_t *it = po_hashtable_iterator(ctx.counters);
-    while (it && po_hashtable_iter_next(it)) {
-        free(po_hashtable_iter_key(it));
-        free(po_hashtable_iter_value(it));
+    // Only the creator should unlink the SHM object name to allow for cleanup.
+    // If running in a multi-process scenario (Main + Director), Main is usually creators.
+    if (ctx.is_creator) {
+        shm_unlink(SHM_NAME);
     }
-    free(it);
-
-    if (ctx.counters)
-        po_hashtable_destroy(&ctx.counters);
-
-    it = po_hashtable_iterator(ctx.timers);
-    while (it && po_hashtable_iter_next(it)) {
-        free(po_hashtable_iter_key(it));
-        free(po_hashtable_iter_value(it));
+    
+    ctx.is_initialized = false;
+    ctx.shm = NULL;
+    // Keep fd open or close it? Close is likely safe as mmap persists? 
+    // Mmap refs the file description. Closing fd is safe.
+    if (ctx.shm_fd >= 0) {
+        close(ctx.shm_fd);
+        ctx.shm_fd = -1;
     }
-    free(it);
-
-    if (ctx.timers)
-        po_hashtable_destroy(&ctx.timers);
-
-    it = po_hashtable_iterator(ctx.histograms);
-    while (it && po_hashtable_iter_next(it)) {
-        free(po_hashtable_iter_key(it));
-        struct po_perf_histogram *h = po_hashtable_iter_value(it);
-        free(h->bins);
-        free(h->counts);
-        free(h);
-    }
-    free(it);
-    if (ctx.histograms)
-        po_hashtable_destroy(&ctx.histograms);
-
-    memset(&ctx, 0, sizeof(ctx));
 }
+
+// -----------------------------------------------------------------------------
+// API Implementation
+// -----------------------------------------------------------------------------
 
 int po_perf_counter_create(const char *name) {
-    if (!ctx.initialized) {
-        errno = PERF_ENOTINIT;
-        return -1;
-    }
-
-    perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
-    e->type = EV_COUNTER_ADD;
-    e->name = name;
-    e->arg = 0;
-    if (perf_batcher_enqueue(ctx.ev_batcher, e) < 0) {
-        errno = PERF_EBUSY;
-        return -1;
-    }
-
-    return 0;
+    if (!ctx.is_initialized) { errno = PERF_ENOTINIT; return -1; }
+    if (strlen(name) >= MAX_METRIC_NAME) { errno = EINVAL; return -1; }
+    return find_or_alloc_counter(name) >= 0 ? 0 : -1;
 }
+
 void po_perf_counter_inc(const char *name) {
-    if (!ctx.initialized)
-        return;
-
-    perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
-    if (!e)
-        return;
-
-    e->type = EV_COUNTER_ADD;
-    e->name = name;
-    e->arg = 1;
-    perf_batcher_enqueue(ctx.ev_batcher, e);
+    if (!ctx.is_initialized) return;
+    int idx = find_or_alloc_counter(name);
+    if (idx >= 0) {
+        atomic_fetch_add(&ctx.shm->counters[idx].value, 1);
+    }
 }
+
 void po_perf_counter_add(const char *name, uint64_t delta) {
-    if (!ctx.initialized)
-        return;
-
-    perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
-    if (!e)
-        return;
-
-    e->type = EV_COUNTER_ADD;
-    e->name = name;
-    e->arg = delta;
-    perf_batcher_enqueue(ctx.ev_batcher, e);
+    if (!ctx.is_initialized) return;
+    int idx = find_or_alloc_counter(name);
+    if (idx >= 0) {
+        atomic_fetch_add(&ctx.shm->counters[idx].value, delta);
+    }
 }
 
 int po_perf_timer_create(const char *name) {
-    if (!ctx.initialized) {
-        errno = PERF_ENOTINIT;
-        return -1;
-    }
-
-    struct po_perf_timer *t = po_hashtable_get(ctx.timers, name);
-    if (!t) {
-        t = calloc(1, sizeof(*t));
-        if (!t)
-            return -1;
-
-        atomic_init(&t->total_ns, 0);
-        po_hashtable_put(ctx.timers, strdup(name), t);
-    }
-
-    return 0;
+    if (!ctx.is_initialized) { errno = PERF_ENOTINIT; return -1; }
+    if (strlen(name) >= MAX_METRIC_NAME) { errno = EINVAL; return -1; }
+    return find_or_alloc_timer(name) >= 0 ? 0 : -1;
 }
 
 int po_perf_timer_start(const char *name) {
-    if (!ctx.initialized) {
-        errno = PERF_ENOTINIT;
-        return -1;
-    }
+    if (!ctx.is_initialized) { errno = PERF_ENOTINIT; return -1; }
+    int idx = find_or_alloc_timer(name);
+    if (idx < 0) return -1;
 
-    perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
-    if (!e)
-        return -1;
-
-    e->type = EV_TIMER_START;
-    e->name = name;
-    return perf_batcher_enqueue(ctx.ev_batcher, e) == 0 ? 0 : -1;
+    clock_gettime(CLOCK_MONOTONIC, &ctx.shm->timers[idx].start);
+    return 0;
 }
 
 int po_perf_timer_stop(const char *name) {
-    if (!ctx.initialized) {
-        errno = PERF_ENOTINIT;
-        return -1;
-    }
+    if (!ctx.is_initialized) { errno = PERF_ENOTINIT; return -1; }
+    int idx = find_or_alloc_timer(name);
+    if (idx < 0) return -1;
 
-    perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
-    if (!e)
-        return -1;
-
-    e->type = EV_TIMER_STOP;
-    e->name = name;
-    return perf_batcher_enqueue(ctx.ev_batcher, e) == 0 ? 0 : -1;
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    
+    struct timespec start = ctx.shm->timers[idx].start;
+    uint64_t diff = (uint64_t)(end.tv_sec - start.tv_sec) * 1000000000ULL +
+                    (uint64_t)(end.tv_nsec - start.tv_nsec);
+    
+    atomic_fetch_add(&ctx.shm->timers[idx].total_ns, diff);
+    return 0;
 }
 
 int po_perf_histogram_create(const char *name, const uint64_t *bins, size_t nbins) {
-    if (nbins == 0) {
-        errno = EINVAL;
-        return -1;
-    }
+    if (!ctx.is_initialized) { errno = PERF_ENOTINIT; return -1; }
+    if (nbins > MAX_HIST_BINS || nbins == 0) { errno = EINVAL; return -1; }
+    if (strlen(name) >= MAX_METRIC_NAME) { errno = EINVAL; return -1; }
 
-    if (!ctx.initialized) {
-        errno = PERF_ENOTINIT;
-        return -1;
-    }
-
-    if (po_hashtable_contains_key(ctx.histograms, name)) {
+    // Check existing
+    if (get_histogram_index(name) >= 0) {
         errno = EEXIST;
         return -1;
     }
 
-    po_perf_histogram_t *h = malloc(sizeof(*h));
-    if (!h)
+    pthread_mutex_lock(&ctx.shm->lock);
+    // Double check
+    if (get_histogram_index(name) >= 0) {
+        pthread_mutex_unlock(&ctx.shm->lock);
+        errno = EEXIST;
         return -1;
+    }
 
+    size_t count = atomic_load(&ctx.shm->num_histograms);
+    if (count >= MAX_HISTOGRAMS) {
+        pthread_mutex_unlock(&ctx.shm->lock);
+        errno = ENOMEM;
+        return -1;
+    }
+
+    shm_histogram_t *h = &ctx.shm->histograms[count];
+    strncpy(h->name, name, MAX_METRIC_NAME - 1);
+    h->name[MAX_METRIC_NAME - 1] = '\0';
     h->nbins = nbins;
-    h->bins = malloc(nbins * sizeof(*h->bins));
-    if (!h->bins) {
-        free(h);
-        return -1;
-    }
+    memcpy(h->bins, bins, nbins * sizeof(uint64_t));
+    for (size_t i = 0; i < MAX_HIST_BINS; i++) atomic_init(&h->counts[i], 0);
 
-    h->counts = calloc(nbins, sizeof(*h->counts));
-    if (!h->counts) {
-        free(h->bins);
-        free(h);
-        return -1;
-    }
-
-    memcpy(h->bins, bins, nbins * sizeof(*h->bins));
-    po_hashtable_put(ctx.histograms, strdup(name), h);
-    return 0;
-}
-int po_perf_histogram_record(const char *h, uint64_t value) {
-    if (!ctx.initialized) {
-        errno = PERF_ENOTINIT;
-        return -1;
-    }
-
-    perf_event_t *e = perf_zcpool_acquire(ctx.fmt_pool);
-    if (!e)
-        return -1;
-
-    e->type = EV_HISTOGRAM_RECORD;
-    e->name = h;
-    e->arg = value;
-    if (perf_batcher_enqueue(ctx.ev_batcher, e) < 0)
-        return -1;
-
+    atomic_store(&ctx.shm->num_histograms, count + 1);
+    pthread_mutex_unlock(&ctx.shm->lock);
     return 0;
 }
 
-// Test/support API: best-effort synchronous flush of pending perf events.
-int po_perf_flush(void) {
-    if (!ctx.initialized)
-        return -1;
+int po_perf_histogram_record(const char *name, uint64_t value) {
+    if (!ctx.is_initialized) return -1;
+    
+    int idx = get_histogram_index(name);
+    if (idx < 0) return -1;
 
-    const int max_spins = 1000;
-    struct timespec ts = {.tv_sec = 0, .tv_nsec = 50 * 1000};
-    int stable = 0;
-    size_t last = (size_t)-1;
-
-    for (int i = 0; i < max_spins; ++i) {
-        size_t cnt = perf_ringbuf_count(ctx.event_q);
-        if (cnt == 0) {
-            if (stable++ > 2)
-                return 0;
-        } else
-            stable = 0;
-
-        if (cnt == last && cnt == 0)
+    shm_histogram_t *h = &ctx.shm->histograms[idx];
+    
+    // Linear scan buckets
+    for (size_t i = 0; i < h->nbins; i++) {
+        if (value <= h->bins[i]) {
+            atomic_fetch_add(&h->counts[i], 1);
             return 0;
+        }
+    }
+    // Last bucket
+    atomic_fetch_add(&h->counts[h->nbins - 1], 1);
+    return 0;
+}
 
-        last = cnt;
-        nanosleep(&ts, NULL);
-        if (ts.tv_nsec < 2 * 1000 * 1000)
-            ts.tv_nsec += 50 * 1000;
+int po_perf_flush(void) {
+    // No-op for SHM as updates are immediate
+    return 0;
+}
+
+// -----------------------------------------------------------------------------
+// Reporting Helper
+// -----------------------------------------------------------------------------
+
+// Helper to compare counters for qsort
+static int compare_shm_counters(const void *a, const void *b) {
+    const shm_counter_t *ca = a;
+    const shm_counter_t *cb = b;
+    return strcmp(ca->name, cb->name);
+}
+static int compare_shm_timers(const void *a, const void *b) {
+    const shm_timer_t *ta = a;
+    const shm_timer_t *tb = b;
+    return strcmp(ta->name, tb->name);
+}
+static int compare_shm_histograms(const void *a, const void *b) {
+    const shm_histogram_t *ha = a;
+    const shm_histogram_t *hb = b;
+    return strcmp(ha->name, hb->name);
+}
+
+static void print_line(FILE *out, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    if (out) {
+        vfprintf(out, fmt, args);
+        fprintf(out, "\n");
+    } else {
+        // Need buffer for LOG_INFO
+        char buf[256];
+        vsnprintf(buf, sizeof(buf), fmt, args);
+        LOG_INFO("%s", buf);
+    }
+    va_end(args);
+}
+
+int po_perf_report(FILE *out) {
+    if (!ctx.is_initialized) return -1;
+
+    print_line(out, "=== Performance Report (SHM) ===");
+
+    // Copy snapshots to sort
+    size_t nc = atomic_load(&ctx.shm->num_counters);
+    if (nc > 0) {
+        print_line(out, "-- Counters --");
+        shm_counter_t *local_c = malloc(nc * sizeof(shm_counter_t));
+        memcpy(local_c, ctx.shm->counters, nc * sizeof(shm_counter_t));
+        qsort(local_c, nc, sizeof(shm_counter_t), compare_shm_counters);
+        
+        for (size_t i = 0; i < nc; i++) {
+             print_line(out, "%s: %lu", local_c[i].name, (unsigned long)atomic_load(&local_c[i].value));
+        }
+        free(local_c);
+    } else {
+        print_line(out, "-- Counters -- (none)");
     }
 
-    return perf_ringbuf_count(ctx.event_q) == 0 ? 0 : -1;
+    size_t nt = atomic_load(&ctx.shm->num_timers);
+    if (nt > 0) {
+        print_line(out, "-- Timers --");
+        shm_timer_t *local_t = malloc(nt * sizeof(shm_timer_t));
+        memcpy(local_t, ctx.shm->timers, nt * sizeof(shm_timer_t));
+        qsort(local_t, nt, sizeof(shm_timer_t), compare_shm_timers);
+
+        for (size_t i = 0; i < nt; i++) {
+             print_line(out, "%s: %lu ns", local_t[i].name, (unsigned long)atomic_load(&local_t[i].total_ns));
+        }
+        free(local_t);
+    } else {
+        print_line(out, "-- Timers -- (none)");
+    }
+
+    size_t nh = atomic_load(&ctx.shm->num_histograms);
+    if (nh > 0) {
+        print_line(out, "-- Histograms --");
+        shm_histogram_t *local_h = malloc(nh * sizeof(shm_histogram_t));
+        memcpy(local_h, ctx.shm->histograms, nh * sizeof(shm_histogram_t));
+        qsort(local_h, nh, sizeof(shm_histogram_t), compare_shm_histograms);
+
+        for (size_t i = 0; i < nh; i++) {
+            print_line(out, "%s:", local_h[i].name);
+            for (size_t b = 0; b < local_h[i].nbins; b++) {
+                print_line(out, "  <= %lu: %lu", (unsigned long)local_h[i].bins[b], 
+                           (unsigned long)atomic_load(&local_h[i].counts[b]));
+            }
+        }
+        free(local_h);
+    } else {
+        print_line(out, "-- Histograms -- (none)");
+    }
+
+    return 0;
 }

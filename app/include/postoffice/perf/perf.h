@@ -2,19 +2,19 @@
  * @file perf.h
  * @ingroup perf
  * @brief Low-level performance instrumentation primitives (counters, timers,
- *        histograms) with asynchronous aggregation and optional reporting.
+ *        histograms) using shared memory for global cross-process metrics.
  *
  * Architecture
  * -----------
- *  - Non-blocking (fire-and-forget) updates queue events internally allowing
- *    producers on hot paths to avoid contention.
- *  - Background worker drains events updating internal aggregates.
- *  - Reporting functions snapshot current aggregates synchronously.
+ *  - Uses POSIX Shared Memory (SHM) to store metrics globally.
+ *  - Atomic operations for lock-free updates (wait-free for counters).
+ *  - No internal dynamic allocation or complex structures (hashtables) to
+ *    avoid recursion loops when instrumenting core libraries.
  *
  * Threading
  * ---------
- * Public API functions are thread-safe. Initialization must occur once prior
- * to concurrent usage. Shutdown joins worker and flushes remaining events.
+ * Public API functions are thread-safe and process-safe. Initialization must
+ * occur in every process (handles SHM mapping).
  *
  * Error Handling
  * --------------

@@ -94,9 +94,9 @@ void po_metrics_shutdown(void);
 
 /* Lightweight per-scope timing helper for histogram recording without
  * depending on perf internals for elapsed retrieval. Usage:
- *   PO_METRIC_LATENCY_SCOPE(start_ts);
+ *   PO_METRIC_TICK(start_ts);
  *   ... work ...
- *   uint64_t dur = PO_METRIC_LATENCY_ELAPSED_NS(start_ts);
+ *   uint64_t dur = PO_METRIC_ELAPSED_NS(start_ts);
  */
 typedef struct {
     uint64_t ns;

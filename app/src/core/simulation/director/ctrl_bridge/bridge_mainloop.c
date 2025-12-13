@@ -48,7 +48,7 @@ static void handle_client_fd(int client_fd) {
         if (n && line[n-1] == '\n') line[n-1] = '\0';
 
         LOG_INFO("ctrl-bridge: received command: %s", line);
-        po_perf_counter_inc("director.bridge.commands");
+        PO_METRIC_COUNTER_INC("director.bridge.commands");
 
         /* TODO: integrate with Director APIs */
 
@@ -64,8 +64,8 @@ int bridge_mainloop_init(void) {
     unlink(ctrl_socket_path);
 
     // Initialize metrics
-    po_perf_counter_create("director.bridge.connections");
-    po_perf_counter_create("director.bridge.commands");
+    PO_METRIC_COUNTER_CREATE("director.bridge.connections");
+    PO_METRIC_COUNTER_CREATE("director.bridge.commands");
 
     return 0;
 }
@@ -119,7 +119,7 @@ int bridge_mainloop_run(void) {
                 int client_fd = po_socket_accept(listen_fd, addr_buf, sizeof(addr_buf));
                 
                 if (client_fd >= 0) {
-                    po_perf_counter_inc("director.bridge.connections");
+                    PO_METRIC_COUNTER_INC("director.bridge.connections");
                     // Handle client (blocking for now in separate thread or inline)
                     // We'll spawn a thread to keep the main loop responsive to new connections
                     pthread_t t;

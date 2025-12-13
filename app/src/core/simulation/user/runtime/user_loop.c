@@ -24,9 +24,6 @@ static void user_handle_signal(int sig) {
 }
 
 int user_init(void) {
-    if (po_perf_init(16, 8, 4) != 0) {
-        fprintf(stderr, "user: perf init failed\n");
-    }
     if (po_metrics_init() != 0) {
         fprintf(stderr, "user: metrics init failed\n");
     }

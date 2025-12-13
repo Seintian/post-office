@@ -10,6 +10,7 @@
 #include "widgets.h" // For widget drawing
 #include "layout.h"  // For layout updates
 
+#include "metrics/metrics.h"
 #include "perf/perf.h"
 #include "perf/ringbuf.h"
 #include "perf/zerocopy.h"
@@ -114,10 +115,10 @@ bool tui_init(void) {
     }
     
     // Attempt init perf (ignore EALREADY)
-    if (po_perf_init(16, 16, 16) == 0) {
+    if (po_perf_init(64, 16, 8) == 0) {
         // Register TUI metrics
-        po_perf_counter_create("tui.events");
-        po_perf_counter_create("tui.frames");
+        PO_METRIC_COUNTER_CREATE("tui.events");
+        PO_METRIC_COUNTER_CREATE("tui.frames");
     }
 
     g_tui.initialized = true;
@@ -184,7 +185,7 @@ void tui_run(void) {
         }
 
         tui_render();
-        po_perf_counter_inc("tui.frames");
+        PO_METRIC_COUNTER_INC("tui.frames");
 
         clock_gettime(CLOCK_MONOTONIC, &end);
         
@@ -302,7 +303,7 @@ bool tui_process_event(void) {
     // Release buffer immediately after copy
     perf_zcpool_release(g_tui.event_pool, ptr_event);
 
-    po_perf_counter_inc("tui.events");
+    PO_METRIC_COUNTER_INC("tui.events");
 
     // Global handler
     if (g_global_handler.cb) {
