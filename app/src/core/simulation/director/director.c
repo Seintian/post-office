@@ -55,6 +55,8 @@ int main(void) {
     }
     // Log to console (stderr is standard for logs, but user said "console" so let's use stderr for now as it's unbuffered usually)
     po_logger_add_sink_console(true);
+    // Log to file
+    po_logger_add_sink_file("logs/director.log", false);
 
     // 2. Setup Task Queue (MPSC)
     po_task_queue_t task_queue;
@@ -123,12 +125,10 @@ int main(void) {
         bridge_mainloop_stop();
         pthread_join(bridge_thread, NULL);
     }
-    
+
     po_task_queue_destroy(&task_queue);
-    
     po_metrics_shutdown();
-    po_perf_shutdown(stdout); // Prints final report to stdout (keep this as report, not log)
-    
+
     // Final log before logger shutdown
     LOG_INFO("Director exit.");
     po_logger_shutdown();

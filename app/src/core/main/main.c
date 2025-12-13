@@ -4,6 +4,7 @@
 #include <postoffice/backtrace/backtrace.h>
 #include <postoffice/log/logger.h>
 #include <postoffice/metrics/metrics.h>
+#include <postoffice/perf/perf.h>
 #include <postoffice/sysinfo/sysinfo.h>
 #include "tui/app_tui.h"
 #include "simulation/simulation_lifecycle.h"
@@ -159,13 +160,14 @@ static void cleanup_resources(po_args_t *args) {
     /* Stop background samplers before shutting down other systems */
     LOG_INFO("Cleaning up resources and shutting down");
     po_sysinfo_sampler_stop();
-    LOG_DEBUG("Sysinfo sampler stopped");
+
+    // Shut down logger FIRST (before metrics) because worker threads use metrics
+    po_logger_shutdown();
+
+    // Display metrics report before shutting down logger
+    po_perf_report(stdout);
 
     po_metrics_shutdown();
-    LOG_DEBUG("Metrics subsystem shut down");
-
-    po_logger_shutdown();
-    LOG_DEBUG("Logger shut down");
 
     po_args_destroy(args);
 }

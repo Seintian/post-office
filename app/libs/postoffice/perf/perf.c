@@ -255,9 +255,6 @@ void po_perf_shutdown(FILE *out) {
 
     if (out) {
         po_perf_report(out);
-    } else {
-        // Default to logging if no file provided
-        po_perf_report(NULL);
     }
 
     // We do NOT unmap SHM here, because the logger worker thread might still be running

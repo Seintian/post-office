@@ -654,8 +654,6 @@ static void crash_handler(int sig, siginfo_t* info, void* ctx) {
         backtrace_save(dump_path, fault_rip, uc, info);
     }
 
-    safe_write(STDERR_FILENO, "Aborting process.\n");
-
     /* Unregister and re-raise to properly terminate/core dump */
     if (sigutil_restore(sig) != 0) {
         safe_write(STDERR_FILENO, "Failed to restore signal handler\n");

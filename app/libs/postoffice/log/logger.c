@@ -225,7 +225,10 @@ static void *worker_main(void *arg) {
             fflush(g_fp);
     }
 
-    void *p; // Drain remaining
+    // Drain all remaining records from the ringbuf directly.
+    // We can't use perf_batcher_next() here because it blocks on the eventfd
+    // when there are no more events, even if records remain in the ringbuf.
+    void *p;
     while (perf_ringbuf_dequeue(g_ring, &p) == 0) {
         log_record_t *r = (log_record_t *)p;
         if (r != &g_sentinel) {
