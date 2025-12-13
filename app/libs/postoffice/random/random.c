@@ -12,11 +12,12 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 // Simple xoshiro256** PRNG (good quality, small state)
 // Public domain reference: http://prng.di.unimi.it/
 
-static uint64_t s_state[4] = {0};
+static _Thread_local uint64_t s_state[4] = {0};
 
 static inline uint64_t rotl(const uint64_t x, int k) {
     return (x << k) | (x >> (64 - k));
@@ -95,7 +96,10 @@ void po_rand_seed_auto(void) {
     // Fallback: time-based
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
-    uint64_t mix = ((uint64_t)ts.tv_sec << 32) ^ (uint64_t)ts.tv_nsec ^ (uint64_t)getpid();
+    uint64_t mix = ((uint64_t)ts.tv_sec << 32) ^ 
+                   (uint64_t)ts.tv_nsec ^ 
+                   (uint64_t)getpid() ^ 
+                   (uint64_t)pthread_self();
     po_rand_seed(mix);
 }
 
