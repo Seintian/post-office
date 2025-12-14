@@ -43,10 +43,10 @@ PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
 STORAGE_DIR            = $(POSTOFFICE_LIBS_DIR)/storage
 RANDOM_DIR             = $(POSTOFFICE_LIBS_DIR)/random
 TUI_LIB_DIR            = $(POSTOFFICE_LIBS_DIR)/tui
-TUI_DIR                = $(TUI_LIB_DIR)
 LOG_DIR                = $(POSTOFFICE_LIBS_DIR)/log
 SYSINFO_DIR            = $(POSTOFFICE_LIBS_DIR)/sysinfo
 BACKTRACE_DIR          = $(POSTOFFICE_LIBS_DIR)/backtrace
+VECTOR_DIR             = $(POSTOFFICE_LIBS_DIR)/vector
 
 ## Third-party Libraries
 INIH_DIR               = $(THIRDPARTY_LIBS_DIR)/inih
@@ -81,7 +81,7 @@ LIBS_I     = -I$(POSTOFFICE_LIBS_DIR) -I$(POSTOFFICE_LIBS_DIR)/tui -I$(THIRDPART
 CORE_I     = -I$(CORE_SRC_DIR)/main -I$(CORE_SRC_DIR)/simulation
 SRC_I      = -I$(SRC_DIR)
 
-APP_MAIN_TUI_DIR   = $(CORE_SRC_DIR)/main/tui
+APP_MAIN_TUI_LIB_DIR   = $(CORE_SRC_DIR)/main/tui
 ALL_I              = $(INCLUDES_I) $(LIBS_I) $(CORE_I) $(SRC_I)
 
 #! set to `true` to enable debug flags
@@ -119,7 +119,7 @@ THIRDPARTY_CFLAGS = $(NON_DEBUGGING_FLAGS) -O2
 # Set CFLAGS: Production always gets utility + optimization + security.
 CFLAGS = $(NON_DEBUGGING_FLAGS)
 ifeq ($(DEV),true)
-	CFLAGS += $(WARNING_FLAGS) $(DEBUGGING_FLAGS)
+	CFLAGS += $(WARNING_FLAGS) $(DEBUGGING_FLAGS) $(SANITIZERS_FLAGS)
 else
 	CFLAGS += $(PRODUCTION_FLAGS)
 endif
@@ -200,6 +200,7 @@ RANDOM_SRC      = $(wildcard $(RANDOM_DIR)/*.c)
 LOG_SRC         = $(wildcard $(LOG_DIR)/*.c)
 SYSINFO_SRC     = $(wildcard $(SYSINFO_DIR)/*.c)
 BACKTRACE_SRC     = $(wildcard $(BACKTRACE_DIR)/*.c)
+VECTOR_SRC        = $(wildcard $(VECTOR_DIR)/*.c)
 
 ## Third-party Libraries
 INIH_SRC        = $(wildcard $(INIH_DIR)/*.c)
@@ -215,8 +216,8 @@ UNITY_SRC       = $(wildcard $(UNITY_DIR)/*.c)
 # Nested trees (main/tui, director/ctrl_bridge) are handled separately below.
 MAIN_APP_SRC          = $(wildcard $(MAIN_DIR)/*.c)
 MAIN_SIM_SRC          = $(wildcard $(MAIN_SIM_DIR)/*.c)
-TUI_SRC_UNNORMALIZED  = $(shell find $(TUI_DIR) -name '*.c')
-APP_MAIN_TUI_SRC_UNNORMALIZED = $(shell find $(APP_MAIN_TUI_DIR) -name '*.c')
+TUI_SRC_UNNORMALIZED  = $(shell find $(TUI_LIB_DIR) -name '*.c')
+APP_MAIN_TUI_SRC_UNNORMALIZED = $(shell find $(APP_MAIN_TUI_LIB_DIR) -name '*.c')
 TUI_SRC               = $(patsubst ./%,%,$(TUI_SRC_UNNORMALIZED))
 APP_MAIN_TUI_SRC      = $(patsubst ./%,%,$(APP_MAIN_TUI_SRC_UNNORMALIZED))
 DIRECTOR_APP_SRC      = $(wildcard $(DIRECTOR_DIR)/*.c)
@@ -257,6 +258,7 @@ RANDOM_OBJS         = $(patsubst $(RANDOM_DIR)/%.c,$(BUILD_DIR)/random/%.o,$(RAN
 LOG_OBJS            = $(patsubst $(LOG_DIR)/%.c,$(BUILD_DIR)/log/%.o,$(LOG_SRC))
 SYSINFO_OBJS        = $(patsubst $(SYSINFO_DIR)/%.c,$(BUILD_DIR)/sysinfo/%.o,$(SYSINFO_SRC))
 BACKTRACE_OBJS      = $(patsubst $(BACKTRACE_DIR)/%.c,$(BUILD_DIR)/backtrace/%.o,$(BACKTRACE_SRC))
+VECTOR_OBJS         = $(patsubst $(VECTOR_DIR)/%.c,$(BUILD_DIR)/vector/%.o,$(VECTOR_SRC))
 
 ## Third-party Libraries
 INIH_OBJS           = $(patsubst $(INIH_DIR)/%.c,$(BUILD_DIR)/inih/%.o,$(INIH_SRC))
@@ -270,13 +272,13 @@ DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(RANDOM_OBJS) $(HASHTABLE_OBJS
                       $(PRIME_OBJS) $(LOG_C_OBJS) $(METRICS_OBJS) \
 					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
 					  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS) $(SYSINFO_OBJS) \
-					  $(BACKTRACE_OBJS)
+					  $(BACKTRACE_OBJS) $(VECTOR_OBJS)
 
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
 MAIN_SIM_OBJS 			= $(patsubst $(MAIN_SIM_DIR)/%.c,$(BUILD_DIR)/main/simulation/%.o,$(MAIN_SIM_SRC))
-TUI_OBJS              = $(patsubst $(TUI_DIR)/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SRC))
-APP_MAIN_TUI_OBJS     = $(patsubst $(APP_MAIN_TUI_DIR)/%.c,$(BUILD_DIR)/app_tui/%.o,$(APP_MAIN_TUI_SRC))
+TUI_OBJS              = $(patsubst $(TUI_LIB_DIR)/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SRC))
+APP_MAIN_TUI_OBJS     = $(patsubst $(APP_MAIN_TUI_LIB_DIR)/%.c,$(BUILD_DIR)/app_tui/%.o,$(APP_MAIN_TUI_SRC))
 DIRECTOR_APP_OBJS 		= $(patsubst $(DIRECTOR_DIR)/%.c,$(BUILD_DIR)/director/%.o,$(DIRECTOR_APP_SRC))
 DIRECTOR_BRIDGE_OBJS     = $(patsubst $(DIRECTOR_BRIDGE_DIR)/%.c,$(BUILD_DIR)/director/ctrl_bridge/%.o,$(DIRECTOR_BRIDGE_SRC))
 DIRECTOR_SCHED_OBJS      = $(patsubst $(DIRECTOR_SCHED_DIR)/%.c,$(BUILD_DIR)/director/schedule/%.o,$(DIRECTOR_SCHED_SRC))
@@ -475,22 +477,22 @@ help:
 
 # Create executables
 $(MAIN_EXEC): $(MAIN_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(DIRECTOR_EXEC): $(DIRECTOR_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(TICKET_ISSUER_EXEC): $(TICKET_ISSUER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(USERS_MANAGER_EXEC): $(USERS_MANAGER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(WORKER_EXEC): $(WORKER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(USER_EXEC): $(USER_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS_FLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(TEST_MAIN_EXEC): $(TEST_MAIN_OBJS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
@@ -555,12 +557,12 @@ $(BUILD_DIR)/sim_ipc/%.o: $(SIM_IPC_DIR)/%.c
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
 # Rule for shared TUI library objects
-$(BUILD_DIR)/tui/%.o: $(TUI_DIR)/%.c
+$(BUILD_DIR)/tui/%.o: $(TUI_LIB_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 # Rule for app main TUI objects
-$(BUILD_DIR)/app_tui/%.o: $(APP_MAIN_TUI_DIR)/%.c
+$(BUILD_DIR)/app_tui/%.o: $(APP_MAIN_TUI_LIB_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
@@ -610,6 +612,10 @@ $(BUILD_DIR)/sysinfo/%.o: $(SYSINFO_DIR)/%.c
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 $(BUILD_DIR)/backtrace/%.o: $(BACKTRACE_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+$(BUILD_DIR)/vector/%.o: $(VECTOR_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 

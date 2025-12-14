@@ -199,14 +199,11 @@ static inline bool logger_would_log(po_log_level_t level) {
 #define LOG_ERROR(fmt, ...) LOG_AT(LOG_ERROR, fmt, ##__VA_ARGS__)
 
 /** @def LOG_FATAL(fmt, ...)
- *  @brief Log a message at FATAL level and abort the program.
+ *  @brief Log a message at FATAL level.
  *  @param fmt Format string (printf-style).
  *  @param ... Arguments for the format string.
  */
-#include <stddef.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <sys/cdefs.h>
+#define LOG_FATAL(fmt, ...) LOG_AT(LOG_FATAL, fmt, ##__VA_ARGS__)
 
 /**
  * @brief Log a message with the specified level and location information.
@@ -245,8 +242,14 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
  * This function bypasses the writer thread and best-effort dumps all records
  * currently in the ring buffer. Intended for use in crash handlers.
  *
- * @note This function is async-signal-safe (uses only write/strlen).
+ * @note This function is async-signal-safe. It avoids dynamic allocation,
+ *       locking, and stdio/formatting functions that are not signal-safe.
+ *       It uses raw `write`, `strlen`, and manual ASCII formatting.
+ *
  * @warning The provided file descriptor must be valid and writable.
+ *          Since it accesses the shared ring buffer concurrently with potential
+ *          producers (though arguably crashing), data consistency is best-effort.
+ *          It is guaranteed not to deadlock or crash the handler itself.
  *
  * @param fd File descriptor to write to.
  */

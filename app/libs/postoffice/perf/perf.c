@@ -135,30 +135,42 @@ static struct {
 
 static int find_or_alloc_counter(const char *name) {
     if (!ctx.shm || !ctx.counter_map) return -1;
-    
+
     // 1. Fast path: Hash table lookup with read lock (allows concurrent reads)
     pthread_rwlock_rdlock(&ctx.hash_rwlock);
     void *cached = po_hashtable_get(ctx.counter_map, name);
     pthread_rwlock_unlock(&ctx.hash_rwlock);
-    
+
     if (cached) {
         return (int)(intptr_t)cached - 1; // Stored as index+1 to avoid NULL
     }
 
     // 2. Slow path: Allocate new (with write lock for hash table + SHM lock)
     pthread_rwlock_wrlock(&ctx.hash_rwlock);
-    
+
     // Double-check after acquiring write lock (another thread may have added it)
     cached = po_hashtable_get(ctx.counter_map, name);
     if (cached) {
         pthread_rwlock_unlock(&ctx.hash_rwlock);
         return (int)(intptr_t)cached - 1;
     }
-    
+
     // Now acquire SHM lock for allocation
     pthread_mutex_lock(&ctx.shm->lock);
-    
+
     size_t count = atomic_load(&ctx.shm->num_counters);
+
+    // Scan SHM to see if another process already created this metric
+    for (size_t i = 0; i < count; i++) {
+        if (strncmp(ctx.shm->counters[i].name, name, MAX_METRIC_NAME) == 0) {
+            // Found it! Cache in our local map and return
+            po_hashtable_put(ctx.counter_map, ctx.shm->counters[i].name, (void *)(intptr_t)(i + 1));
+            pthread_mutex_unlock(&ctx.shm->lock);
+            pthread_rwlock_unlock(&ctx.hash_rwlock);
+            return (int)i;
+        }
+    }
+
     if (count >= MAX_COUNTERS) {
         pthread_mutex_unlock(&ctx.shm->lock);
         pthread_rwlock_unlock(&ctx.hash_rwlock);
@@ -173,10 +185,10 @@ static int find_or_alloc_counter(const char *name) {
 
     // Store in hash table (already have write lock)
     po_hashtable_put(ctx.counter_map, c->name, (void *)(intptr_t)(count + 1));
-    
+
     // Commit
     atomic_store(&ctx.shm->num_counters, count + 1);
-    
+
     pthread_mutex_unlock(&ctx.shm->lock);
     pthread_rwlock_unlock(&ctx.hash_rwlock);
     return (int)count;
@@ -184,29 +196,40 @@ static int find_or_alloc_counter(const char *name) {
 
 static int find_or_alloc_timer(const char *name) {
     if (!ctx.shm || !ctx.timer_map) return -1;
-    
+
     // 1. Fast path: Hash table lookup with read lock
     pthread_rwlock_rdlock(&ctx.hash_rwlock);
     void *cached = po_hashtable_get(ctx.timer_map, name);
     pthread_rwlock_unlock(&ctx.hash_rwlock);
-    
+
     if (cached) {
         return (int)(intptr_t)cached - 1;
     }
 
     // 2. Slow path: Allocate new (with write lock)
     pthread_rwlock_wrlock(&ctx.hash_rwlock);
-    
+
     // Double-check
     cached = po_hashtable_get(ctx.timer_map, name);
     if (cached) {
         pthread_rwlock_unlock(&ctx.hash_rwlock);
         return (int)(intptr_t)cached - 1;
     }
-    
+
     pthread_mutex_lock(&ctx.shm->lock);
-    
+
     size_t count = atomic_load(&ctx.shm->num_timers);
+
+    // Scan SHM to see if another process already created this metric
+    for (size_t i = 0; i < count; i++) {
+        if (strncmp(ctx.shm->timers[i].name, name, MAX_METRIC_NAME) == 0) {
+            po_hashtable_put(ctx.timer_map, ctx.shm->timers[i].name, (void *)(intptr_t)(i + 1));
+            pthread_mutex_unlock(&ctx.shm->lock);
+            pthread_rwlock_unlock(&ctx.hash_rwlock);
+            return (int)i;
+        }
+    }
+
     if (count >= MAX_TIMERS) {
         pthread_mutex_unlock(&ctx.shm->lock);
         pthread_rwlock_unlock(&ctx.hash_rwlock);
@@ -217,7 +240,7 @@ static int find_or_alloc_timer(const char *name) {
     strncpy(t->name, name, MAX_METRIC_NAME - 1);
     t->name[MAX_METRIC_NAME - 1] = '\0';
     atomic_init(&t->total_ns, 0);
-    
+
     // Store in hash table
     po_hashtable_put(ctx.timer_map, t->name, (void *)(intptr_t)(count + 1));
 
@@ -229,12 +252,12 @@ static int find_or_alloc_timer(const char *name) {
 
 static int get_histogram_index(const char *name) {
     if (!ctx.shm || !ctx.histogram_map) return -1;
-    
+
     // Read lock for hash table lookup
     pthread_rwlock_rdlock(&ctx.hash_rwlock);
     void *cached = po_hashtable_get(ctx.histogram_map, name);
     pthread_rwlock_unlock(&ctx.hash_rwlock);
-    
+
     if (cached) {
         return (int)(intptr_t)cached - 1;
     }
@@ -280,18 +303,14 @@ void po_perf_counter_add_by_idx(int idx, uint64_t delta) {
 
 void po_perf_timer_start_by_idx(int idx) {
     if (idx >= 0 && ctx.shm) {
-        if (clock_gettime(CLOCK_MONOTONIC_COARSE, &ctx.shm->timers[idx].start) != 0) {
-            clock_gettime(CLOCK_MONOTONIC, &ctx.shm->timers[idx].start);
-        }
+        clock_gettime(CLOCK_MONOTONIC, &ctx.shm->timers[idx].start);
     }
 }
 
 void po_perf_timer_stop_by_idx(int idx) {
     if (idx >= 0 && ctx.shm) {
         struct timespec end;
-        if (clock_gettime(CLOCK_MONOTONIC_COARSE, &end) != 0) {
-            clock_gettime(CLOCK_MONOTONIC, &end);
-        }
+        clock_gettime(CLOCK_MONOTONIC, &end);
         struct timespec start = ctx.shm->timers[idx].start;
         uint64_t diff = (uint64_t)(end.tv_sec - start.tv_sec) * 1000000000ULL +
                         (uint64_t)(end.tv_nsec - start.tv_nsec);
@@ -489,8 +508,8 @@ int po_perf_timer_create(const char *name) {
 
 
 // Define clock ID if not available
-#ifndef CLOCK_MONOTONIC_COARSE
-    #define CLOCK_MONOTONIC_COARSE CLOCK_MONOTONIC
+#ifndef CLOCK_MONOTONIC
+    #define CLOCK_MONOTONIC 1
 #endif
 
 int po_perf_timer_start(const char *name) {
@@ -498,11 +517,8 @@ int po_perf_timer_start(const char *name) {
     int idx = find_or_alloc_timer(name);
     if (idx < 0) return -1;
 
-    // Use COARSE clock for performance (lower precision, much faster)
-    if (clock_gettime(CLOCK_MONOTONIC_COARSE, &ctx.shm->timers[idx].start) != 0) {
-        // Fallback if COARSE is not supported (e.g. older kernels)
-        clock_gettime(CLOCK_MONOTONIC, &ctx.shm->timers[idx].start);
-    }
+    // Use HIGH RES clock for precision as requested
+    clock_gettime(CLOCK_MONOTONIC, &ctx.shm->timers[idx].start);
     return 0;
 }
 
@@ -512,9 +528,7 @@ int po_perf_timer_stop(const char *name) {
     if (idx < 0) return -1;
 
     struct timespec end;
-    if (clock_gettime(CLOCK_MONOTONIC_COARSE, &end) != 0) {
-        clock_gettime(CLOCK_MONOTONIC, &end);
-    }
+    clock_gettime(CLOCK_MONOTONIC, &end);
 
     struct timespec start = ctx.shm->timers[idx].start;
     uint64_t diff = (uint64_t)(end.tv_sec - start.tv_sec) * 1000000000ULL +
@@ -532,7 +546,7 @@ int po_perf_histogram_create(const char *name, const uint64_t *bins, size_t nbin
 
     // Acquire write lock for hash table + SHM lock for allocation
     pthread_rwlock_wrlock(&ctx.hash_rwlock);
-    
+
     // Check existing (already have lock, call hash table directly)
     void *cached = po_hashtable_get(ctx.histogram_map, name);
     if (cached) {
@@ -540,10 +554,22 @@ int po_perf_histogram_create(const char *name, const uint64_t *bins, size_t nbin
         errno = EEXIST;
         return -1;
     }
-    
+
     pthread_mutex_lock(&ctx.shm->lock);
 
     size_t count = atomic_load(&ctx.shm->num_histograms);
+
+    // Scan SHM to see if another process already created this metric
+    for (size_t i = 0; i < count; i++) {
+        if (strncmp(ctx.shm->histograms[i].name, name, MAX_METRIC_NAME) == 0) {
+            po_hashtable_put(ctx.histogram_map, ctx.shm->histograms[i].name, (void *)(intptr_t)(i + 1));
+            pthread_mutex_unlock(&ctx.shm->lock);
+            pthread_rwlock_unlock(&ctx.hash_rwlock);
+            errno = EEXIST; // Return EEXIST as if local cache found it
+            return -1;
+        }
+    }
+
     if (count >= MAX_HISTOGRAMS) {
         pthread_mutex_unlock(&ctx.shm->lock);
         pthread_rwlock_unlock(&ctx.hash_rwlock);

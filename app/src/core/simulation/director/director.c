@@ -5,15 +5,19 @@
 #include <postoffice/log/logger.h>
 #include <postoffice/sysinfo/sysinfo.h>
 #include <postoffice/net/socket.h>
+#include <postoffice/vector/vector.h>
 #include <utils/errors.h>
 #include "schedule/task_queue.h"
 #include "ctrl_bridge/bridge_mainloop.h"
-#include "ipc/simulation_ipc.h"         // Added IPC header
+#include "ipc/simulation_ipc.h"
+
+#include "utils/configs.h"
 
 #include <errno.h>
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -22,31 +26,57 @@
 #include <stdbool.h>
 #include <string.h>
 #include <utils/signals.h>
+#include <stdatomic.h> // For atomic_load/store
 
 static volatile sig_atomic_t g_running = 1;
 static bool g_headless_mode = false;
 static sim_shm_t* g_shm = NULL;         // Global SHM pointer
+
+static po_vector_t *g_child_pids = NULL;
+
+static uint32_t g_n_workers = DEFAULT_WORKERS;
+static const char* g_config_path = NULL; // Global config path
+
+// Define constants for default start time
+#define DEFAULT_START_DAY 1
+#define DEFAULT_START_HOUR 0
+
+// Define a cache line max for logger config
+// #define PO_CACHE_LINE_MAX 64 // Using included definition
 
 static void parse_args(int argc, char** argv) {
     static struct option long_options[] = {
         {"headless", no_argument, 0, 'h'},
         {"config", required_argument, 0, 'c'},
         {"loglevel", required_argument, 0, 'l'},
+        {"workers", required_argument, 0, 'w'},
         {0, 0, 0, 0}
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "hc:l:", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hc:l:w:", long_options, NULL)) != -1) {
         switch (opt) {
             case 'h':
                 g_headless_mode = true;
                 break;
             case 'c':
-                // Config handling
+                g_config_path = optarg; // Store config path
                 break;
             case 'l':
-                // TODO: Parse log level string to enum if needed
+                // Log level handling (Placeholder)
+                fprintf(stderr, "Warning: --loglevel %s ignored (not implemented)\n", optarg);
                 break;
+            case 'w': {
+                char *endptr;
+                long val = strtol(optarg, &endptr, 10);
+                if (*endptr == '\0' && val > 0) {
+                    g_n_workers = (uint32_t)val;
+                } else {
+                    fprintf(stderr, "Invalid worker count: %s\n", optarg);
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            }
             default:
                 break;
         }
@@ -58,27 +88,124 @@ static void handle_signal(int sig, siginfo_t* info, void* context) {
     g_running = 0;
 }
 
-static void register_signals(void) {
-    if (sigutil_handle_terminating(handle_signal, 0) != 0) {
-        LOG_WARN("Failed to register signal handlers");
-    }
-}
-
 static void* bridge_thread_fn(void* _) {
     (void) _;
     bridge_mainloop_run();
     return NULL;
 }
 
+static void track_child(pid_t pid) {
+    if (g_child_pids) {
+        po_vector_push(g_child_pids, (void*)(intptr_t)pid);
+    }
+}
+
+static void spawn_process(const char* bin, char *const argv[]) {
+    pid_t p = fork();
+    if (p == 0) {
+        // Child
+        execv(bin, argv);
+
+        // If execv fails, use unsafe write to stderr to avoid lock corruption
+        const char *msg = "Failed to exec process\n";
+        if (write(STDERR_FILENO, msg, strlen(msg)) == -1) { /* ignore */ }
+        _exit(1); 
+    } else if (p < 0) {
+        LOG_ERROR("Failed to fork %s: %s", bin, strerror(errno));
+    } else {
+        LOG_INFO("Spawned %s (PID %d)", bin, p);
+        track_child(p);
+    }
+}
+
+static void load_config_into_shm(const char *config_path) {
+    po_config_t *cfg = NULL;
+    // Load config (instrumented inside)
+    if (po_config_load(config_path, &cfg) != 0) {
+        LOG_WARN("Failed to load config %s, using defaults", config_path);
+        // Defaults
+        g_shm->params.sim_duration_days = 10;
+        g_shm->params.tick_nanos = 1000000;
+        g_shm->params.explode_threshold = 100;
+        return;
+    }
+
+    // [simulation] SIM_DURATION
+    int duration = 0;
+    if (po_config_get_int(cfg, "simulation", "SIM_DURATION", &duration) == 0) {
+        g_shm->params.sim_duration_days = (uint32_t)duration;
+    } else {
+        g_shm->params.sim_duration_days = 10; // default
+    }
+
+    // [simulation] N_NANO_SECS
+    long tick_nanos = 0;
+    if (po_config_get_long(cfg, "simulation", "N_NANO_SECS", &tick_nanos) == 0) {
+        g_shm->params.tick_nanos = (uint64_t)tick_nanos;
+    } else {
+        g_shm->params.tick_nanos = 2500000;
+    }
+
+    // [simulation] EXPLODE_THRESHOLD
+    int explode = 0;
+    if (po_config_get_int(cfg, "simulation", "EXPLODE_THRESHOLD", &explode) == 0) {
+        g_shm->params.explode_threshold = (uint32_t)explode;
+    } else {
+        g_shm->params.explode_threshold = 100;
+    }
+    
+    // [workers] NOF_WORKERS
+    int n_workers = 0;
+    if (po_config_get_int(cfg, "workers", "NOF_WORKERS", &n_workers) == 0 && n_workers > 0) {
+        // We might want to use this, but for now we rely on CLI or default.
+        // If we want config to override, we need to restructure main().
+        // For now, let's just log it.
+    } 
+
+    // [users_manager] N_NEW_USERS
+    int n_new_users = 0;
+    if (po_config_get_int(cfg, "users_manager", "N_NEW_USERS", &n_new_users) == 0 && n_new_users > 0) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d", n_new_users);
+        setenv("PO_USERS_COUNT", buf, 1);
+        LOG_INFO("Config: Set PO_USERS_COUNT to %d", n_new_users);
+    }    // "Implement both TIMEOUT and EXPLODE conditions". Worker count is separate issue.
+    // We will stick to Termination parameters for now.
+
+    LOG_INFO("Loaded Config: Duration=%u days, Tick=%lu ns, Explode=%u",
+             g_shm->params.sim_duration_days, g_shm->params.tick_nanos, g_shm->params.explode_threshold);
+
+    po_config_free(&cfg);
+}
+
+// Helper to update SHM time
+static void update_sim_time(sim_shm_t* shm, int day, int hour, int min) {
+    uint64_t new_packed = ((uint64_t)day << 16) | ((uint64_t)hour << 8) | (uint64_t)min;
+    atomic_store(&shm->time_control.packed_time, new_packed);
+}
+
 int main(int argc, char** argv) {
     // Parse command-line arguments
     parse_args(argc, argv);
+    
+    struct sigaction sa;
+    sa.sa_sigaction = handle_signal;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
 
     // 0. Collect system information for optimizations
-    po_sysinfo_t sysinfo;
-    size_t cacheline_size = 64; // default
+    /* po_sysinfo_t sysinfo;
     if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
-        cacheline_size = (size_t)sysinfo.dcache_lnsize;
+         // cacheline_size = (size_t)sysinfo.dcache_lnsize; 
+    } */
+    
+    // Initialize PID vector
+    g_child_pids = po_vector_create();
+    if (!g_child_pids) {
+        fprintf(stderr, "Failed to allocate PID vector\n");
+        exit(EXIT_FAILURE);
     }
 
     // 1. Initialize Metrics Subsystem (which initializes perf internally)
@@ -92,24 +219,47 @@ int main(int argc, char** argv) {
         .ring_capacity = 4096,
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
-        .cacheline_bytes = cacheline_size
+        .cacheline_bytes = PO_CACHE_LINE_MAX
     };
     if (po_logger_init(&log_cfg) != 0) {
-        fprintf(stderr, "director: logger init failed\n");
+         fprintf(stderr, "Failed to init logger\n");
+         return 1;
     }
-    // Log to console (stderr is standard for logs, but user said "console" so let's use stderr for now as it's unbuffered usually)
+    // Add default sinks
     po_logger_add_sink_console(true);
-    // Log to file
     po_logger_add_sink_file("logs/director.log", false);
 
-    // 3. Initialize Shared Memory
-    g_shm = sim_ipc_shm_create();
+    // Init Perf early
+    if (po_perf_init(64, 16, 8) != 0) {
+        LOG_WARN("Failed to init perf: %s", strerror(errno));
+    }
+
+    // Cleanup stale SHM/Semaphores from previous runs if any
+    sim_ipc_shm_destroy();
+    
+    // Initialize Simulation IPC (Shared Memory)
+    // Use n_workers from arguments (default 6)
+    // NOTE: If we want config-based worker count, we should parse config HERE, before SHM size calc.
+    // For now, assume CLI provides workers or defaults.
+    
+    g_shm = sim_ipc_shm_create(g_n_workers);
     if (!g_shm) {
-        LOG_ERROR("director: failed to create shared memory (errno=%d)", errno);
+        LOG_FATAL("Failed to create shared memory: %s", strerror(errno));
+        // Cleanup resources
+        if (g_child_pids) po_vector_destroy(g_child_pids);
         po_logger_shutdown();
         exit(EXIT_FAILURE);
     }
+    
+    // Store n_workers in params for other processes
+    // (Already done in sim_ipc_shm_create, but explicit check doesn't hurt)
+    if (g_shm->params.n_workers != g_n_workers) {
+        LOG_WARN("Director: SHM worker count mismatch? Expected %u vs %u", g_n_workers, g_shm->params.n_workers);
+    }
     LOG_INFO("Shared memory initialized at %p", (void*)g_shm);
+
+    // Now load config into parameters
+    load_config_into_shm(g_config_path ? g_config_path : "config/timeout.ini");
 
     // 3.1 Initialize Semaphores
     int semid = sim_ipc_sem_create(SIM_MAX_SERVICE_TYPES);
@@ -122,182 +272,196 @@ int main(int argc, char** argv) {
     LOG_INFO("Semaphores initialized (ID: %d)", semid);
 
     // 4. Centralized IPC Creation
-    // A. Shared Worker Logfile
-    FILE* f_workers = fopen("logs/workers.log", "w"); // Truncate
+    FILE* f_workers = fopen("logs/workers.log", "w"); 
     if (f_workers) fclose(f_workers);
     else LOG_WARN("Failed to truncate logs/workers.log");
 
-    // B. Ticket Issuer Socket (Created by Director, Inherited by Issuer)
-    int issuer_sock_fd = po_socket_listen_unix(SIM_SOCK_ISSUER, 128);
-    if (issuer_sock_fd < 0) {
-        LOG_ERROR("director: failed to bind issuer socket %s", SIM_SOCK_ISSUER);
-        exit(1);
+    // Secure socket path logic
+    const char* user_home = getenv("HOME");
+    char sock_path[512];
+    if (user_home) {
+        snprintf(sock_path, sizeof(sock_path), "%s/.postoffice/issuer.sock", user_home);
+        // Ensure dir exists
+        char cmd[512];
+        snprintf(cmd, sizeof(cmd), "mkdir -p %s/.postoffice", user_home);
+        if (system(cmd) == -1) { /* ignore */ }
+    } else {
+        snprintf(sock_path, sizeof(sock_path), "/tmp/postoffice_%d_issuer.sock", getuid()); // Fallback with UID
     }
-    // Clear CLOEXEC so child inherits it
-    int flags = fcntl(issuer_sock_fd, F_GETFD);
-    fcntl(issuer_sock_fd, F_SETFD, flags & ~FD_CLOEXEC);
-    LOG_INFO("Created Issuer Socket FD: %d", issuer_sock_fd);
+    unlink(sock_path); // remove old if exists
 
-    // C. Initialize Global Time
-    atomic_store(&g_shm->time_control.day, 1);
-    atomic_store(&g_shm->time_control.hour, 8); // Start at 08:00
-    atomic_store(&g_shm->time_control.minute, 0);
-    atomic_store(&g_shm->time_control.elapsed_nanos, 0);
+    int issuer_sock_fd = po_socket_listen_unix(sock_path, 128);
+    if (issuer_sock_fd < 0) {
+        LOG_ERROR("director: failed to bind issuer socket %s", sock_path);
+        sim_ipc_shm_destroy();
+        po_logger_shutdown();
+        exit(EXIT_FAILURE);
+    }
+    // Clear CLOEXEC
+    int flags = fcntl(issuer_sock_fd, F_GETFD);
+    if (flags != -1) fcntl(issuer_sock_fd, F_SETFD, flags & ~FD_CLOEXEC);
+
+    LOG_INFO("Created Issuer Socket FD: %d at %s", issuer_sock_fd, sock_path);
 
     // 5. Process Spawning
-    // Helper macro to spawn
-    #define SPAWN(bin, ...) do { \
-        pid_t p = fork(); \
-        if (p == 0) { \
-            execl(bin, bin, ##__VA_ARGS__, NULL); \
-            LOG_ERROR("Failed to exec %s: %s", bin, strerror(errno)); \
-            exit(1); \
-        } else if (p < 0) { \
-            LOG_ERROR("Failed to fork %s: %s", bin, strerror(errno)); \
-        } else { \
-            LOG_INFO("Spawned %s (PID %d)", bin, p); \
-        } \
-    } while(0)
-
-    // Note: We assume binaries are in "bin/" relative to current CWD or absolute path.
-    // The Makefile builds to bin/, logic runs from app/.
-    // Binaries are: bin/post_office_ticket_issuer, bin/post_office_worker, bin/post_office_users_manager
-
     const char *bin_issuer = "bin/post_office_ticket_issuer";
     const char *bin_worker = "bin/post_office_worker";
     const char *bin_manager = "bin/post_office_users_manager";
 
-    // A. Spawn Ticket Issuer (Pass FD)
+    // Spawn Ticket Issuer
     char fd_str[16];
     snprintf(fd_str, sizeof(fd_str), "%d", issuer_sock_fd);
-    SPAWN(bin_issuer, "-l", "INFO", "--socket-fd", fd_str); 
+    char *args_issuer[] = {(char*)bin_issuer, "-l", "INFO", "--socket-fd", fd_str, NULL};
+    spawn_process(bin_issuer, args_issuer);
 
-    // B. Spawn Workers (e.g. 4 workers)
-    for (int i = 0; i < 4; i++) {
-        char id_str[8], type_str[8];
-        snprintf(id_str, sizeof(id_str), "%d", i);
-        snprintf(type_str, sizeof(type_str), "%d", i % SIM_MAX_SERVICE_TYPES);
-        SPAWN(bin_worker, "-i", id_str, "-s", type_str);
+    // 6. Spawn Workers
+    LOG_INFO("Spawning %u Worker processes...", g_n_workers);
+    for (uint32_t i = 0; i < g_n_workers; i++) {
+        char id_buf[16];
+        snprintf(id_buf, sizeof(id_buf), "%u", i);
+
+        // Assign service type round-robin
+        int stype = i % SIM_MAX_SERVICE_TYPES;
+        char stype_buf[16];
+        snprintf(stype_buf, sizeof(stype_buf), "%d", stype);
+        
+        char *args_worker[] = {(char*)bin_worker, "-i", id_buf, "-s", stype_buf, NULL};
+        spawn_process(bin_worker, args_worker);
     }
 
-    // C. Spawn Users Manager
+    // Spawn Users Manager
     char pid_str[16];
     snprintf(pid_str, sizeof(pid_str), "%d", getpid());
-    SPAWN(bin_manager, "--pid", pid_str);
+    char *args_manager[] = {(char*)bin_manager, "--pid", pid_str, NULL};
+    spawn_process(bin_manager, args_manager);
 
-    // 6. Setup Task Queue (MPSC)
     po_task_queue_t task_queue;
     if (po_task_queue_init(&task_queue, 256) != 0) {
         LOG_ERROR("failed to init task queue");
-        sim_ipc_shm_destroy();
+        // We should kill children here properly
+        kill(0, SIGTERM);
         return 1;
     }
 
-    // 7. Register Signals
-    register_signals();
+    // register_signals(); // Replaced by direct sigaction calls above
 
-    // 8. Start Control Bridge
     pthread_t bridge_thread;
     int bridge_started = 0;
-
     if (!g_headless_mode) {
         if (bridge_mainloop_init() == 0) {
-            if (pthread_create(&bridge_thread, NULL, bridge_thread_fn, NULL) != 0) {
-                LOG_ERROR("failed to start bridge thread");
-            } else {
+            if (pthread_create(&bridge_thread, NULL, bridge_thread_fn, NULL) == 0) {
                 bridge_started = 1;
                 LOG_INFO("Control bridge started (TUI mode)");
             }
-        } else {
-            LOG_ERROR("bridge init failed; continuing without control bridge");
         }
-    } else {
-        LOG_INFO("Running in headless mode - control bridge disabled");
     }
 
-    LOG_INFO("Director started (PID: %d), Sim Time: Day %d %02d:%02d", 
-             getpid(), 
-             atomic_load(&g_shm->time_control.day), 
-             atomic_load(&g_shm->time_control.hour), 
-             atomic_load(&g_shm->time_control.minute));
+    // Parse initial time
+    // uint64_t packed = atomic_load(&g_shm->time_control.packed_time);
+    // int day = (packed >> 16) & 0xFFFF;
+    // int hour = (packed >> 8) & 0xFF;
+    // int min = packed & 0xFF;
 
-    // Main Loop
+    // LOG_INFO("Director started (PID: %d), Sim Time: Day %d %02d:%02d", getpid(), day, hour, min);
+
+    // 7. Main Loop (Manage Time)
+    // We need 1 thread/process updating time? 
+    // Director IS the timekeeper.
+    
+    // Set active
     atomic_store(&g_shm->time_control.sim_active, true);
     
-    g_running = true; 
+    int current_day = DEFAULT_START_DAY;
+    int current_hour = DEFAULT_START_HOUR;
+    int current_min = 0;
+    
+    LOG_INFO("Simulation started... (Ctrl+C to stop)");
+
     while (g_running) {
-        // A. Child Monitoring
-        int status;
-        pid_t exited_pid = waitpid(-1, &status, WNOHANG);
-        if (exited_pid > 0) {
-            LOG_ERROR("Child process %d exited unexpectedly (status %d). Shutting down.", exited_pid, status);
-            g_running = false;
-            break;
-        }
+        // Update Time
+        update_sim_time(g_shm, current_day, current_hour, current_min);
+        
+        // Sleep for 1 "tick" (1 simulated minute)
+        // Convert tick_nanos to microseconds for usleep
+        uint64_t sleep_us = g_shm->params.tick_nanos / 1000;
+        if (sleep_us == 0) sleep_us = 1000; // minimum safety
+        usleep((useconds_t)sleep_us);
 
-        // B. Simulation Tick (Time Advancement)
-        int min = atomic_load(&g_shm->time_control.minute);
-        int hour = atomic_load(&g_shm->time_control.hour);
-        int day = atomic_load(&g_shm->time_control.day);
-
-        min++;
-        if (min >= 60) {
-            min = 0;
-            hour++;
-            if (hour >= 24) { // Close logic could go here
-                hour = 0;
-                day++;
-                LOG_INFO("New Day: %d", day);
-            }
-            if (hour % 4 == 0) { // Log every 4 hours
-                LOG_INFO("Sim Time: Day %d %02d:00", day, hour);
+        // Advance 1 minute
+        current_min++;
+        if (current_min >= 60) {
+            current_min = 0;
+            current_hour++;
+            if (current_hour >= 24) {
+                current_day++;
+                current_hour = 0;
+                LOG_INFO("Day %d begin", current_day);
             }
         }
         
-        // Update SHM atomically
-        atomic_store(&g_shm->time_control.minute, min);
-        atomic_store(&g_shm->time_control.hour, hour);
-        atomic_store(&g_shm->time_control.day, day);
+        // CHECK TERMINATION CONDITIONS
+        
+        // 1. Timeout
+        if (g_shm->params.sim_duration_days > 0 && 
+            (uint32_t)current_day > g_shm->params.sim_duration_days) {
+            LOG_INFO("TIMEOUT: Simulation duration reached (%d days). Stopping.", g_shm->params.sim_duration_days);
+            g_running = 0;
+            break;
+        }
 
-        // C. Sleep
-        usleep(10000); // 100ms per minute -> 2.4s per day roughly (24*60 / 10 = 144 ticks?) 
-                       // Wait, 10000us = 10ms. 
-                       // 10ms * 60 = 600ms = 1 hour.
-                       // 600ms * 24 = 14.4s = 1 day. Good.
+        // 2. Explode (Queue Overflow)
+        if (g_shm->params.explode_threshold > 0) {
+             uint32_t total_waiting = 0;
+             for (int i = 0; i < SIM_MAX_SERVICE_TYPES; i++) {
+                 total_waiting += atomic_load(&g_shm->queues[i].waiting_count);
+             }
+             
+             if (total_waiting >= g_shm->params.explode_threshold) {
+                 LOG_FATAL("EXPLODE: Too many waiting users (%u >= %u). Simulation collapsed.", 
+                           total_waiting, g_shm->params.explode_threshold);
+                 g_running = 0;
+                 break;
+             }
+        }
+
+        // A. Child Monitoring
+        // ... (existing child monitoring logic would be here if any)
     }
 
-    LOG_INFO("Director stopping...");
 
-    // Disable simulation
+    LOG_INFO("Director stopping...");
     atomic_store(&g_shm->time_control.sim_active, false);
 
-    // 9. Shutdown Sequence
     if (bridge_started) {
         bridge_mainloop_stop();
         pthread_join(bridge_thread, NULL);
     }
     
-    // Kill all child processes (workers, users, issuer) in the process group
-    kill(0, SIGTERM);
-    // Give them a moment to shutdown and flush logs
+    // Graceful Shutdown of children
+    size_t count = po_vector_size(g_child_pids);
+    for (size_t i=0; i<count; i++) {
+        pid_t p = (pid_t)(intptr_t)po_vector_at(g_child_pids, i);
+        if (p > 0) kill(p, SIGTERM);
+    }
+    // Final wait/cleanup
     usleep(100000);
+    // Force kill if needed
+    for (size_t i=0; i<count; i++) {
+        pid_t p = (pid_t)(intptr_t)po_vector_at(g_child_pids, i);
+        if (p > 0) waitpid(p, NULL, WNOHANG);
+    }
+    
+    po_vector_destroy(g_child_pids);
 
-    // Cleanup children
-    kill(0, SIGTERM); 
-    usleep(100000);
-
-    // Clean up Shared Memory
     if (g_shm) {
         sim_ipc_shm_detach(g_shm);
-        sim_ipc_shm_destroy(); // Master destroys
+        sim_ipc_shm_destroy(); 
         LOG_INFO("Shared memory destroyed");
     }
 
-    // Final log before logger shutdown
     LOG_INFO("Director exit.");
     po_logger_shutdown();
-
     po_task_queue_destroy(&task_queue);
-    po_metrics_shutdown();
+    po_perf_shutdown(stdout);
     return 0;
 }

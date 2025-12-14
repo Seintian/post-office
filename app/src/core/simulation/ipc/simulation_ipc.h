@@ -18,7 +18,7 @@
  *
  * @return Pointer to mapped sim_shm_t on success, NULL on failure (errno set).
  */
-sim_shm_t* sim_ipc_shm_create(void);
+sim_shm_t* sim_ipc_shm_create(size_t n_workers);
 
 /**
  * @brief Attach to an existing Simulation Shared Memory.

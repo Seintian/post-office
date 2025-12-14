@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include <postoffice/perf/cache.h> // For PO_CACHE_LINE_MAX
 
 /**
  * @file simulation_protocol.h
@@ -15,11 +16,15 @@
 /* --- Constants --- */
 
 #define SIM_SHM_NAME "/postoffice_shm"
-#define SIM_SOCK_ISSUER "/tmp/postoffice_issuer.sock" // For Ticket Issuer
-#define SIM_SEM_KEY 0x1234  // Key for SysV Semaphores (can be derived from path too)
+// Socket path will be determined at runtime (e.g. $HOME/.postoffice/launcher.sock)
+// Semaphore key will be derived via ftok
 
-#define SIM_MAX_WORKERS 32
+// SIM_MAX_WORKERS replaced by dynamic sizing in sim_params_t
+#define DEFAULT_WORKERS 6
 #define SIM_MAX_SERVICE_TYPES 4
+
+#define DEFAULT_START_DAY 1
+#define DEFAULT_START_HOUR 0
 
 /* --- Typedefs --- */
 
@@ -46,74 +51,94 @@ typedef enum {
 
 /**
  * @brief Structure representing a worker's live status in SHM.
- * Aligned to 64 bytes to avoid false sharing.
+ * Aligned to cache line to avoid false sharing.
  */
-typedef struct __attribute__((aligned(64))) worker_status_s {
+typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) worker_status_s {
     atomic_int state;            // worker_state_t
     atomic_uint current_ticket;  // Ticket # being served
     atomic_int service_type;     // Current service type
-    pid_t pid;
-    char _pad[44];               // Padding to 64 bytes
+    atomic_int pid;              // Worker PID (atomic access)
 } worker_status_t;
+// Compile-time check to ensure no false sharing (size must be multiple of cache line)
+_Static_assert(sizeof(worker_status_t) % PO_CACHE_LINE_MAX == 0, "worker_status_t size mismatch");
 
 /**
  * @brief Structure representing a queue's live status in SHM.
- * Aligned to 64 bytes.
+ * Aligned to cache line.
  */
-typedef struct __attribute__((aligned(64))) queue_status_s {
+typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) queue_status_s {
     atomic_uint waiting_count;   // Users currently in queue
     atomic_uint total_served;    // Cumulative users served
-    char _pad[56];
 } queue_status_t;
+_Static_assert(sizeof(queue_status_t) % PO_CACHE_LINE_MAX == 0, "queue_status_t size mismatch");
 
 /**
  * @brief Global statistics (counters).
+ * Aligned to cache line.
  */
-typedef struct global_stats_s {
+typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) global_stats_s {
     atomic_uint total_tickets_issued;
     atomic_uint total_services_completed;
     atomic_uint total_users_spawned;
     // Add more granular stats here
 } global_stats_t;
+_Static_assert(sizeof(global_stats_t) % PO_CACHE_LINE_MAX == 0, "global_stats_t size mismatch");
 
 /**
  * @brief Configuration parameters (read-only after init).
  */
 typedef struct sim_params_s {
     uint32_t n_workers;
-    uint32_t n_users_initial;
-    uint32_t sim_duration_sec;
-    // Add other config params
+    uint32_t sim_duration_days;
+    uint32_t explode_threshold;
+    uint64_t tick_nanos; // Nanoseconds per simulation minute
 } sim_params_t;
 
 /**
  * @brief Global Time & Control.
+ * 
+ * We pack day (16 bits), hour (8 bits), minute (8 bits) into a single 64-bit atomic
+ * to ensure readers always see a consistent snapshot of time.
+ * 
+ * bits 0-7:   minute (0-59)
+ * bits 8-15:  hour (0-23)
+ * bits 16-31: day (1-65535)
+ * bits 32-63: reserved / epoch counter
  */
-typedef struct sim_time_s {
-    atomic_int day;           // Current simulation day (1-based)
-    atomic_int hour;          // Current hour (0-23)
-    atomic_int minute;        // Current minute (0-59)
+typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) sim_time_s {
+    atomic_uint_least64_t packed_time; 
     atomic_int elapsed_nanos; // Accumulator for minute steps
     atomic_bool sim_active;   // Global run flag
 } sim_time_t;
+_Static_assert(sizeof(sim_time_t) % PO_CACHE_LINE_MAX == 0, "sim_time_t size mismatch");
 
 /**
  * @brief Main Shared Memory Structure.
  */
+/**
+ * @brief Main Shared Memory Structure.
+ */
 typedef struct simulation_shm_s {
-    // 1. Time & Control (Aligned)
+    // 1. Configuration (Read-only after init)
+    sim_params_t params;
+    char _pad0[PO_CACHE_LINE_MAX - sizeof(sim_params_t)];
+
+    // 2. Time & Control (Aligned)
     sim_time_t time_control;
 
-    // 2. Global Sequence for Tickets
+    // 3. Global Sequence for Tickets
     atomic_uint ticket_seq;
-    char _pad2[60]; // atomic_uint is 4 bytes, pad to 64
+    char _pad1[PO_CACHE_LINE_MAX - sizeof(atomic_uint)]; 
 
-    // 3. Statistics
+    // 4. Statistics
     global_stats_t stats;
 
-    // 4. Live Data
-    worker_status_t workers[SIM_MAX_WORKERS];
-    queue_status_t  queues[SIM_MAX_SERVICE_TYPES];
+    // 5. Live Data - Queues
+    queue_status_t queues[SIM_MAX_SERVICE_TYPES];
+
+    // 6. Live Data - Workers (Flexible Array Member)
+    // Must be at the end.
+    worker_status_t workers[];
 } sim_shm_t;
 
 /* --- Socket Messages --- */

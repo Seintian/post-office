@@ -6,8 +6,9 @@
 
 #include "hashset/hashset.h"
 #include "hashtable/hashtable.h"
-#include "inih/ini.h"
+#include "thirdparty/inih/ini.h"
 #include "utils/errors.h"
+#include <postoffice/perf/perf.h>
 
 // djb2 string hash
 static unsigned long str_hash(const void *s) {
@@ -141,7 +142,17 @@ static int _po_config_load(const char *filename, po_config_t **cfg_out, bool str
         return -1;
     }
 
+    // Instrument with perf
+    static bool perf_initialized = false;
+    if (!perf_initialized) {
+        po_perf_timer_create("config.load_time_us");
+        perf_initialized = true;
+    }
+
+    po_perf_timer_start("config.load_time_us");
     int ret = ini_parse(filename, &ini_handler_cb, ctx);
+    po_perf_timer_stop("config.load_time_us");
+
     if (ret != 0) {
         *cfg_out = ctx;
         return -1;

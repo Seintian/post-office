@@ -10,8 +10,8 @@
  * @see signals.c
  */
 
-#ifndef _UTILS_SIGNALS_H
-#define _UTILS_SIGNALS_H
+#ifndef UTILS_SIGNALS_H
+#define UTILS_SIGNALS_H
 
 #ifndef _GNU_SOURCE
 // Required by IDE
@@ -49,14 +49,13 @@
     SIGABRT, \
     SIGHUP,  \
     SIGQUIT, \
-    SIGABRT, \
     SIGFPE,  \
     SIGSEGV, \
     SIGPIPE, \
     SIGALRM, \
     SIGILL,  \
     SIGBUS,  \
-    SIGSYS,  \
+    SIGSYS
 
 // Bitwise flags for selecting signal handling options
 #define SIGUTIL_BLOCK_NONE              0x00  /** Do not block any signals */

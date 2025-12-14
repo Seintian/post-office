@@ -8,6 +8,7 @@
 #include <postoffice/net/net.h>
 #include <postoffice/log/logger.h>
 #include <utils/errors.h>
+#include <postoffice/perf/cache.h>
 #include "../ipc/simulation_ipc.h"
 #include "../ipc/simulation_protocol.h"
 
@@ -18,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 #include <sys/socket.h>
 #include <utils/signals.h>
 
@@ -34,8 +36,14 @@ static void setup_signals(void) {
     }
 }
 
+static void get_sim_time(sim_shm_t* shm, int *d, int *h, int *m) {
+    uint64_t packed = atomic_load(&shm->time_control.packed_time);
+    *d = (packed >> 16) & 0xFFFF;
+    *h = (packed >> 8) & 0xFF;
+    *m = packed & 0xFF;
+}
+
 int main(int argc, char** argv) {
-    int user_id = 0;
     (void)argc; (void)argv;
 
     // 1. Initialize Logger
@@ -44,7 +52,7 @@ int main(int argc, char** argv) {
         .ring_capacity = 1024,
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
-        .cacheline_bytes = 64
+        .cacheline_bytes = PO_CACHE_LINE_MAX
     };
     if (po_logger_init(&log_cfg) != 0) {
         return 1;
@@ -54,22 +62,28 @@ int main(int argc, char** argv) {
     // 2. Attach SHM
     sim_shm_t* shm = sim_ipc_shm_attach();
     if (!shm) {
+        po_logger_shutdown();
         return 1;
     }
 
-    // 3. Socket Handling (Inherited or Bind)
+    // 3. Socket Handling
     int server_fd = -1;
     // Simple arg parsing for socket FD
     for (int i=1; i<argc; i++) {
         if (strcmp(argv[i], "--socket-fd") == 0 && i+1 < argc) {
-            server_fd = atoi(argv[i+1]);
+            char* endptr;
+            errno = 0;
+            long val = strtol(argv[i+1], &endptr, 10);
+            if (errno == 0 && *endptr == '\0' && val >= 0 && val <= INT_MAX) {
+                server_fd = (int)val;
+            }
         }
     }
 
     if (server_fd < 0) {
         // Fallback or Error? Spec says "created by director", so error.
-        // But for running standalone vs director, we might support bind.
-        // For now, assume Refactor Goal: Director must create it.
+        sim_ipc_shm_detach(shm);
+        po_logger_shutdown();
         return 1;
     }
 
@@ -87,7 +101,7 @@ int main(int argc, char** argv) {
                 continue;
             }
             if (errno == EINTR) continue;
-            // LOG_ERROR("accept failed: %s", po_strerror(errno));
+            LOG_ERROR("accept failed: %s", po_strerror(errno));
             continue;
         }
 
@@ -109,11 +123,15 @@ int main(int argc, char** argv) {
         if (n == sizeof(req)) {
             // Logic: Increment Global Ticket Seq
             uint32_t ticket = atomic_fetch_add(&shm->ticket_seq, 1);
+             if (ticket == UINT32_MAX) {
+                LOG_WARN("Ticket sequence wrapped around");
+            }
 
             // Log with Time
-            sim_time_t *t = &shm->time_control;
+            int day, hour, min;
+            get_sim_time(shm, &day, &hour, &min);
             LOG_INFO("[Day %d %02d:%02d] Issued ticket %u to PID %d for service %d", 
-                      atomic_load(&t->day), atomic_load(&t->hour), atomic_load(&t->minute),
+                      day, hour, min,
                       ticket, req.requester_pid, req.service_type);
 
             // Respond
@@ -121,8 +139,12 @@ int main(int argc, char** argv) {
                 .ticket_number = ticket,
                 .assigned_service = req.service_type
             };
-            po_socket_send(client_fd, &resp, sizeof(resp), 0);
-            
+            ssize_t sent = po_socket_send(client_fd, &resp, sizeof(resp), 0);
+            if (sent != sizeof(resp)) {
+                LOG_ERROR("Failed to send ticket response to PID %d: %s", 
+                           req.requester_pid, po_strerror(errno));
+            }
+
             // Update Stats
             atomic_fetch_add(&shm->stats.total_tickets_issued, 1);
         }

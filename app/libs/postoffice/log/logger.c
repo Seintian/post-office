@@ -612,28 +612,28 @@ void po_logger_crash_dump(int fd) {
     while (g_ring && perf_ringbuf_dequeue(g_ring, &p) == 0) {
         log_record_t *r = (log_record_t *)p;
         if (r && r != &g_sentinel) {
-             const char *lvl = "UNKNOWN";
-             switch(r->level) {
-                 case LOG_TRACE: lvl = "TRACE"; break;
-                 case LOG_DEBUG: lvl = "DEBUG"; break;
-                 case LOG_INFO:  lvl = "INFO "; break;
-                 case LOG_WARN:  lvl = "WARN "; break;
-                 case LOG_ERROR: lvl = "ERROR"; break;
-                 case LOG_FATAL: lvl = "FATAL"; break;
-             }
-             
-             // [LEVEL] func - msg
-             if (write(fd, "[", 1) < 0) {}
-             if (write(fd, lvl, 5) < 0) {}
-             if (write(fd, "] ", 2) < 0) {}
-             
-             if (r->func[0]) {
-                 if (write(fd, r->func, strlen(r->func)) < 0) {}
-                 if (write(fd, " - ", 3) < 0) {}
-             }
-             
-             if (write(fd, r->msg, strlen(r->msg)) < 0) {}
-             if (write(fd, "\n", 1) < 0) {}
+            const char *lvl = "UNKNOWN";
+            switch(r->level) {
+                case LOG_TRACE: lvl = "TRACE"; break;
+                case LOG_DEBUG: lvl = "DEBUG"; break;
+                case LOG_INFO:  lvl = "INFO "; break;
+                case LOG_WARN:  lvl = "WARN "; break;
+                case LOG_ERROR: lvl = "ERROR"; break;
+                case LOG_FATAL: lvl = "FATAL"; break;
+            }
+
+            // [LEVEL] func - msg
+            if (write(fd, "[", 1) < 0) {}
+            if (write(fd, lvl, 5) < 0) {}
+            if (write(fd, "] ", 2) < 0) {}
+
+            if (r->func[0]) {
+                if (write(fd, r->func, strlen(r->func)) < 0) {}
+                if (write(fd, " - ", 3) < 0) {}
+            }
+
+            if (write(fd, r->msg, strlen(r->msg)) < 0) {}
+            if (write(fd, "\n", 1) < 0) {}
         }
     }
     const char *footer = "--- End of Pending Logs ---\n";

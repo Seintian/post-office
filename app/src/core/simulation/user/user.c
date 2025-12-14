@@ -8,6 +8,7 @@
 #include <postoffice/net/net.h>
 #include <postoffice/log/logger.h>
 #include <utils/errors.h>
+#include <postoffice/random/random.h>
 #include "../ipc/simulation_ipc.h"
 #include "../ipc/simulation_protocol.h"
 
@@ -30,32 +31,52 @@ static void handle_signal(int sig, siginfo_t* info, void* context) {
 
 static void setup_signals(void) {
     if (sigutil_handle_terminating(handle_signal, 0) != 0) {
-        // Log not initialized yet likely, but try
-         fprintf(stderr, "Failed to register signal handlers\n");
+        fprintf(stderr, "Failed to register signal handlers\n");
     }
+}
+
+static void get_sim_time(sim_shm_t* shm, int *d, int *h, int *m) {
+    uint64_t packed = atomic_load(&shm->time_control.packed_time);
+    *d = (packed >> 16) & 0xFFFF;
+    *h = (packed >> 8) & 0xFF;
+    *m = packed & 0xFF;
 }
 
 int main(int argc, char** argv) {
     // Expected args: ./user <user_id> <service_type>
-    int user_id = 0;    // Simulation ID (not PID)
-    int service_type = 0;
+    int user_id = -1;
+    int service_type = -1;
 
     int opt;
     while ((opt = getopt(argc, argv, "i:s:")) != -1) {
+        char *endptr;
+        long val;
         switch (opt) {
-            case 'i': user_id = atoi(optarg); break;
-            case 's': service_type = atoi(optarg); break;
+            case 'i': 
+                val = strtol(optarg, &endptr, 10);
+                if (*endptr == '\0' && val >= 0) user_id = (int)val;
+                break;
+            case 's': 
+                val = strtol(optarg, &endptr, 10);
+                if (*endptr == '\0' && val >= 0) service_type = (int)val;
+                break;
             default: break;
         }
     }
+    
+    if (user_id == -1 || service_type == -1) {
+        fprintf(stderr, "Usage: %s -i <id> -s <type>\n", argv[0]);
+        return 1;
+    }
 
     // 1. Init Logger (minimal buffer for user, or share setting)
+
     po_logger_config_t log_cfg = {
         .level = LOG_INFO,
         .ring_capacity = 256,
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
-        .cacheline_bytes = 64
+        .cacheline_bytes = PO_CACHE_LINE_MAX
     };
     if (po_logger_init(&log_cfg) != 0) return 1;
 
@@ -72,19 +93,30 @@ int main(int argc, char** argv) {
 
     setup_signals();
 
-    sim_time_t *t = &shm->time_control;
+    int day, hour, min;
+    get_sim_time(shm, &day, &hour, &min);
 
     // 3. Connect to Ticket Issuer
+    
+    // Determine socket path
+    const char* user_home = getenv("HOME");
+    char sock_path[512];
+    if (user_home) {
+        snprintf(sock_path, sizeof(sock_path), "%s/.postoffice/issuer.sock", user_home);
+    } else {
+        snprintf(sock_path, sizeof(sock_path), "/tmp/postoffice_%d_issuer.sock", getuid());
+    }
+
     int sock_fd = -1;
     for (int i = 0; i < 100; i++) {
-        sock_fd = po_socket_connect_unix(SIM_SOCK_ISSUER);
+        sock_fd = po_socket_connect_unix(sock_path);
         if (sock_fd >= 0) break;
         usleep(20000); // 20ms retry
     }
 
     if (sock_fd < 0) {
-        LOG_ERROR("[Day %d %02d:%02d] User process failed to connect to socket", 
-                  atomic_load(&t->day), atomic_load(&t->hour), atomic_load(&t->minute));
+        LOG_ERROR("[Day %d %02d:%02d] User process failed to connect to socket %s", 
+                  day, hour, min, sock_path);
         sim_ipc_shm_detach(shm);
         po_logger_shutdown();
         return 1;
@@ -95,7 +127,14 @@ int main(int argc, char** argv) {
         .requester_pid = getpid(),
         .service_type = (service_type_t)service_type
     };
-    po_socket_send(sock_fd, &req, sizeof(req), 0);
+    ssize_t sent = po_socket_send(sock_fd, &req, sizeof(req), 0);
+    if (sent != sizeof(req)) {
+        LOG_ERROR("User %d failed to send ticket request (sent=%zd, errno=%d)", user_id, sent, errno);
+        po_socket_close(sock_fd);
+        sim_ipc_shm_detach(shm);
+        po_logger_shutdown();
+        return 1;
+    }
 
     msg_ticket_resp_t resp;
     ssize_t n = -1;
@@ -121,8 +160,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    get_sim_time(shm, &day, &hour, &min);
     LOG_INFO("[Day %d %02d:%02d] User %d (PID %d) got ticket %u for service %d", 
-             atomic_load(&t->day), atomic_load(&t->hour), atomic_load(&t->minute),
+             day, hour, min,
              user_id, getpid(), resp.ticket_number, resp.assigned_service);
 
     // 5. Enter Queue (Increment "Waiting" Semaphore)
@@ -133,17 +173,24 @@ int main(int argc, char** argv) {
     // So User must "Give" (Post/Signal) a unit.
     // Yes.
 
+
     int semid = sim_ipc_sem_get();
     if (semid != -1) {
+        // Increment SHM waiting count FIRST to avoid race with worker
+        atomic_fetch_add(&shm->queues[service_type].waiting_count, 1);
+
         struct sembuf sb = {
             .sem_num = (unsigned short)service_type,
             .sem_op = 1, // Increment (Post user availability)
             .sem_flg = 0
         };
-        semop(semid, &sb, 1);
-
-        // Also update SHM stats for visibility
-        atomic_fetch_add(&shm->queues[service_type].waiting_count, 1);
+        if (semop(semid, &sb, 1) == -1) {
+            LOG_WARN("User %d semop failed (errno=%d)", user_id, errno);
+            // Rollback if failed
+            atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
+        }
+    } else {
+        LOG_WARN("User %d failed to get semid", user_id);
     }
 
     // 6. Wait for Service
@@ -155,7 +202,7 @@ int main(int argc, char** argv) {
 
         // Check if I am being served
         // This linear scan is inefficient for many workers but fine for <100
-        for (int i = 0; i < SIM_MAX_WORKERS; i++) {
+        for (uint32_t i = 0; i < shm->params.n_workers; i++) {
             // Need atomic load here
             uint32_t current_t = atomic_load(&shm->workers[i].current_ticket);
             // int current_s = atomic_load(&shm->workers[i].service_type);
@@ -163,8 +210,9 @@ int main(int argc, char** argv) {
             // Check if this worker handles my service and is serving my ticket
             // But wait, ticket numbers are global unique.
             if (current_t == resp.ticket_number) {
+                get_sim_time(shm, &day, &hour, &min);
                 LOG_INFO("[Day %d %02d:%02d] User %d being served by Worker %d", 
-                         atomic_load(&t->day), atomic_load(&t->hour), atomic_load(&t->minute),
+                         day, hour, min,
                          user_id, i);
                 served = true;
                 break;
@@ -185,22 +233,24 @@ int main(int argc, char** argv) {
         while (g_running) {
             // Find my worker again (or remember index)
             bool still_serving = false;
-            for (int i = 0; i < SIM_MAX_WORKERS; i++) {
+            for (uint32_t i = 0; i < shm->params.n_workers; i++) {
                 if (atomic_load(&shm->workers[i].current_ticket) == resp.ticket_number) {
                     still_serving = true;
                     break;
                 }
             }
             if (!still_serving) {
+                get_sim_time(shm, &day, &hour, &min);
                 LOG_INFO("[Day %d %02d:%02d] User %d service completed", 
-                         atomic_load(&t->day), atomic_load(&t->hour), atomic_load(&t->minute), user_id);
+                         day, hour, min, user_id);
                 break; 
             }
             usleep(50000);
         }
     } else {
+        get_sim_time(shm, &day, &hour, &min);
         LOG_WARN("[Day %d %02d:%02d] User %d gave up or sim ended", 
-                 atomic_load(&t->day), atomic_load(&t->hour), atomic_load(&t->minute), user_id);
+                 day, hour, min, user_id);
     }
 
     sim_ipc_shm_detach(shm);

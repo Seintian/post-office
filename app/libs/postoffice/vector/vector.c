@@ -110,14 +110,18 @@ int po_vector_insert(po_vector_t *vec, size_t index, void *element) {
     if (index > vec->size) {
         errno = EINVAL;
         return -1;
-    if (vec->size >= vec->capacity && vector_ensure_capacity(vec, vec->capacity + 1) != 0)
-        return -1; // Allocation failed
-    // Ensure we have enough space
-    if (vec->size >= vec->capacity && vector_ensure_capacity(vec, vec->capacity + 1) == -1)
-        return -1; // Allocation failed
+    }
+
+    if (vec->size >= vec->capacity) {
+        if (vector_ensure_capacity(vec, vec->capacity + 1) != 0) {
+            return -1; // Allocation failed
+        }
+    }
 
     // Shift elements to make space
-    memmove(&vec->data[index + 1], &vec->data[index], (vec->size - index) * sizeof(void *));
+    if (index < vec->size) {
+        memmove(&vec->data[index + 1], &vec->data[index], (vec->size - index) * sizeof(void *));
+    }
 
     vec->data[index] = element;
     vec->size++;

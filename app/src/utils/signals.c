@@ -58,10 +58,11 @@ int sigutil_setup(signals_handler_t handler, unsigned char flag, int handler_fla
     if (sigutil_restore_all() == -1)
         return -1;
 
-    if (SIGUTIL_HANDLE_NON_TERMINATING <= flag && flag <= SIGUTIL_HANDLE_ALL_SIGNALS && !handler) {
+    if ((flag & (SIGUTIL_HANDLE_ALL_SIGNALS | SIGUTIL_HANDLE_TERMINATING_ONLY | SIGUTIL_HANDLE_NON_TERMINATING)) && !handler) {
         errno = EINVAL;
         return -1;
     }
+
 
     if ((flag & SIGUTIL_HANDLE_ALL_SIGNALS) == SIGUTIL_HANDLE_ALL_SIGNALS) {
         if (sigutil_handle_all(handler, handler_flags) == -1)
@@ -128,7 +129,6 @@ int sigutil_handle_terminating(signals_handler_t handler, int flags) {
 
     return 0;
 }
-
 int sigutil_handle_non_terminating(signals_handler_t handler, int flags) {
     for (int i = 1; i < NSIG; i++) {
         bool is_terminating = false;
@@ -140,8 +140,11 @@ int sigutil_handle_non_terminating(signals_handler_t handler, int flags) {
             }
         }
 
-        if (!is_terminating && sigutil_handle(i, handler, flags) == -1)
+        if (!is_terminating && sigutil_handle(i, handler, flags) == -1) {
+            if (errno == EINVAL)
+                continue;
             return -1;
+        }
     }
 
     return 0;
@@ -257,8 +260,9 @@ int sigutil_restore_all(void) {
 
     for (int i = 1; i < NSIG; i++) {
         if (sigaction(i, &sa, NULL) == -1) {
-            /* ignore non-catchable signals */
-            continue;
+            if (errno == EINVAL)
+                continue;  /* ignore non-catchable signals */
+            return -1;
         }
     }
 
@@ -291,13 +295,12 @@ int sigutil_wait(int signum) {
         return -1;
 
     int sig;
-    if (sigwait(&sigset, &sig) == -1)
-        return -1;
+    int ret = sigwait(&sigset, &sig);
 
     if (sigutil_unblock(signum) == -1)
         return -1;
 
-    return 0;
+    return ret;
 }
 
 int sigutil_wait_any(void) {
@@ -313,9 +316,6 @@ int sigutil_wait_any(void) {
     if (sigwait(&new_sigset, &sig) == -1)
         return -1;
 
-    if (sigutil_unblock_all() == -1)
-        return -1;
-
     /* Restore the old sigset of blocked signals */
     if (sigprocmask(SIG_SETMASK, &old_sigset, NULL) == -1)
         return -1;
@@ -328,25 +328,57 @@ int sigutil_wait_any(void) {
 }
 
 int sigutil_signal_children(int sig) {
+    /* Block all signals to ensure atomicity of the PGID swap */
+    sigset_t old_mask, all_mask;
+    if (sigfillset(&all_mask) == -1) return -1;
+    if (sigprocmask(SIG_BLOCK, &all_mask, &old_mask) == -1) return -1;
+
     /* Save the current process group ID */
     pid_t old_pgid = getpgid(0);
-    if (old_pgid == -1)
+    if (old_pgid == -1) {
+        sigprocmask(SIG_SETMASK, &old_mask, NULL);
         return -1;
+    }
 
     /* Get the parent Process Group ID */
     pid_t new_pgid = getpgid(getppid());
-    if (new_pgid == -1)
+    if (new_pgid == -1) {
+        sigprocmask(SIG_SETMASK, &old_mask, NULL);
         return -1;
+    }
 
-    if (setpgid(0, new_pgid) == -1)
+    /* Switch process group */
+    if (setpgid(0, new_pgid) == -1) {
+        sigprocmask(SIG_SETMASK, &old_mask, NULL);
         return -1;
+    }
 
-    if (killpg(old_pgid, sig) == -1)
-        return -1;
+    /* Signal the group (which should include siblings now, but we are signaling old_pgid?)
+       Wait, the original logic was:
+       setpgid(0, parent_pgid); 
+       killpg(old_pgid, sig);  <-- Signal the GROUP we just left?
+       setpgid(0, old_pgid);
 
-    /* Reset the process group ID to the original */
-    if (setpgid(0, old_pgid) == -1)
-        return -1;
+       If we change PGID to parent's, we are no longer in `old_pgid`. 
+       If `old_pgid` was our own private group (common for leaders), then `killpg(old_pgid)` signals our children.
+       This logic seems intended to signal "my children" by:
+       1. Leaving the group (so I don't signal myself, if I was the leader?)
+       2. Signaling the group.
+       3. Rejoining.
+       
+       Yes, that seems to be the intent.
+    */
+    int ret = killpg(old_pgid, sig);
 
-    return 0;
+    /* Restore process group */
+    if (setpgid(0, old_pgid) == -1) {
+        /* This is bad: we are stuck in parent's group. 
+           But we can't do much else than report error. */
+        ret = -1; 
+    }
+
+    /* Restore signal mask */
+    sigprocmask(SIG_SETMASK, &old_mask, NULL);
+
+    return ret == 0 ? 0 : -1;
 }
