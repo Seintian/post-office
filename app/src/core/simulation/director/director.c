@@ -36,6 +36,9 @@ static po_vector_t *g_child_pids = NULL;
 
 static uint32_t g_n_workers = DEFAULT_WORKERS;
 static const char* g_config_path = NULL; // Global config path
+static int g_n_users_initial = 5; // Initial users count
+static int g_n_users_batch = 5; // Add/remove batch size
+static const char* g_log_level_str = "INFO"; //Log level string
 
 // Define constants for default start time
 #define DEFAULT_START_DAY 1
@@ -63,8 +66,14 @@ static void parse_args(int argc, char** argv) {
                 g_config_path = optarg; // Store config path
                 break;
             case 'l':
-                // Log level handling (Placeholder)
-                fprintf(stderr, "Warning: --loglevel %s ignored (not implemented)\n", optarg);
+                // Check if valid level
+                if (po_logger_level_from_str(optarg) == -1) {
+                    fprintf(stderr, "Invalid log level: %s\n", optarg);
+                    // fallback to INFO
+                } else {
+                    g_log_level_str = optarg;
+                    setenv("PO_LOG_LEVEL", optarg, 1);
+                }
                 break;
             case 'w': {
                 char *endptr;
@@ -162,15 +171,39 @@ static void load_config_into_shm(const char *config_path) {
         // For now, let's just log it.
     } 
 
-    // [users_manager] N_NEW_USERS
+    // [users_manager] N_NEW_USERS (batch size for add/remove)
     int n_new_users = 0;
     if (po_config_get_int(cfg, "users_manager", "N_NEW_USERS", &n_new_users) == 0 && n_new_users > 0) {
+        g_n_users_batch = n_new_users;
+        g_n_users_initial = n_new_users; // Also use as initial count
+        LOG_INFO("Config: Users initial=%d, batch=%d", g_n_users_initial, g_n_users_batch);
+    }
+
+    // [users]
+    int n_requests = 0;
+    if (po_config_get_int(cfg, "users", "N_REQUESTS", &n_requests) == 0 && n_requests > 0) {
         char buf[16];
-        snprintf(buf, sizeof(buf), "%d", n_new_users);
-        setenv("PO_USERS_COUNT", buf, 1);
-        LOG_INFO("Config: Set PO_USERS_COUNT to %d", n_new_users);
-    }    // "Implement both TIMEOUT and EXPLODE conditions". Worker count is separate issue.
-    // We will stick to Termination parameters for now.
+        snprintf(buf, sizeof(buf), "%d", n_requests);
+        setenv("PO_USER_REQUESTS", buf, 1);
+        LOG_INFO("Config: Set PO_USER_REQUESTS to %d", n_requests);
+    }
+    
+    // Probabilities are doubles/floats. config parser supports string/int/bool? 
+    // Need to check po_config API or use get_string and strtod.
+    // Assuming po_config_get_string exists or similar.
+    // Checking previous context: only get_int, get_long in snippet.
+    // Let's assume get_string is available or use get_int for now if scaled? 
+    // They are probabilities 0.5. So likely string.
+    const char* p_min = NULL;
+    if (po_config_get_str(cfg, "users", "P_SERV_MIN", &p_min) == 0 && p_min) {
+        setenv("PO_USER_P_MIN", p_min, 1);
+    }
+
+    const char* p_max = NULL;
+    if (po_config_get_str(cfg, "users", "P_SERV_MAX", &p_max) == 0 && p_max) {
+        setenv("PO_USER_P_MAX", p_max, 1);
+    }
+
 
     LOG_INFO("Loaded Config: Duration=%u days, Tick=%lu ns, Explode=%u",
              g_shm->params.sim_duration_days, g_shm->params.tick_nanos, g_shm->params.explode_threshold);
@@ -214,8 +247,15 @@ int main(int argc, char** argv) {
     }
 
     // 2. Initialize Logger with optimal cache line size
+    int initial_level = LOG_INFO;
+    char *env_lvl = getenv("PO_LOG_LEVEL");
+    if (env_lvl) {
+        int l = po_logger_level_from_str(env_lvl);
+        if (l != -1) initial_level = l;
+    }
+
     po_logger_config_t log_cfg = {
-        .level = LOG_INFO,
+        .level = initial_level,
         .ring_capacity = 4096,
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
@@ -311,7 +351,7 @@ int main(int argc, char** argv) {
     // Spawn Ticket Issuer
     char fd_str[16];
     snprintf(fd_str, sizeof(fd_str), "%d", issuer_sock_fd);
-    char *args_issuer[] = {(char*)bin_issuer, "-l", "INFO", "--socket-fd", fd_str, NULL};
+    char *args_issuer[] = {(char*)bin_issuer, "-l", (char*)g_log_level_str, "--socket-fd", fd_str, NULL};
     spawn_process(bin_issuer, args_issuer);
 
     // 6. Spawn Workers
@@ -325,14 +365,15 @@ int main(int argc, char** argv) {
         char stype_buf[16];
         snprintf(stype_buf, sizeof(stype_buf), "%d", stype);
         
-        char *args_worker[] = {(char*)bin_worker, "-i", id_buf, "-s", stype_buf, NULL};
+        char *args_worker[] = {(char*)bin_worker, "-l", (char*)g_log_level_str, "-i", id_buf, "-s", stype_buf, NULL};
         spawn_process(bin_worker, args_worker);
     }
 
     // Spawn Users Manager
-    char pid_str[16];
-    snprintf(pid_str, sizeof(pid_str), "%d", getpid());
-    char *args_manager[] = {(char*)bin_manager, "--pid", pid_str, NULL};
+    char initial_str[16], batch_str[16];
+    snprintf(initial_str, sizeof(initial_str), "%d", g_n_users_initial);
+    snprintf(batch_str, sizeof(batch_str), "%d", g_n_users_batch);
+    char *args_manager[] = {(char*)bin_manager, "-l", (char*)g_log_level_str, "--initial", initial_str, "--batch", batch_str, NULL};
     spawn_process(bin_manager, args_manager);
 
     po_task_queue_t task_queue;
@@ -380,7 +421,7 @@ int main(int argc, char** argv) {
     while (g_running) {
         // Update Time
         update_sim_time(g_shm, current_day, current_hour, current_min);
-        
+
         // Sleep for 1 "tick" (1 simulated minute)
         // Convert tick_nanos to microseconds for usleep
         uint64_t sleep_us = g_shm->params.tick_nanos / 1000;
@@ -389,18 +430,8 @@ int main(int argc, char** argv) {
 
         // Advance 1 minute
         current_min++;
-        if (current_min >= 60) {
-            current_min = 0;
-            current_hour++;
-            if (current_hour >= 24) {
-                current_day++;
-                current_hour = 0;
-                LOG_INFO("Day %d begin", current_day);
-            }
-        }
-        
-        // CHECK TERMINATION CONDITIONS
-        
+        // Check limits before logging day change
+
         // 1. Timeout
         if (g_shm->params.sim_duration_days > 0 && 
             (uint32_t)current_day > g_shm->params.sim_duration_days) {
@@ -409,19 +440,36 @@ int main(int argc, char** argv) {
             break;
         }
 
+        if (current_min >= 60) {
+            current_min = 0;
+            current_hour++;
+            if (current_hour >= 24) {
+                current_day++;
+                current_hour = 0;
+                
+                // Moved check above
+                if (g_shm->params.sim_duration_days > 0 && 
+                    (uint32_t)current_day > g_shm->params.sim_duration_days) {
+                        // Will break next iter
+                } else {
+                    LOG_INFO("Day %d begin", current_day);
+                }
+            }
+        }
+
         // 2. Explode (Queue Overflow)
         if (g_shm->params.explode_threshold > 0) {
-             uint32_t total_waiting = 0;
-             for (int i = 0; i < SIM_MAX_SERVICE_TYPES; i++) {
-                 total_waiting += atomic_load(&g_shm->queues[i].waiting_count);
-             }
-             
-             if (total_waiting >= g_shm->params.explode_threshold) {
-                 LOG_FATAL("EXPLODE: Too many waiting users (%u >= %u). Simulation collapsed.", 
-                           total_waiting, g_shm->params.explode_threshold);
-                 g_running = 0;
-                 break;
-             }
+            uint32_t total_waiting = 0;
+            for (int i = 0; i < SIM_MAX_SERVICE_TYPES; i++) {
+                total_waiting += atomic_load(&g_shm->queues[i].waiting_count);
+            }
+
+            if (total_waiting > g_shm->params.explode_threshold) {
+                LOG_FATAL("EXPLODE: Too many waiting users (%u > %u). Simulation collapsed.", 
+                        total_waiting, g_shm->params.explode_threshold);
+                g_running = 0;
+                break;
+            }
         }
 
         // A. Child Monitoring

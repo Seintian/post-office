@@ -9,6 +9,7 @@
 #include <postoffice/log/logger.h>
 #include <utils/errors.h>
 #include <postoffice/perf/cache.h>
+#include <postoffice/perf/perf.h>
 #include "../ipc/simulation_ipc.h"
 #include <postoffice/net/poller.h>
 #include "../ipc/simulation_protocol.h"
@@ -187,5 +188,6 @@ int main(int argc, char** argv) {
     close(server_fd); 
     sim_ipc_shm_detach(shm);
     po_logger_shutdown();
+    po_perf_shutdown(NULL);
     return 0;
 }

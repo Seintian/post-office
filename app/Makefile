@@ -151,13 +151,6 @@ CONFIG ?= $(shell \
 # Default logger level (TRACE, DEBUG, INFO, WARN, ERROR, FATAL)
 LOG_LEVEL ?= TRACE
 
-# Director PID (used by users manager)
-DIRECTOR_PID ?= $(shell pidof -s "$(BIN_DIR)/$(PROJECT_PREFIX)director")
-
-# Arguments for users manager process
-USERS_MANAGER_ARGS = --loglevel "$(LOG_LEVEL)" --pid "$(DIRECTOR_PID)"
-USERS_MANAGER_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)users_manager
-
 # Arguments for main process
 MAIN_ARGS = --config "$(CONFIG)" --loglevel "$(LOG_LEVEL)"
 MAIN_TUI_ARGS = $(MAIN_ARGS) --tui
@@ -167,13 +160,10 @@ MAIN_EXEC = $(PROFILER) $(BIN_DIR)/$(PROJECT_PREFIX)main
 DIRECTOR_ARGS = --config "$(CONFIG)" --loglevel "$(LOG_LEVEL)" --headless
 DIRECTOR_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)director
 
-# Arguments for ticket issuer process
-TICKET_ISSUER_ARGS =
+# Executables for simulation processes
 TICKET_ISSUER_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)ticket_issuer
-
-# Arguments for worker process
-WORKER_ARGS =
 WORKER_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)worker
+USERS_MANAGER_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)users_manager
 
 # Arguments for user process
 USER_ARGS =
@@ -304,7 +294,7 @@ APP_ENTRYPOINT_OBJS = $(BUILD_DIR)/main/main.o $(BUILD_DIR)/director/director.o 
                       $(BUILD_DIR)/users_manager/users_manager.o $(BUILD_DIR)/worker/worker.o $(BUILD_DIR)/user/user.o
 APP_COMMON_OBJS    = $(filter-out $(APP_ENTRYPOINT_OBJS),$(APP_ALL_OBJS))
 
-TEST_MAIN_OBJS 		= $(TEST_OBJS) $(APP_COMMON_OBJS) $(DEFAULTS_OBJS) $(UNITY_OBJS)
+TEST_MAIN_OBJS 		= $(TEST_OBJS) $(APP_COMMON_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(UNITY_OBJS)
 
 # *** Targets *** #
 
@@ -340,15 +330,15 @@ simulation: _simulation-only
 	@$(DIRECTOR_EXEC) $(DIRECTOR_ARGS) || \
 		(EXIT_CODE=$$? && echo "> Makefile: ERROR: Director process failed with exit code $$EXIT_CODE"; exit $$EXIT_CODE)
 
-# Run the users manager to add `N_NEW_USERS` users
-add-users: _simulation-only
-	@if [ -z "$(DIRECTOR_PID)" ]; then \
-		echo "> Makefile: ERROR: Director process is not running. Start the director before adding users."; \
-		exit 1; \
-	fi
-	@echo "> Makefile: Running the Users Manager to add new users..."
-	@$(USERS_MANAGER_EXEC) $(USERS_MANAGER_ARGS) || \
-		(EXIT_CODE=$$? && echo "> Makefile: ERROR: Users Manager process failed with exit code $$EXIT_CODE"; exit $$EXIT_CODE)
+# Run the users manager to add `N_NEW_USERS` users (sends SIGUSR1)
+add-users:
+	@echo "> Makefile: Sending add-users signal..."
+	@pkill -USR1 -f "bin/post_office_users_manager" || echo "> Makefile: ERROR: Users Manager not running"
+
+# Remove `N_NEW_USERS` users (sends SIGUSR2)
+rem-users:
+	@echo "> Makefile: Sending remove-users signal..."
+	@pkill -USR2 -f "bin/post_office_users_manager" || echo "> Makefile: ERROR: Users Manager not running"
 
 # Run the simulation with TIMEOUT configuration
 timeout:

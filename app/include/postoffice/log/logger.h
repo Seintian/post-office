@@ -116,6 +116,13 @@ int po_logger_set_level(po_log_level_t level);
 po_log_level_t po_logger_get_level(void);
 
 /**
+ * @brief Parse log level from string.
+ * @param str String representation (TRACE, DEBUG, INFO, WARN, ERROR, FATAL).
+ * @return Log level or -1 if invalid.
+ */
+int po_logger_level_from_str(const char *str);
+
+/**
  * @brief Add console output as a log sink.
  *
  * @param use_stderr If true, use stderr; otherwise use stdout.

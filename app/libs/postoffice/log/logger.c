@@ -177,14 +177,14 @@ static char *fast_pad6(long v, char *p) {
 static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
     // Format: "%s.%06ld %lu %-5s %s:%d %s() - %s\n"
     // "YYYY-MM-DD HH:MM:SS" is 19 chars
-    
+
     // We assume outsz is large enough (MAX_RECORD_SIZE) so strict checking 
     // on every field isn't critical for crash safety but we should be reasonable.
     // The logger buffer is huge relative to these fields.
     (void)outsz;
-    
+
     char *p = out;
-    
+
     // 1. Timestamp (Cached)
     if (r->ts.tv_sec != t_cache_sec) {
         struct tm tm_val;
@@ -193,27 +193,26 @@ static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
         strftime(t_cache_ts, sizeof(t_cache_ts), "%Y-%m-%d %H:%M:%S", &tm_val);
         t_cache_sec = s;
     }
-    
+
     // Copy timestamp reference strings are fixed length 19
     memcpy(p, t_cache_ts, 19);
     p += 19;
-    
+
     *p++ = '.';
-    
+
     // 2. Microseconds (padded 6)
     long usec = r->ts.tv_nsec / 1000L;
     p = fast_pad6(usec, p);
-    
+
     *p++ = ' ';
-    
+
     // 3. Thread ID
     p = fast_utoa10(r->tid, p);
-    
+
     *p++ = ' ';
-    
+
     // 4. Log Level (padded to 5 chars)
     // "TRACE", "DEBUG", "INFO ", "WARN ", "ERROR", "FATAL"
-    // We can just hardcode the padded versions here
     const char *lvl_str;
     switch (r->level) {
         case LOG_TRACE: lvl_str = "TRACE"; break;
@@ -224,42 +223,36 @@ static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
         case LOG_FATAL: lvl_str = "FATAL"; break;
         default:        lvl_str = "UNK  "; break;
     }
-    // All are 5 chars
     memcpy(p, lvl_str, 5);
     p += 5;
-    
+
     *p++ = ' ';
-    
+
     // 5. File
     const char *f = r->file;
     while (*f) *p++ = *f++;
-    
+
     *p++ = ':';
-    
+
     // 6. Line
     p = fast_utoa10((uint64_t)r->line, p);
     
     *p++ = ' ';
-    
-    // 7. Func
-    const char *fn = r->func;
-    while (*fn) *p++ = *fn++;
-    
-    // 8. Separator "() - "
-    // Note: User format was "%s() - %s".
-    // r->func is just the name "function_name".
-    *p++ = '(';
-    *p++ = ')';
-    *p++ = ' ';
-    *p++ = '-';
-    *p++ = ' ';
-    
+
+    // 7. Func (only if not empty)
+    if (r->func[0]) {
+        const char *fn = r->func;
+        while (*fn) *p++ = *fn++;
+
+        *p++ = ' ';
+        *p++ = '-';
+        *p++ = ' ';
+    }
+
     // 9. Message
     const char *m = r->msg;
-    // We could use strcpy/memcpy if we trusted lengths, but let's loop to be safe or use strlen
-    // r->msg is null terminated
     while (*m) *p++ = *m++;
-    
+
     *p++ = '\n';
     *p = '\0';
 }
@@ -726,6 +719,18 @@ void po_logger_log(po_log_level_t level, const char *file, int line, const char 
     va_start(ap, fmt);
     po_logger_logv(level, file, line, func, fmt, ap);
     va_end(ap);
+}
+
+
+int po_logger_level_from_str(const char *str) {
+    if (!str) return -1;
+    if (strcasecmp(str, "TRACE") == 0) return LOG_TRACE;
+    if (strcasecmp(str, "DEBUG") == 0) return LOG_DEBUG;
+    if (strcasecmp(str, "INFO") == 0)  return LOG_INFO;
+    if (strcasecmp(str, "WARN") == 0)  return LOG_WARN;
+    if (strcasecmp(str, "ERROR") == 0) return LOG_ERROR;
+    if (strcasecmp(str, "FATAL") == 0) return LOG_FATAL;
+    return -1;
 }
 
 void po_logger_crash_dump(int fd) {

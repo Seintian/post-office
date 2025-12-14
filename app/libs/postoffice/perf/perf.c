@@ -678,7 +678,7 @@ int po_perf_report(FILE *out) {
     size_t nt = atomic_load(&ctx.shm->num_timers);
     if (nt > 0) {
         print_line(out, "-- Timers --");
-        shm_timer_t *local_t = malloc(nt * sizeof(shm_timer_t));
+        void *ptr = NULL; if (posix_memalign(&ptr, 128, (nt * sizeof(shm_timer_t) + 127) & ~(size_t)127) != 0) ptr = NULL; shm_timer_t *local_t = ptr;
         memcpy(local_t, ctx.shm->timers, nt * sizeof(shm_timer_t));
         qsort(local_t, nt, sizeof(shm_timer_t), compare_shm_timers);
 

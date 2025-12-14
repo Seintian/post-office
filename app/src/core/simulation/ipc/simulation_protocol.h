@@ -69,6 +69,11 @@ _Static_assert(sizeof(worker_status_t) % PO_CACHE_LINE_MAX == 0, "worker_status_
 typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) queue_status_s {
     atomic_uint waiting_count;   // Users currently in queue
     atomic_uint total_served;    // Cumulative users served
+
+    // Ticket Queue for User->Worker handoff
+    atomic_uint head;
+    atomic_uint tail;
+    atomic_uint tickets[128]; // 0 = empty, val = ticket+1
 } queue_status_t;
 _Static_assert(sizeof(queue_status_t) % PO_CACHE_LINE_MAX == 0, "queue_status_t size mismatch");
 
