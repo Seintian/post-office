@@ -219,11 +219,17 @@ TEST(APP, METRICS_AND_PUBLIC_APIS_SMOKE) {
     po_args_destroy(&args);
 
     // Logger + storage high-level API (attach sink)
+    po_sysinfo_t sysinfo;
+    size_t cacheline_size = 64; // default
+    if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
+        cacheline_size = (size_t)sysinfo.dcache_lnsize;
+    }
+
     po_logger_config_t lcfg = {.level = LOG_INFO,
                                .ring_capacity = 256,
                                .consumers = 1,
                                .policy = LOGGER_OVERWRITE_OLDEST,
-                               .cacheline_bytes = 64};
+                               .cacheline_bytes = cacheline_size};
     TEST_ASSERT_EQUAL_INT(0, po_logger_init(&lcfg));
     char tdir[] = "/tmp/po_storageXXXXXX";
     TEST_ASSERT_NOT_NULL(mkdtemp(tdir));

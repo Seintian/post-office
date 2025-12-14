@@ -100,8 +100,7 @@ TEST_SETUP(PERF_CONCURRENCY) {
 }
 
 TEST_TEAR_DOWN(PERF_CONCURRENCY) {
-    po_perf_report(stdout);
-    po_perf_shutdown(NULL);
+    po_perf_shutdown(NULL);  // Suppress report output during tests
 }
 
 // Test 1: Multi-threaded counter increments

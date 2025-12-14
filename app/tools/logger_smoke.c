@@ -1,4 +1,5 @@
 #include <postoffice/log/logger.h>
+#include <postoffice/sysinfo/sysinfo.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,11 +29,19 @@ int main(void) {
             level = LOG_FATAL;
     }
 
+    // Collect system information for optimizations
+    po_sysinfo_t sysinfo;
+    size_t cacheline_size = 64; // default
+    if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
+        cacheline_size = (size_t)sysinfo.dcache_lnsize;
+    }
+
     po_logger_config_t cfg = {
         .level = level,
         .ring_capacity = 1u << 12,
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
+        .cacheline_bytes = cacheline_size,
     };
     if (po_logger_init(&cfg) != 0) {
         fprintf(stderr, "logger: init failed\n");

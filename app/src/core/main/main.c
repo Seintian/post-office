@@ -34,15 +34,17 @@ static int parse_arguments(po_args_t *args, int argc, char *argv[]) {
 /**
  * Initialize the logger with appropriate configuration.
  * 
- * @param args Parsed command-line arguments
+ * @param loglevel Log level to use
+ * @param cacheline_size Cache line size for optimal alignment
  * @return 0 on success, non-zero on failure
  */
-static int initialize_logger(int loglevel) {
+static int initialize_logger(int loglevel, size_t cacheline_size) {
     po_logger_config_t cfg = {
         .level = (loglevel >= 0 && loglevel <= 5) ? (po_log_level_t)loglevel : LOG_INFO,
         .ring_capacity = 1u << 14, // 16384 entries
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
+        .cacheline_bytes = cacheline_size,
     };
 
     if (po_logger_init(&cfg) != 0) {
@@ -230,14 +232,21 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // Collect system information for optimizations
+    po_sysinfo_t sysinfo;
+    size_t cacheline_size = 64; // default
+    if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
+        cacheline_size = (size_t)sysinfo.dcache_lnsize;
+    }
+
     // Initialize metrics (BEFORE logger)
     if (initialize_metrics() != 0) {
         po_args_destroy(&args);
         return 1;
     }
 
-    // Initialize logger
-    if (initialize_logger(args.loglevel) != 0) {
+    // Initialize logger with optimal cache line size
+    if (initialize_logger(args.loglevel, cacheline_size) != 0) {
         po_args_destroy(&args);
         return 1;
     }

@@ -19,6 +19,26 @@
  *  - Header-only macros: avoid function call / branch overhead on hot paths.
  *  - Safe to invoke before explicit creation (create-on-first-use for timers /
  *    counters / histograms via underlying perf calls where semantics allow).
+ *  - **Timers use Coarse Clock**: To minimize overhead (~5ns vs ~50ns), timers
+ *    use `CLOCK_MONOTONIC_COARSE`. Precision is reduced to **~1-4ms** (tick
+ *    rate dependent). Use for coarse-grained loops, not micro-benchmarks.
+ *
+ *  Performance Optimization Strategy
+ *  ---------------------------------
+ *  This header uses a hybrid caching strategy to achieve zero-overhead metric
+ *  recording on hot paths while maintaining safety for dynamic usages:
+ *
+ *  1. **Static Caching (Hot Path)**: When a string literal (constant known at
+ *     compile-time) is passed as the metric name, the macro uses a
+ *     `static __thread int` index to cache the lookup result. This reduces the
+ *     cost of subsequent calls to a single integer check and direct memory
+ *     access, bypassing hash computation and table lookups entirely.
+ *     **Recommendation**: Use string literals for all high-frequency metrics.
+ *
+ *  2. **Dynamic Lookup (Fallback)**: When a dynamic string (variable) is passed,
+ *     the macro bypasses the static cache and performs a safe lookup/hash on
+ *     every call. This prevents aliasing bugs where different dynamic strings
+ *     at the same call site would reuse the wrong cached index.
  *
  *  Thread Safety & Ordering
  *  ------------------------
@@ -150,15 +170,79 @@ static inline uint64_t po_metric_now_ns(void) {
         (void)(val);                                                                               \
     } while (0)
 #else
-// Active implementation delegates to perf.*
+// Active implementation with TLS-based index caching for zero-overhead hot paths
 #define PO_METRIC_COUNTER_CREATE(name) po_perf_counter_create((name))
-#define PO_METRIC_COUNTER_INC(name) po_perf_counter_inc((name))
-#define PO_METRIC_COUNTER_ADD(name, d) po_perf_counter_add((name), (uint64_t)(d))
+
+// Compiler portability wrapper for constant checking optimization
+#if defined(__GNUC__) || defined(__clang__) || defined(__INTEL_COMPILER)
+    #define PO_IS_CONSTANT(x) __builtin_constant_p(x)
+#else
+    #define PO_IS_CONSTANT(x) 0
+#endif
+
+#define PO_METRIC_COUNTER_INC(name) do { \
+    if (PO_IS_CONSTANT(name)) { \
+        static __thread int _cached_idx = -1; \
+        if (_cached_idx < 0) { \
+            _cached_idx = po_perf_counter_lookup(name); \
+        } \
+        po_perf_counter_inc_by_idx(_cached_idx); \
+    } else { \
+        po_perf_counter_inc(name); \
+    } \
+} while (0)
+
+#define PO_METRIC_COUNTER_ADD(name, delta) do { \
+    if (PO_IS_CONSTANT(name)) { \
+        static __thread int _cached_idx = -1; \
+        if (_cached_idx < 0) { \
+            _cached_idx = po_perf_counter_lookup(name); \
+        } \
+        po_perf_counter_add_by_idx(_cached_idx, (uint64_t)(delta)); \
+    } else { \
+        po_perf_counter_add((name), (uint64_t)(delta)); \
+    } \
+} while (0)
+
 #define PO_METRIC_TIMER_CREATE(name) po_perf_timer_create((name))
-#define PO_METRIC_TIMER_START(name) po_perf_timer_start((name))
-#define PO_METRIC_TIMER_STOP(name) po_perf_timer_stop((name))
+
+#define PO_METRIC_TIMER_START(name) do { \
+    if (PO_IS_CONSTANT(name)) { \
+        static __thread int _cached_idx = -1; \
+        if (_cached_idx < 0) { \
+            _cached_idx = po_perf_timer_lookup(name); \
+        } \
+        po_perf_timer_start_by_idx(_cached_idx); \
+    } else { \
+        po_perf_timer_start(name); \
+    } \
+} while (0)
+
+#define PO_METRIC_TIMER_STOP(name) do { \
+    if (PO_IS_CONSTANT(name)) { \
+        static __thread int _cached_idx = -1; \
+        if (_cached_idx < 0) { \
+            _cached_idx = po_perf_timer_lookup(name); \
+        } \
+        po_perf_timer_stop_by_idx(_cached_idx); \
+    } else { \
+        po_perf_timer_stop(name); \
+    } \
+} while (0)
+
 #define PO_METRIC_HISTO_CREATE(name, bins, nbins) po_perf_histogram_create((name), (bins), (nbins))
-#define PO_METRIC_HISTO_RECORD(name, val) po_perf_histogram_record((name), (uint64_t)(val))
+
+#define PO_METRIC_HISTO_RECORD(name, val) do { \
+    if (PO_IS_CONSTANT(name)) { \
+        static __thread int _cached_idx = -1; \
+        if (_cached_idx < 0) { \
+            _cached_idx = po_perf_histogram_lookup(name); \
+        } \
+        po_perf_histogram_record_by_idx(_cached_idx, (uint64_t)(val)); \
+    } else { \
+        po_perf_histogram_record((name), (uint64_t)(val)); \
+    } \
+} while (0)
 #endif
 
 #ifdef __cplusplus

@@ -15,6 +15,7 @@
 #include <postoffice/log/logger.h>
 #include <postoffice/metrics/metrics.h>
 #include <postoffice/perf/perf.h>
+#include <postoffice/sysinfo/sysinfo.h>
 
 static volatile sig_atomic_t g_user_running = 0;
 
@@ -24,6 +25,13 @@ static void user_handle_signal(int sig) {
 }
 
 int user_init(void) {
+    // Collect system information for optimizations
+    po_sysinfo_t sysinfo;
+    size_t cacheline_size = 64; // default
+    if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
+        cacheline_size = (size_t)sysinfo.dcache_lnsize;
+    }
+
     if (po_metrics_init() != 0) {
         fprintf(stderr, "user: metrics init failed\n");
     }
@@ -32,7 +40,8 @@ int user_init(void) {
         .level = LOG_INFO,
         .ring_capacity = 4096,
         .consumers = 1,
-        .policy = LOGGER_OVERWRITE_OLDEST
+        .policy = LOGGER_OVERWRITE_OLDEST,
+        .cacheline_bytes = cacheline_size
     };
     if (po_logger_init(&log_cfg) != 0) {
         fprintf(stderr, "user: logger init failed\n");

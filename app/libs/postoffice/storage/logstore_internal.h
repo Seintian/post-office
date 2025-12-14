@@ -23,6 +23,7 @@ extern "C" {
 
 #include "perf/batcher.h"
 #include "perf/ringbuf.h"
+#include "perf/cache.h"
 #include "storage/db_lmdb.h"
 #include "storage/index.h"
 #include "storage/logstore.h"
@@ -40,6 +41,9 @@ typedef struct {
 } append_req_t;
 
 struct po_logstore {
+    // ========================================================================
+    // COLD FIELDS (rarely accessed after initialization)
+    // ========================================================================
     int fd;                                  // append-only file descriptor
     db_env_t *env;                           // LMDB environment
     db_bucket_t *idx;                        // LMDB bucket for index
@@ -47,29 +51,51 @@ struct po_logstore {
     po_perf_batcher_t *b;                    // batching helper
     pthread_t *workers;                      // flush worker thread(s)
     unsigned nworkers;                       // number of workers
-    _Atomic int running;                     // running flag
     po_index_t *mem_idx;                     // fast path in-memory index
     pthread_rwlock_t idx_lock;               // RW lock protecting mem_idx
     size_t batch_size;                       // configured batch size
     po_logstore_fsync_policy_t fsync_policy; // durability policy
-    _Atomic uint64_t seq;                    // sequence for logger sink keys
     append_req_t *sentinel;                  // sentinel request for shutdown
     uint64_t fsync_interval_ns;              // interval (ns) for interval policy
-    uint64_t last_fsync_ns;                  // last fsync timestamp
     unsigned fsync_every_n;                  // threshold for EVERY_N policy
-    unsigned batches_since_fsync;            // counter for EVERY_N policy
     int background_fsync;                    // background fsync thread enabled
     pthread_t fsync_thread;                  // background fsync thread
-    _Atomic int fsync_thread_run;            // background fsync running flag
     size_t max_key_bytes;                    // configured max key size
     size_t max_value_bytes;                  // configured max value size
-    _Atomic size_t outstanding_reqs;         // diagnostic: live append requests (debug/leak guard)
-    _Atomic int worker_ready;                // at least one worker entered main loop
-    // metrics (incremented atomically; cheap and optional)
+    int never_overwrite;                     // if set, append returns -1 when full instead of retrying
+    
+    // ========================================================================
+    // HOT FIELDS (frequently accessed, isolated on separate cache lines)
+    // ========================================================================
+    
+    // Updated by producers (enqueue path)
+    _Atomic uint64_t seq;                    // sequence for logger sink keys
+    char _pad1[PO_CACHE_LINE_MAX - sizeof(_Atomic uint64_t)];
+    
+    // Updated by workers (flush path)
     _Atomic uint64_t metric_batches_flushed;
+    char _pad2[PO_CACHE_LINE_MAX - sizeof(_Atomic uint64_t)];
+    
     _Atomic uint64_t metric_records_flushed;
+    char _pad3[PO_CACHE_LINE_MAX - sizeof(_Atomic uint64_t)];
+    
+    // Updated by producers (error path)
     _Atomic uint64_t metric_enqueue_failures;
-    int never_overwrite; // if set, append returns -1 when full instead of retrying
+    char _pad4[PO_CACHE_LINE_MAX - sizeof(_Atomic uint64_t)];
+    
+    // Updated by both producers and workers
+    _Atomic size_t outstanding_reqs;         // diagnostic: live append requests (debug/leak guard)
+    char _pad5[PO_CACHE_LINE_MAX - sizeof(_Atomic size_t)];
+    
+    // Control flags (read frequently, written rarely)
+    _Atomic int running;                     // running flag
+    _Atomic int worker_ready;                // at least one worker entered main loop
+    _Atomic int fsync_thread_run;            // background fsync running flag
+    char _pad6[PO_CACHE_LINE_MAX - 3 * sizeof(_Atomic int)];
+    
+    // Timing fields (updated by fsync thread)
+    uint64_t last_fsync_ns;                  // last fsync timestamp
+    unsigned batches_since_fsync;            // counter for EVERY_N policy
 };
 
 // Length validation helper (0 ok, -1 invalid)

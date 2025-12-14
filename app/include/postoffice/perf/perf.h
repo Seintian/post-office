@@ -143,6 +143,68 @@ int po_perf_histogram_create(const char *name, const uint64_t *bins, size_t nbin
 int po_perf_histogram_record(const char *name, uint64_t value) __nonnull((1));
 
 // -----------------------------------------------------------------------------
+// Lookup Functions (for macro caching)
+// -----------------------------------------------------------------------------
+
+/**
+ * Lookup or allocate a counter by name, returning its index.
+ * Used by macros for TLS-based index caching.
+ * @param name Counter name
+ * @return Index >= 0 on success, -1 on failure
+ */
+int po_perf_counter_lookup(const char *name) __nonnull((1));
+
+/**
+ * Lookup or allocate a timer by name, returning its index.
+ * @param name Timer name
+ * @return Index >= 0 on success, -1 on failure
+ */
+int po_perf_timer_lookup(const char *name) __nonnull((1));
+
+/**
+ * Lookup a histogram by name, returning its index.
+ * @param name Histogram name
+ * @return Index >= 0 if found, -1 if not found
+ */
+int po_perf_histogram_lookup(const char *name) __nonnull((1));
+
+// -----------------------------------------------------------------------------
+// Fast-Path Functions (operate on indices, for macro caching)
+// -----------------------------------------------------------------------------
+
+/**
+ * Increment counter by index (no lookup overhead).
+ * @param idx Counter index from po_perf_counter_lookup
+ */
+void po_perf_counter_inc_by_idx(int idx);
+
+/**
+ * Add delta to counter by index.
+ * @param idx Counter index
+ * @param delta Amount to add
+ */
+void po_perf_counter_add_by_idx(int idx, uint64_t delta);
+
+/**
+ * Start timer by index.
+ * @param idx Timer index from po_perf_timer_lookup
+ */
+void po_perf_timer_start_by_idx(int idx);
+
+/**
+ * Stop timer by index.
+ * @param idx Timer index
+ */
+void po_perf_timer_stop_by_idx(int idx);
+
+/**
+ * Record histogram value by index.
+ * @param idx Histogram index from po_perf_histogram_lookup
+ * @param value Value to record
+ */
+void po_perf_histogram_record_by_idx(int idx, uint64_t value);
+
+// -----------------------------------------------------------------------------
 // Reporting
 // -----------------------------------------------------------------------------
 

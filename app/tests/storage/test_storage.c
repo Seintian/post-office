@@ -19,6 +19,7 @@
 
 #include "log/logger.h"
 #include "storage/logstore.h"
+#include "sysinfo/sysinfo.h"
 #include "unity/unity_fixture.h"
 
 // ---------------------------------------------------------------------
@@ -528,10 +529,17 @@ TEST(LOGSTORE, LOGGER_SINK_ATTACHED_WRITES_FILE) {
     TEST_ASSERT_NOT_NULL(g_ls);
     TEST_ASSERT_EQUAL_INT(0, po_logstore_attach_logger(g_ls));
     // Init logger minimal if not already
+    po_sysinfo_t sysinfo;
+    size_t cacheline_size = 64; // default
+    if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
+        cacheline_size = (size_t)sysinfo.dcache_lnsize;
+    }
+
     po_logger_config_t lcfg = {.level = LOG_INFO,
                                .ring_capacity = 1024,
                                .consumers = 1,
-                               .policy = LOGGER_OVERWRITE_OLDEST};
+                               .policy = LOGGER_OVERWRITE_OLDEST,
+                               .cacheline_bytes = cacheline_size};
     po_logger_init(&lcfg);
     char path[512];
     snprintf(path, sizeof(path), "%s/aof.log", g_dir);

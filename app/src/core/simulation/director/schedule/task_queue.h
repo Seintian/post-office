@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <postoffice/perf/ringbuf.h>
 #include <postoffice/perf/zerocopy.h>
+#include <postoffice/perf/cache.h>
 
 /**
  * \brief A generic task is a function pointer + context.
@@ -18,11 +19,23 @@ typedef void (*po_task_fn)(void *ctx);
  * \brief Task queue structure.
  * Wraps a perf_ringbuf_t with a spinlock to allow multiple producers.
  * Uses a perf_zcpool_t to allocate task nodes without malloc.
+ * 
+ * Cache line padding prevents false sharing between fields accessed by
+ * different threads. We use PO_CACHE_LINE_MAX (128 bytes) to support
+ * architectures with larger cache lines (e.g., some PowerPC systems).
+ * This wastes memory on x86-64 (64-byte lines) but ensures correctness
+ * everywhere.
  */
+
 typedef struct {
     po_perf_ringbuf_t *ring;
+    char _pad1[PO_CACHE_LINE_MAX - sizeof(void*)];  // Isolate ring pointer
+
     perf_zcpool_t *pool;
+    char _pad2[PO_CACHE_LINE_MAX - sizeof(void*)];  // Isolate pool pointer
+
     pthread_spinlock_t lock;
+    char _pad3[PO_CACHE_LINE_MAX - sizeof(pthread_spinlock_t)];  // Isolate lock
 } po_task_queue_t;
 
 /**

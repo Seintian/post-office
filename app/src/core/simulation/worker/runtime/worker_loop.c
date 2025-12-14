@@ -16,6 +16,7 @@
 #include <postoffice/log/logger.h>
 #include <postoffice/metrics/metrics.h>
 #include <postoffice/perf/perf.h>
+#include <postoffice/sysinfo/sysinfo.h>
 
 static volatile sig_atomic_t g_worker_running = 0;
 
@@ -26,6 +27,13 @@ static void worker_handle_signal(int sig) {
 
 /* Initialize runtime resources for worker (placeholder). */
 int worker_init(void) {
+    // Collect system information for optimizations
+    po_sysinfo_t sysinfo;
+    size_t cacheline_size = 64; // default
+    if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
+        cacheline_size = (size_t)sysinfo.dcache_lnsize;
+    }
+
     if (po_metrics_init() != 0) {
         fprintf(stderr, "worker: metrics init failed\n");
     }
@@ -34,7 +42,8 @@ int worker_init(void) {
         .level = LOG_INFO,
         .ring_capacity = 4096,
         .consumers = 1,
-        .policy = LOGGER_OVERWRITE_OLDEST
+        .policy = LOGGER_OVERWRITE_OLDEST,
+        .cacheline_bytes = cacheline_size
     };
     if (po_logger_init(&log_cfg) != 0) {
         fprintf(stderr, "worker: logger init failed\n");

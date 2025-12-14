@@ -44,6 +44,10 @@ void simulation_start(bool tui_mode) {
         argv[argc++] = "--config";
         argv[argc++] = (char*)g_simulation_config_path;
     }
+    // Pass headless flag to Director when not in TUI mode
+    if (!tui_mode) {
+        argv[argc++] = "--headless";
+    }
     argv[argc++] = NULL;
 
     posix_spawn_file_actions_t actions;
@@ -105,7 +109,13 @@ void simulation_run_headless(void) {
         int status;
         pid_t result = waitpid(g_director_pid, &status, WNOHANG);
         if (result == g_director_pid) {
-            LOG_ERROR("Director exited unexpectedly. Status: %d", WEXITSTATUS(status));
+            // Director exited
+            int exit_status = WEXITSTATUS(status);
+            if (exit_status != 0) {
+                LOG_ERROR("Director exited unexpectedly. Status: %d", exit_status);
+            } else {
+                LOG_INFO("Director exited cleanly.");
+            }
             g_director_pid = -1;
             break;
         } else if (result < 0) {

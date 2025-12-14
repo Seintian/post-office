@@ -3,11 +3,13 @@
 #include <postoffice/metrics/metrics.h>
 #include <postoffice/perf/perf.h>
 #include <postoffice/log/logger.h>
+#include <postoffice/sysinfo/sysinfo.h>
 #include <utils/errors.h>
 #include "schedule/task_queue.h"
 #include "ctrl_bridge/bridge_mainloop.h"
 
 #include <errno.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -17,6 +19,29 @@
 #include <string.h>
 
 static volatile sig_atomic_t g_running = 1;
+static bool g_headless_mode = false;
+
+static void parse_args(int argc, char** argv) {
+    static struct option long_options[] = {
+        {"headless", no_argument, 0, 'h'},
+        {"config", required_argument, 0, 'c'},
+        {0, 0, 0, 0}
+    };
+
+    int opt;
+    while ((opt = getopt_long(argc, argv, "hc:", long_options, NULL)) != -1) {
+        switch (opt) {
+            case 'h':
+                g_headless_mode = true;
+                break;
+            case 'c':
+                // Config handling (if needed in future)
+                break;
+            default:
+                break;
+        }
+    }
+}
 
 static void handle_signal(int sig) {
     (void)sig;
@@ -28,7 +53,7 @@ static void register_signals(void) {
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = handle_signal;
     sigemptyset(&sa.sa_mask);
-    
+
     // Interrupt calls to wake up sleeping loops if possible
     sa.sa_flags = 0; 
 
@@ -36,19 +61,35 @@ static void register_signals(void) {
     sigaction(SIGTERM, &sa, NULL);
 }
 
-int main(void) {
+static void* bridge_thread_fn(void* _) {
+    (void) _;
+    bridge_mainloop_run();
+    return NULL;
+}
+
+int main(int argc, char** argv) {
+    // Parse command-line arguments
+    parse_args(argc, argv);
+
+    // 0. Collect system information for optimizations
+    po_sysinfo_t sysinfo;
+    size_t cacheline_size = 64; // default
+    if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
+        cacheline_size = (size_t)sysinfo.dcache_lnsize;
+    }
+
     // 1. Initialize Metrics Subsystem (which initializes perf internally)
     if (po_metrics_init() != 0) {
         fprintf(stderr, "director: metrics init failed: %s\n", po_strerror(errno));
     }
 
-    // 0. Initialize Logger
+    // 2. Initialize Logger with optimal cache line size
     po_logger_config_t log_cfg = {
         .level = LOG_INFO,
         .ring_capacity = 4096,
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
-        .cacheline_bytes = 0
+        .cacheline_bytes = cacheline_size
     };
     if (po_logger_init(&log_cfg) != 0) {
         fprintf(stderr, "director: logger init failed\n");
@@ -68,29 +109,29 @@ int main(void) {
     // 3. Register Signals
     register_signals();
 
-    // 4. Start Control Bridge in Background Thread
+    // 4. Start Control Bridge in Background Thread (only in TUI mode)
     pthread_t bridge_thread;
     int bridge_started = 0;
-    if (bridge_mainloop_init() == 0) {
-        void* bridge_thread_fn(void* _) {
-            (void) _;
-            bridge_mainloop_run();
-            return NULL;
-        }
 
-        if (pthread_create(&bridge_thread, NULL, bridge_thread_fn, NULL) != 0) {
-            LOG_ERROR("failed to start bridge thread");
+    if (!g_headless_mode) {
+        if (bridge_mainloop_init() == 0) {
+            if (pthread_create(&bridge_thread, NULL, bridge_thread_fn, NULL) != 0) {
+                LOG_ERROR("failed to start bridge thread");
+            } else {
+                bridge_started = 1;
+                LOG_INFO("Control bridge started (TUI mode)");
+            }
         } else {
-            bridge_started = 1;
+            LOG_ERROR("bridge init failed; continuing without control bridge");
         }
     } else {
-        LOG_ERROR("bridge init failed; continuing without control bridge");
+        LOG_INFO("Running in headless mode - control bridge disabled");
     }
 
     // 5. Instrumentation Setup
     PO_METRIC_COUNTER_CREATE("director.lifetime.loops");
     PO_METRIC_COUNTER_CREATE("director.lifetime.tasks");
-    
+
     const uint64_t loop_bins[] = { 10, 100, 1000, 10000 }; // microseconds cases
     PO_METRIC_HISTO_CREATE("director.loop_us", loop_bins, 4);
 
@@ -99,14 +140,16 @@ int main(void) {
     // 6. Main Loop
     PO_METRIC_TIMER_CREATE("director.loop_tick");
 
+    // Temporarily skip main loop when in headless mode
+    g_running = !g_headless_mode;
     while (g_running) {
         PO_METRIC_TIMER_START("director.loop_tick");
-        
+
         // A. Drain Tasks
-        size_t processed = po_task_drain(&task_queue, 32);
-        if (processed > 0) {
-            PO_METRIC_COUNTER_ADD("director.lifetime.tasks", processed);
-        }
+        // size_t processed = po_task_drain(&task_queue, 32);
+        // if (processed > 0) {
+        //     PO_METRIC_COUNTER_ADD("director.lifetime.tasks", processed);
+        // }
 
         // B. Simulation Tick (Placeholder)
         // simulation_update();
@@ -126,11 +169,11 @@ int main(void) {
         pthread_join(bridge_thread, NULL);
     }
 
-    po_task_queue_destroy(&task_queue);
-    po_metrics_shutdown();
-
     // Final log before logger shutdown
     LOG_INFO("Director exit.");
     po_logger_shutdown();
+
+    po_task_queue_destroy(&task_queue);
+    po_metrics_shutdown();
     return 0;
 }

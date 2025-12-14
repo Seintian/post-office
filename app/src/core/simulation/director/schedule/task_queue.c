@@ -85,7 +85,7 @@ size_t po_task_drain(po_task_queue_t *queue, size_t max_tasks) {
 
     size_t processed = 0;
     void *item = NULL;
-    
+
     // Local batch of nodes to release to pool
     #define BATCH_LIMIT 256
     void *nodes_to_free[BATCH_LIMIT];
@@ -95,12 +95,19 @@ size_t po_task_drain(po_task_queue_t *queue, size_t max_tasks) {
     while (processed < max_tasks) {
         if (perf_ringbuf_dequeue(queue->ring, &item) == 0) {
             task_node_t *node = (task_node_t*)item;
-            
+
+            // Prefetch next item if available
+            void *next_item = NULL;
+            if (perf_ringbuf_peek_at(queue->ring, 0, &next_item) == 0) {
+                // 0: read, 3: prefetch - High temporal locality
+                __builtin_prefetch(next_item, 0, 3);
+            }
+
             // Execute task
             if (node && node->fn) {
                 node->fn(node->ctx);
             }
-            
+
             // Stash for release
             if (node) {
                 nodes_to_free[pending_free++] = node;
@@ -122,7 +129,7 @@ size_t po_task_drain(po_task_queue_t *queue, size_t max_tasks) {
             break;
         }
     }
-    
+
     // Flush remaining frees
     if (pending_free > 0) {
         pthread_spin_lock(&queue->lock);
@@ -131,13 +138,13 @@ size_t po_task_drain(po_task_queue_t *queue, size_t max_tasks) {
         }
         pthread_spin_unlock(&queue->lock);
     }
-    
+
     return processed;
 }
 
 void po_task_queue_destroy(po_task_queue_t *queue) {
     if (!queue) return;
-    
+
     // Drain remaining tasks
     po_task_drain(queue, 10000);
 
