@@ -68,6 +68,7 @@ TICKET_ISSUER_DIR      = $(SIMULATION_DIR)/ticket_issuer
 USERS_MANAGER_DIR      = $(SIMULATION_DIR)/users_manager
 WORKER_DIR             = $(SIMULATION_DIR)/worker
 USER_DIR               = $(SIMULATION_DIR)/user
+SIM_IPC_DIR            = $(SIMULATION_DIR)/ipc
 
 # Configuration files
 TIMEOUT_INI_PATH       = $(CONFIG_DIR)/timeout.ini
@@ -163,7 +164,7 @@ MAIN_TUI_ARGS = $(MAIN_ARGS) --tui
 MAIN_EXEC = $(PROFILER) $(BIN_DIR)/$(PROJECT_PREFIX)main
 
 # Arguments for director process
-DIRECTOR_ARGS = --config "$(CONFIG)" --loglevel "$(LOG_LEVEL)"
+DIRECTOR_ARGS = --config "$(CONFIG)" --loglevel "$(LOG_LEVEL)" --headless
 DIRECTOR_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)director
 
 # Arguments for ticket issuer process
@@ -229,6 +230,7 @@ TICKET_ISSUER_APP_SRC = $(shell find $(TICKET_ISSUER_DIR) -name '*.c')
 USERS_MANAGER_APP_SRC = $(shell find $(USERS_MANAGER_DIR) -name '*.c')
 WORKER_APP_SRC        = $(shell find $(WORKER_DIR) -name '*.c')
 USER_APP_SRC          = $(shell find $(USER_DIR) -name '*.c')
+SIM_IPC_SRC           = $(wildcard $(SIM_IPC_DIR)/*.c)
 TEST_SRC              = $(shell find $(TESTS_DIR) -name '*.c') \
 						$(filter-out $(MAIN_DIR)/main.c,$(MAIN_APP_SRC)) \
 						$(filter-out $(DIRECTOR_DIR)/director.c,$(DIRECTOR_APP_SRC)) \
@@ -282,16 +284,17 @@ TICKET_ISSUER_APP_OBJS 	= $(patsubst $(TICKET_ISSUER_DIR)/%.c,$(BUILD_DIR)/ticke
 USERS_MANAGER_APP_OBJS 	= $(patsubst $(USERS_MANAGER_DIR)/%.c,$(BUILD_DIR)/users_manager/%.o,$(USERS_MANAGER_APP_SRC))
 WORKER_APP_OBJS 		= $(patsubst $(WORKER_DIR)/%.c,$(BUILD_DIR)/worker/%.o,$(WORKER_APP_SRC))
 USER_APP_OBJS 			= $(patsubst $(USER_DIR)/%.c,$(BUILD_DIR)/user/%.o,$(USER_APP_SRC))
+SIM_IPC_OBJS          = $(patsubst $(SIM_IPC_DIR)/%.c,$(BUILD_DIR)/sim_ipc/%.o,$(SIM_IPC_SRC))
 TEST_ONLY_SRCS         = $(shell find $(TESTS_DIR) -name '*.c')
 TEST_OBJS              = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_ONLY_SRCS))
 
 # Full dependency list for each final executable
 MAIN_OBJS           = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
-DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DIRECTOR_SCHED_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
-TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
-USERS_MANAGER_OBJS 	= $(USERS_MANAGER_APP_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
-WORKER_OBJS 		= $(WORKER_APP_OBJS) $(DEFAULTS_OBJS)
-USER_OBJS 			= $(USER_APP_OBJS) $(DEFAULTS_OBJS)
+DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DIRECTOR_SCHED_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
+TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
+USERS_MANAGER_OBJS 	= $(USERS_MANAGER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
+WORKER_OBJS 		= $(WORKER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS)
+USER_OBJS 			= $(USER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS)
 # Application objects (except entrypoints) to link into tests
 APP_ALL_OBJS       = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DIRECTOR_SCHED_OBJS) \
                      $(TICKET_ISSUER_APP_OBJS) $(USERS_MANAGER_APP_OBJS) $(WORKER_APP_OBJS) $(USER_APP_OBJS)
@@ -543,6 +546,11 @@ $(BUILD_DIR)/worker/%.o: $(WORKER_DIR)/%.c
 
 # Rule for user application objects
 $(BUILD_DIR)/user/%.o: $(USER_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
+
+# Rule for simulation IPC objects
+$(BUILD_DIR)/sim_ipc/%.o: $(SIM_IPC_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
