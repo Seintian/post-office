@@ -167,7 +167,9 @@ static void cleanup_resources(po_args_t *args) {
     po_logger_shutdown();
 
     // Display metrics report before shutting down logger
-    po_perf_report(stdout);
+    // po_perf_report(stdout);
+    // po_perf_shutdown(stdout);
+    po_perf_shutdown(NULL);
 
     po_metrics_shutdown();
 

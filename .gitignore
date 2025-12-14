@@ -79,3 +79,7 @@ app/crash*/
 # Doxygen
 app/docs/html/
 app/docs/latex/
+
+# perf reports
+**/perf*
+**/report*
