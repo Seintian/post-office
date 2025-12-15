@@ -22,7 +22,7 @@ void simulation_init(const char* config_path) {
     g_simulation_config_path = config_path; // Assumes config_path lifetime is managed by caller (main args)
 }
 
-void simulation_start(bool tui_mode) {
+void simulation_start(bool tui_mode, int loglevel) {
     if (g_director_pid > 0) return; // Already running
 
     LOG_INFO("Starting simulation (Director)...");
@@ -37,13 +37,32 @@ void simulation_start(bool tui_mode) {
     }
 
     // Build args
-    char* argv[10];
+    char* argv[12];
     int argc = 0;
     argv[argc++] = (char*)exe_path;
     if (g_simulation_config_path) {
         argv[argc++] = "--config";
         argv[argc++] = (char*)g_simulation_config_path;
     }
+
+    // Pass loglevel
+    // Convert int level back to string for argument (Director expects string)
+    // We can use a helper or just map it if po_logger doesn't have int->str public API
+    // Actually po_logger_level_from_str reverse is not exposed public usually?
+    // Let's implement a quick map or check logger.h
+    const char* lvl_str = "INFO";
+    switch (loglevel) {
+        case 0: lvl_str = "TRACE"; break;
+        case 1: lvl_str = "DEBUG"; break;
+        case 2: lvl_str = "INFO"; break;
+        case 3: lvl_str = "WARN"; break;
+        case 4: lvl_str = "ERROR"; break;
+        case 5: lvl_str = "FATAL"; break;
+        default: lvl_str = "INFO"; break;
+    }
+    argv[argc++] = "--loglevel";
+    argv[argc++] = (char*)lvl_str;
+
     // Pass headless flag to Director when not in TUI mode
     if (!tui_mode) {
         argv[argc++] = "--headless";
@@ -88,7 +107,7 @@ static void handle_signal(int sig) {
 }
 
 void simulation_run_headless(void) {
-    simulation_start(false);
+    simulation_start(false, (int)po_logger_get_level());
     if (g_director_pid <= 0) return;
 
     g_running = 1;

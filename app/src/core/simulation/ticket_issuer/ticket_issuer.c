@@ -48,9 +48,29 @@ static void get_sim_time(sim_shm_t* shm, int *d, int *h, int *m) {
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
 
+    // 0. Parse Args for Log Level and FD
+    int server_fd = -1;
+    int log_level = LOG_INFO;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--socket-fd") == 0 && i + 1 < argc) {
+            char* endptr;
+            errno = 0;
+            long val = strtol(argv[i + 1], &endptr, 10);
+            if (errno == 0 && *endptr == '\0' && val >= 0 && val <= INT_MAX) {
+                server_fd = (int)val;
+            }
+            i++; // skip val
+        } else if ((strcmp(argv[i], "--loglevel") == 0 || strcmp(argv[i], "-l") == 0) && i + 1 < argc) {
+            int l = po_logger_level_from_str(argv[i + 1]);
+            if (l != -1) log_level = l;
+            i++; // skip val
+        }
+    }
+
     // 1. Initialize Logger
     po_logger_config_t log_cfg = {
-        .level = LOG_INFO,
+        .level = log_level,
         .ring_capacity = 1024,
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
@@ -66,20 +86,6 @@ int main(int argc, char** argv) {
     if (!shm) {
         po_logger_shutdown();
         return 1;
-    }
-
-    // 3. Socket Handling
-    int server_fd = -1;
-    // Simple arg parsing for socket FD
-    for (int i=1; i<argc; i++) {
-        if (strcmp(argv[i], "--socket-fd") == 0 && i+1 < argc) {
-            char* endptr;
-            errno = 0;
-            long val = strtol(argv[i+1], &endptr, 10);
-            if (errno == 0 && *endptr == '\0' && val >= 0 && val <= INT_MAX) {
-                server_fd = (int)val;
-            }
-        }
     }
 
     if (server_fd < 0) {

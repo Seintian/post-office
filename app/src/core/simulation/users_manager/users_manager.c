@@ -107,18 +107,25 @@ static void spawn_user(void) {
         LOG_ERROR("Cannot spawn more users (max 1000)");
         return;
     }
+    
+    static int next_service_type = 0;
+    int stype = next_service_type;
+    next_service_type = (next_service_type + 1) % SIM_MAX_SERVICE_TYPES;
 
     const char *user_bin = "bin/post_office_user";
     pid_t pid = fork();
+
+    // removed static int definition from here
 
     if (pid == 0) {
         // Child
         char id_str[16];
         char param_str[16];
         snprintf(id_str, sizeof(id_str), "%d", (int)(po_rand_u32() & 0x7FFFFFFF)); 
-        snprintf(param_str, sizeof(param_str), "%u", po_rand_u32() % SIM_MAX_SERVICE_TYPES);
+        snprintf(param_str, sizeof(param_str), "%u", stype);
 
         execl(user_bin, "post_office_user", "-l", g_log_level_str, "-i", id_str, "-s", param_str, NULL);
+
 
         const char *msg = "Failed to exec user\n";
         if (write(STDERR_FILENO, msg, strlen(msg)) == -1) {}
@@ -127,6 +134,10 @@ static void spawn_user(void) {
         // Parent
         g_user_pids[g_active_users++] = pid;
         LOG_DEBUG("Spawned user PID %d (total: %d/%d)", pid, g_active_users, g_target_users);
+        
+        // CRITICAL: Advance global RNG state so the next fork inherits a DIFFERENT state.
+        // Otherwise, all children start with the exact same RNG state and generate identical IDs/decisions.
+        po_rand_u64(); 
     } else {
         LOG_ERROR("Fork failed: %s", strerror(errno));
     }

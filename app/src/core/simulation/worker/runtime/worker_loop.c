@@ -152,6 +152,10 @@ int worker_run(int worker_id, int service_type) {
             break;
         }
 
+        // We have acquired a user. Decrement the waiting count to reflect they are no longer "waiting" but "being served".
+        // This makes the EXPLODE check (waiting_count) represent instantaneous queue size, not cumulative.
+        atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
+
         if (!g_running) break;
 
         // Servicing
@@ -178,8 +182,44 @@ int worker_run(int worker_id, int service_type) {
         atomic_store(&shm->workers[worker_id].current_ticket, ticket);
 
         get_sim_time(shm, &day, &hour, &min);
-        LOG_DEBUG("[Day %d %02d:%02d] Worker %d servicing ticket %u...", 
-                 day, hour, min, worker_id, ticket);
+        // Working Hours Check: 08:00 to 17:00
+        // Workers act only during working hours.
+        if (hour < 8 || hour >= 17) {
+            // Office Closed
+            if (atomic_load(&shm->workers[worker_id].state) != WORKER_STATUS_OFFLINE) {
+                atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_OFFLINE);
+            }
+
+            // Precise Wait until 08:00
+            int current_total_mins = hour * 60 + min;
+            int target_total_mins = 8 * 60; // 08:00
+            int mins_to_wait = 0;
+
+            if (hour >= 17) {
+                int mins_until_midnight = (24 * 60) - current_total_mins;
+                mins_to_wait = mins_until_midnight + target_total_mins;
+            } else { // hour < 8
+                mins_to_wait = target_total_mins - current_total_mins;
+            }
+
+            if (mins_to_wait > 0) {
+                uint64_t total_nanos = (uint64_t)mins_to_wait * shm->params.tick_nanos;
+                struct timespec ts;
+                ts.tv_sec = (time_t)(total_nanos / 1000000000ULL);
+                ts.tv_nsec = (long)(total_nanos % 1000000000ULL);
+                nanosleep(&ts, NULL);
+            } else {
+                usleep(10000);
+            }
+            continue;
+        }
+
+        // Ensure status is FREE if not busy
+        if (atomic_load(&shm->workers[worker_id].state) == WORKER_STATUS_OFFLINE) {
+            atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_FREE);
+        }
+
+        LOG_DEBUG("[Day %d %02d:%02d] Worker %d servicing ticket %u...", day, hour, min, worker_id, ticket);
 
         // Simulate Service Time (e.g., 50ms - 500ms)
         int service_time_ms = (int)po_rand_range_i64(50, 500);
@@ -203,7 +243,7 @@ int worker_run(int worker_id, int service_type) {
 
         get_sim_time(shm, &day, &hour, &min);
         LOG_DEBUG("[Day %d %02d:%02d] Worker %d finished service ticket %u", 
-                 day, hour, min, worker_id, ticket);
+                    day, hour, min, worker_id, ticket);
     }
 
     LOG_INFO("Worker %d shutting down...", worker_id);

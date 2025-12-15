@@ -196,7 +196,7 @@ static int run_tui_demo_mode(po_args_t *args) {
  */
 static int run_tui_simulation_mode(po_args_t *args) {
     // Start simulation processes
-    simulation_start(true);
+    simulation_start(true, (int)po_logger_get_level());
 
     // Run TUI
     app_tui_run_simulation();

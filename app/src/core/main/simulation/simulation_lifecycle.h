@@ -19,8 +19,9 @@ void simulation_init(const char* config_path);
  * Start the simulation processes (Director, etc.).
  * Does not block.
  * @param tui_mode If true, suppress stdout of child processes.
+ * @param loglevel Log level to pass to the Director.
  */
-void simulation_start(bool tui_mode);
+void simulation_start(bool tui_mode, int loglevel);
 
 /**
  * Stop the simulation processes.

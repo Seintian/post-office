@@ -30,6 +30,7 @@ struct po_config {
     po_hashtable_t *entries; // section.key-value pairs
     po_hashset_t *sections;  // set of section names
     bool strict;             // strict parsing mode
+    char *last_section;      // Track last section to allow multiple keys
 };
 
 static char *get_full_key(const char *section, const char *key) {
@@ -81,8 +82,10 @@ static int ini_handler_cb(void *user, const char *section, const char *name, con
         return STOP_PARSING;
 
     char *value_copy = strdup(value);
-    if (!value_copy)
+    if (!value_copy) {
+        free(full_key);
         return STOP_PARSING;
+    }
 
     if (po_hashtable_contains_key(ctx->entries, full_key)) {
         free(full_key);
@@ -98,21 +101,40 @@ static int ini_handler_cb(void *user, const char *section, const char *name, con
         return STOP_PARSING;
     }
 
-    char *section_key = strdup(section);
-    if (!section_key)
-        return STOP_PARSING;
-
-    if (po_hashset_contains(ctx->sections, section_key)) {
-        free(section_key);
-
-        if (ctx->strict) {
-            errno = INIH_EDUPSECTION;
-            return STOP_PARSING;
-        }
-    } else if (po_hashset_add(ctx->sections, section_key) != 1) {
-        free(section_key);
-        return STOP_PARSING;
+    // Section Handling
+    // If strict, we want to detect if we switched back to an already seen section (Duplicate Block)
+    // But multiple keys in ONE block is fine.
+    
+    // Check if section changed from last one
+    bool section_changed = false;
+    if (!ctx->last_section || strcmp(ctx->last_section, section) != 0) {
+        section_changed = true;
     }
+
+    if (section_changed) {
+        char *section_key = strdup(section);
+        if (!section_key) return STOP_PARSING;
+
+        // If we changed to a section we have SEEN before, that's a duplicate BLOCK.
+        if (po_hashset_contains(ctx->sections, section_key)) {
+             free(section_key);
+             if (ctx->strict) {
+                 errno = INIH_EDUPSECTION;
+                 return STOP_PARSING;
+             }
+        } else {
+             // New section, add to set
+             if (po_hashset_add(ctx->sections, section_key) != 1) {
+                 free(section_key);
+                 return STOP_PARSING;
+             }
+        }
+        
+        // Update last_section
+        if (ctx->last_section) free(ctx->last_section);
+        ctx->last_section = strdup(section);
+    }
+    // Else: same section, continue.
 
     return CONTINUE_PARSING;
 }
@@ -130,6 +152,7 @@ static int _po_config_load(const char *filename, po_config_t **cfg_out, bool str
     ctx->strict = strict;
     ctx->entries = po_hashtable_create(&str_cmp, &str_hash);
     ctx->sections = po_hashset_create(&str_cmp, &str_hash);
+    ctx->last_section = NULL; 
 
     if (!ctx->entries || !ctx->sections) {
         if (ctx->entries)
@@ -209,6 +232,8 @@ void po_config_free(po_config_t **cfg) {
         clear_keys(config->sections);
         po_hashset_destroy(&config->sections);
     }
+    
+    if (config->last_section) free(config->last_section);
 
     free(config);
     *cfg = NULL;

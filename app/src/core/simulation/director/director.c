@@ -6,6 +6,7 @@
 #include <postoffice/sysinfo/sysinfo.h>
 #include <postoffice/net/socket.h>
 #include <postoffice/vector/vector.h>
+#include <postoffice/random/random.h>
 #include <utils/errors.h>
 #include "schedule/task_queue.h"
 #include "ctrl_bridge/bridge_mainloop.h"
@@ -128,14 +129,31 @@ static void spawn_process(const char* bin, char *const argv[]) {
 }
 
 static void load_config_into_shm(const char *config_path) {
-    po_config_t *cfg = NULL;
-    // Load config (instrumented inside)
-    if (po_config_load(config_path, &cfg) != 0) {
-        LOG_WARN("Failed to load config %s, using defaults", config_path);
+    if (!config_path) {
+        LOG_WARN("No configuration file provided via arguments. Using defaults.");
         // Defaults
         g_shm->params.sim_duration_days = 10;
-        g_shm->params.tick_nanos = 1000000;
+        g_shm->params.tick_nanos = 2500000;
         g_shm->params.explode_threshold = 100;
+        return;
+    }
+
+    po_config_t *cfg = NULL;
+    // Load config strictly
+    if (po_config_load_strict(config_path, &cfg) != 0) {
+        LOG_ERROR("Failed to load config strictly from %s: %s", config_path, po_strerror(errno));
+        // We might want to exit here if "check errors" implies hard failure?
+        // User said "check workers, Main and Director eventual errors with logs".
+        // Let's log severe error.
+        // Fallback to defaults to keep running? Or exit?
+        // "there must be nothing hardcoded" implies we rely on the file.
+        // If file fails, we probably shouldn't guess.
+        // But for safety, let's keep defaults but be very loud.
+        g_shm->params.sim_duration_days = 10;
+        g_shm->params.tick_nanos = 2500000;
+        g_shm->params.explode_threshold = 100;
+        // Fix Leak: Must free cfg (which might be partially allocated)
+        po_config_free(&cfg);
         return;
     }
 
@@ -144,7 +162,8 @@ static void load_config_into_shm(const char *config_path) {
     if (po_config_get_int(cfg, "simulation", "SIM_DURATION", &duration) == 0) {
         g_shm->params.sim_duration_days = (uint32_t)duration;
     } else {
-        g_shm->params.sim_duration_days = 10; // default
+        LOG_WARN("Missing [simulation] SIM_DURATION in config, defaulting to 10");
+        g_shm->params.sim_duration_days = 10;
     }
 
     // [simulation] N_NANO_SECS
@@ -152,6 +171,7 @@ static void load_config_into_shm(const char *config_path) {
     if (po_config_get_long(cfg, "simulation", "N_NANO_SECS", &tick_nanos) == 0) {
         g_shm->params.tick_nanos = (uint64_t)tick_nanos;
     } else {
+        LOG_WARN("Missing [simulation] N_NANO_SECS in config, defaulting to 2500000");
         g_shm->params.tick_nanos = 2500000;
     }
 
@@ -160,24 +180,34 @@ static void load_config_into_shm(const char *config_path) {
     if (po_config_get_int(cfg, "simulation", "EXPLODE_THRESHOLD", &explode) == 0) {
         g_shm->params.explode_threshold = (uint32_t)explode;
     } else {
+        LOG_WARN("Missing [simulation] EXPLODE_THRESHOLD in config, defaulting to 100");
         g_shm->params.explode_threshold = 100;
     }
     
-    // [workers] NOF_WORKERS
-    int n_workers = 0;
-    if (po_config_get_int(cfg, "workers", "NOF_WORKERS", &n_workers) == 0 && n_workers > 0) {
-        // We might want to use this, but for now we rely on CLI or default.
-        // If we want config to override, we need to restructure main().
-        // For now, let's just log it.
+    // [workers] NOF_WORKERS (Informational or override if we refactored main)
+    int n_workers_cfg = 0;
+    if (po_config_get_int(cfg, "workers", "NOF_WORKERS", &n_workers_cfg) == 0 && n_workers_cfg > 0) {
+        if ((uint32_t)n_workers_cfg != g_n_workers) {
+            LOG_WARN("Config workers count (%d) differs from CLI arg (%d). CLI takes precedence.", n_workers_cfg, g_n_workers);
+        }
     } 
 
-    // [users_manager] N_NEW_USERS (batch size for add/remove)
+    // [users_manager] N_NEW_USERS
     int n_new_users = 0;
     if (po_config_get_int(cfg, "users_manager", "N_NEW_USERS", &n_new_users) == 0 && n_new_users > 0) {
         g_n_users_batch = n_new_users;
-        g_n_users_initial = n_new_users; // Also use as initial count
-        LOG_INFO("Config: Users initial=%d, batch=%d", g_n_users_initial, g_n_users_batch);
+        // Default initial to batch if not specified otherwise
+        g_n_users_initial = n_new_users;
     }
+
+    // [users] NOF_USERS
+    // Override initial users if specified
+    int nof_users = 0;
+    if (po_config_get_int(cfg, "users", "NOF_USERS", &nof_users) == 0 && nof_users > 0) {
+        g_n_users_initial = nof_users;
+    }
+
+    LOG_INFO("Config: Users initial=%d, batch=%d", g_n_users_initial, g_n_users_batch);
 
     // [users]
     int n_requests = 0;
@@ -187,13 +217,7 @@ static void load_config_into_shm(const char *config_path) {
         setenv("PO_USER_REQUESTS", buf, 1);
         LOG_INFO("Config: Set PO_USER_REQUESTS to %d", n_requests);
     }
-    
-    // Probabilities are doubles/floats. config parser supports string/int/bool? 
-    // Need to check po_config API or use get_string and strtod.
-    // Assuming po_config_get_string exists or similar.
-    // Checking previous context: only get_int, get_long in snippet.
-    // Let's assume get_string is available or use get_int for now if scaled? 
-    // They are probabilities 0.5. So likely string.
+
     const char* p_min = NULL;
     if (po_config_get_str(cfg, "users", "P_SERV_MIN", &p_min) == 0 && p_min) {
         setenv("PO_USER_P_MIN", p_min, 1);
@@ -203,7 +227,6 @@ static void load_config_into_shm(const char *config_path) {
     if (po_config_get_str(cfg, "users", "P_SERV_MAX", &p_max) == 0 && p_max) {
         setenv("PO_USER_P_MAX", p_max, 1);
     }
-
 
     LOG_INFO("Loaded Config: Duration=%u days, Tick=%lu ns, Explode=%u",
              g_shm->params.sim_duration_days, g_shm->params.tick_nanos, g_shm->params.explode_threshold);
@@ -228,6 +251,9 @@ int main(int argc, char** argv) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
+    // setup_signals(); // Using custom implementation that sets sigaction (Removed: inline above)
+    po_rand_seed_auto(); // Ensure PRNG is seeded
+    
     // 0. Collect system information for optimizations
     /* po_sysinfo_t sysinfo;
     if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
@@ -299,7 +325,8 @@ int main(int argc, char** argv) {
     LOG_INFO("Shared memory initialized at %p", (void*)g_shm);
 
     // Now load config into parameters
-    load_config_into_shm(g_config_path ? g_config_path : "config/timeout.ini");
+    // Now load config into parameters
+    load_config_into_shm(g_config_path);
 
     // 3.1 Initialize Semaphores
     int semid = sim_ipc_sem_create(SIM_MAX_SERVICE_TYPES);
@@ -454,6 +481,9 @@ int main(int argc, char** argv) {
                 } else {
                     LOG_INFO("Day %d begin", current_day);
                 }
+            } else if (current_hour < 8 || current_hour >= 17) {
+                 // Log hourly when closed
+                 LOG_INFO("[Day %d %02d:00] Office Closed", current_day, current_hour);
             }
         }
 

@@ -181,47 +181,81 @@ int user_run(int user_id, int service_type) {
         }
 
         get_sim_time(shm, &day, &hour, &min);
+
+        // Working Hours Check: 08:00 to 17:00
+        // Users should not enter queue if office is closed
+        if (hour < 8 || hour >= 17) {
+            LOG_DEBUG("[Day %d %02d:%02d] User %d found office closed. Waiting for opening...", day, hour, min, user_id);
+
+            // Calculate minutes to wait until 08:00
+            int current_total_mins = hour * 60 + min;
+            int target_total_mins = 8 * 60; // 08:00
+            int mins_to_wait = 0;
+
+            if (hour >= 17) {
+                // Wait until midnight + 8 hours
+                int mins_until_midnight = (24 * 60) - current_total_mins;
+                mins_to_wait = mins_until_midnight + target_total_mins;
+            } else { // hour < 8
+                mins_to_wait = target_total_mins - current_total_mins;
+            }
+            
+            if (mins_to_wait > 0) {
+                // params.tick_nanos = ns per sim minute
+                uint64_t total_nanos = (uint64_t)mins_to_wait * shm->params.tick_nanos;
+                struct timespec ts;
+                ts.tv_sec = (time_t)(total_nanos / 1000000000ULL);
+                ts.tv_nsec = (long)(total_nanos % 1000000000ULL);
+
+                // Wait exactly the simulation time needed
+                nanosleep(&ts, NULL);
+            } else {
+                usleep(10000); // Fallback
+            }
+            continue;
+        }
+
         LOG_DEBUG("[Day %d %02d:%02d] User %d (PID %d) got ticket %u for service %d (Req %d/%d)", 
-                 day, hour, min,
-                 user_id, getpid(), resp.ticket_number, resp.assigned_service, req+1, n_requests);
+                    day, hour, min,
+                    user_id, getpid(), resp.ticket_number, resp.assigned_service, req+1, n_requests);
 
         // Enter Queue
-    int semid = sim_ipc_sem_get();
-    if (semid != -1) {
-        atomic_fetch_add(&shm->queues[service_type].waiting_count, 1);
+        int semid = sim_ipc_sem_get();
+        if (semid != -1) {
+            atomic_fetch_add(&shm->queues[service_type].waiting_count, 1);
 
-        // Push Ticket to Shared Queue
-        // Note: EXPLODE_THRESHOLD=100 ensures we rarely wrap/overflow 128 buffer 
-        // if users respect it. 
-        queue_status_t *q = &shm->queues[service_type];
-        unsigned int tail = atomic_fetch_add(&q->tail, 1);
-        unsigned int idx = tail % 128;
-        // Wait for slot (should be 0)
-        while (atomic_load(&q->tickets[idx]) != 0) {
-            // Busy wait / yield. 
-            // In a robust system we handles wrap better or larger buffer.
-             usleep(100);
-        }
-        atomic_store(&q->tickets[idx], resp.ticket_number + 1);
-
-        struct sembuf sb = {
-            .sem_num = (unsigned short)service_type,
-            .sem_op = 1, // Increment
-            .sem_flg = 0
-        };
-        while (semop(semid, &sb, 1) == -1) {
-            if (errno == EINTR) {
-                if (!g_running) {
-                    atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
-                    goto shutdown;
-                }
-                continue;
+            // Push Ticket to Shared Queue
+            // Note: EXPLODE_THRESHOLD=100 ensures we rarely wrap/overflow 128 buffer 
+            // if users respect it. 
+            queue_status_t *q = &shm->queues[service_type];
+            unsigned int tail = atomic_fetch_add(&q->tail, 1);
+            unsigned int idx = tail % 128;
+            // Wait for slot (should be 0)
+            while (atomic_load(&q->tickets[idx]) != 0) {
+                // Busy wait / yield. 
+                // In a robust system we handles wrap better or larger buffer.
+                usleep(100);
             }
-            LOG_WARN("User %d semop failed (errno=%d)", user_id, errno);
-            atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
-            goto shutdown; 
-        }
-    } else {
+            atomic_store(&q->tickets[idx], resp.ticket_number + 1);
+
+            struct sembuf sb = {
+                .sem_num = (unsigned short)service_type,
+                .sem_op = 1, // Increment
+                .sem_flg = 0
+            };
+            while (semop(semid, &sb, 1) == -1) {
+                if (errno == EINTR) {
+                    if (!g_running) {
+                        atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
+                        goto shutdown;
+                    }
+                    continue;
+                }
+                LOG_WARN("User %d semop failed (errno=%d)", user_id, errno);
+                atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
+                goto shutdown; 
+            }
+        } else {
             LOG_WARN("User %d failed to get semid", user_id);
             break;
         }
@@ -236,8 +270,8 @@ int user_run(int user_id, int service_type) {
                 if (current_t == resp.ticket_number) {
                     get_sim_time(shm, &day, &hour, &min);
                     LOG_DEBUG("[Day %d %02d:%02d] User %d being served by Worker %d", 
-                             day, hour, min,
-                             user_id, i);
+                                day, hour, min,
+                                user_id, i);
                     served = true;
                     break;
                 }
@@ -260,7 +294,7 @@ int user_run(int user_id, int service_type) {
                 if (!still_serving) {
                     get_sim_time(shm, &day, &hour, &min);
                     LOG_DEBUG("[Day %d %02d:%02d] User %d service completed", 
-                             day, hour, min, user_id);
+                                day, hour, min, user_id);
                     break; 
                 }
                 usleep(50000);
@@ -268,7 +302,7 @@ int user_run(int user_id, int service_type) {
         } else {
             get_sim_time(shm, &day, &hour, &min);
             LOG_WARN("[Day %d %02d:%02d] User %d gave up or sim ended", 
-                     day, hour, min, user_id);
+                        day, hour, min, user_id);
             break;
         }
     }
