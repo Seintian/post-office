@@ -50,6 +50,9 @@ static int worker_init(int worker_id, int service_type, sim_shm_t** out_shm, int
     if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
         cacheline_size = (size_t)sysinfo.dcache_lnsize;
     }
+    
+    // Start system info sampler for runtime adaptation
+    po_sysinfo_sampler_init();
 
     if (po_metrics_init() != 0) {
         fprintf(stderr, "worker: metrics init failed\n");
@@ -133,8 +136,29 @@ int worker_run(int worker_id, int service_type) {
     atomic_store(&shm->workers[worker_id].pid, getpid());
     atomic_store(&shm->workers[worker_id].service_type, service_type);
 
+    int last_synced_day = 0;
+
+    // Helper for sync
+    void sync_check_day(void) {
+        if (atomic_load(&shm->sync.barrier_active)) {
+            unsigned int barrier_day = atomic_load(&shm->sync.day_seq);
+            if ((int)barrier_day > last_synced_day) {
+                // We haven't synced for this day yet
+                atomic_fetch_add(&shm->sync.ready_count, 1);
+                last_synced_day = (int)barrier_day;
+                
+                // Wait for release
+                while (g_running && atomic_load(&shm->sync.barrier_active)) {
+                    usleep(1000); // 1ms poll
+                }
+            }
+        }
+    }
+
     // Main Loop
     while (g_running) {
+        sync_check_day();
+
         // Wait for a user in my service queue
         struct sembuf sb = {
             .sem_num = (unsigned short)service_type,
@@ -143,7 +167,24 @@ int worker_run(int worker_id, int service_type) {
         };
 
         // Blocking wait
-        if (semop(semid, &sb, 1) == -1) {
+        // Use timed wait or periodic check to allow sync checking?
+        // semop is blocking. If we block here, we might miss the sync barrier if we are idle!
+        // The Director waits for EVERYONE. If a worker is blocked on semop (idle), it won't see the barrier.
+        // THIS IS A DEADLOCK RISK.
+        // Worker must be "ready" if it's idle.
+        // If worker is idle, it is effectively ready for next day.
+        // But we need to signal it.
+        // If we use IPC_NOWAIT and sleep?
+        
+        // Revised approach:
+        // Use a short timeout for semop (if possible with semtimedop) or polling.
+        // Linux supports semtimedop. _GNU_SOURCE is defined.
+        struct timespec ts_sem = {0, 100000000}; // 100ms
+        if (semtimedop(semid, &sb, 1, &ts_sem) == -1) {
+            if (errno == EAGAIN) {
+                // Timeout, check sync and loop
+                continue;
+            }
             if (errno == EINTR) {
                 if (!g_running) break;
                 continue;
@@ -204,10 +245,10 @@ int worker_run(int worker_id, int service_type) {
 
             if (mins_to_wait > 0) {
                 uint64_t total_nanos = (uint64_t)mins_to_wait * shm->params.tick_nanos;
-                struct timespec ts;
-                ts.tv_sec = (time_t)(total_nanos / 1000000000ULL);
-                ts.tv_nsec = (long)(total_nanos % 1000000000ULL);
-                nanosleep(&ts, NULL);
+                struct timespec ts_sleep;
+                ts_sleep.tv_sec = (time_t)(total_nanos / 1000000000ULL);
+                ts_sleep.tv_nsec = (long)(total_nanos % 1000000000ULL);
+                nanosleep(&ts_sleep, NULL);
             } else {
                 usleep(10000);
             }
@@ -223,6 +264,16 @@ int worker_run(int worker_id, int service_type) {
 
         // Simulate Service Time (e.g., 50ms - 500ms)
         int service_time_ms = (int)po_rand_range_i64(50, 500);
+
+        // Runtime Adaptation: Throttle if CPU is overloaded
+        double cpu_util = -1.0;
+        if (po_sysinfo_sampler_get(&cpu_util, NULL) == 0) {
+            if (cpu_util > 90.0) {
+                // Increase service time to reduce system load
+                service_time_ms = (int)(service_time_ms * 1.5);
+            }
+        }
+
         usleep((unsigned int)service_time_ms * 1000);
 
         // Done

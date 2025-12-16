@@ -35,7 +35,7 @@ static sim_shm_t* g_shm = NULL;         // Global SHM pointer
 
 static po_vector_t *g_child_pids = NULL;
 
-static uint32_t g_n_workers = DEFAULT_WORKERS;
+static uint32_t g_n_workers = 0;
 static const char* g_config_path = NULL; // Global config path
 static int g_n_users_initial = 5; // Initial users count
 static int g_n_users_batch = 5; // Add/remove batch size
@@ -187,7 +187,11 @@ static void load_config_into_shm(const char *config_path) {
     // [workers] NOF_WORKERS (Informational or override if we refactored main)
     int n_workers_cfg = 0;
     if (po_config_get_int(cfg, "workers", "NOF_WORKERS", &n_workers_cfg) == 0 && n_workers_cfg > 0) {
-        if ((uint32_t)n_workers_cfg != g_n_workers) {
+        if (g_n_workers == 0) {
+            // Not set by CLI, use config
+            g_n_workers = (uint32_t)n_workers_cfg;
+            LOG_INFO("Using workers count from config: %u", g_n_workers);
+        } else if ((uint32_t)n_workers_cfg != g_n_workers) {
             LOG_WARN("Config workers count (%d) differs from CLI arg (%d). CLI takes precedence.", n_workers_cfg, g_n_workers);
         }
     } 
@@ -255,11 +259,39 @@ int main(int argc, char** argv) {
     po_rand_seed_auto(); // Ensure PRNG is seeded
     
     // 0. Collect system information for optimizations
-    /* po_sysinfo_t sysinfo;
-    if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
-         // cacheline_size = (size_t)sysinfo.dcache_lnsize; 
-    } */
+    po_sysinfo_t sysinfo;
+    size_t cacheline_size = 64; // default
+    int system_backlog = 128; // default
+
+    if (po_sysinfo_collect(&sysinfo) == 0) {
+        if (sysinfo.dcache_lnsize > 0) {
+            cacheline_size = (size_t)sysinfo.dcache_lnsize; 
+        }
+        if (sysinfo.somaxconn > 0) {
+            system_backlog = sysinfo.somaxconn;
+        }
+        
+        // Smart default for workers if not set
+        if (g_n_workers == 0) {
+            // Use logical processors, optionally scaled
+            if (sysinfo.logical_processors > 0) {
+                g_n_workers = (uint32_t)sysinfo.logical_processors;
+                // Cap minimal workers to ensure simulation liveness
+                if (g_n_workers < 2) g_n_workers = 2; 
+                LOG_INFO("Auto-detected workers count based on logical CPUs: %u", g_n_workers);
+            }
+        }
+    }
     
+    // Start background sampler for runtime adaptation (CPU load)
+    po_sysinfo_sampler_init();
+    
+    // Fallback if still 0
+    if (g_n_workers == 0) {
+        g_n_workers = DEFAULT_WORKERS;
+        LOG_INFO("Using default workers count: %u", g_n_workers);
+    }
+
     // Initialize PID vector
     g_child_pids = po_vector_create();
     if (!g_child_pids) {
@@ -285,7 +317,7 @@ int main(int argc, char** argv) {
         .ring_capacity = 4096,
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
-        .cacheline_bytes = PO_CACHE_LINE_MAX
+        .cacheline_bytes = (size_t)cacheline_size
     };
     if (po_logger_init(&log_cfg) != 0) {
          fprintf(stderr, "Failed to init logger\n");
@@ -324,6 +356,11 @@ int main(int argc, char** argv) {
     }
     LOG_INFO("Shared memory initialized at %p", (void*)g_shm);
 
+    // Initialize Synchronization
+    atomic_store(&g_shm->sync.required_count, g_n_workers + 2); // Workers + Issuer + Manager
+    atomic_store(&g_shm->sync.ready_count, 0);
+    atomic_store(&g_shm->sync.barrier_active, 0);
+
     // Now load config into parameters
     // Now load config into parameters
     load_config_into_shm(g_config_path);
@@ -357,7 +394,7 @@ int main(int argc, char** argv) {
     }
     unlink(sock_path); // remove old if exists
 
-    int issuer_sock_fd = po_socket_listen_unix(sock_path, 128);
+    int issuer_sock_fd = po_socket_listen_unix(sock_path, system_backlog);
     if (issuer_sock_fd < 0) {
         LOG_ERROR("director: failed to bind issuer socket %s", sock_path);
         sim_ipc_shm_destroy();
@@ -368,7 +405,7 @@ int main(int argc, char** argv) {
     int flags = fcntl(issuer_sock_fd, F_GETFD);
     if (flags != -1) fcntl(issuer_sock_fd, F_SETFD, flags & ~FD_CLOEXEC);
 
-    LOG_INFO("Created Issuer Socket FD: %d at %s", issuer_sock_fd, sock_path);
+    LOG_INFO("Created Issuer Socket FD: %d at %s (backlog=%d)", issuer_sock_fd, sock_path, system_backlog);
 
     // 5. Process Spawning
     const char *bin_issuer = "bin/post_office_ticket_issuer";
@@ -445,6 +482,28 @@ int main(int argc, char** argv) {
     
     LOG_INFO("Simulation started... (Ctrl+C to stop)");
 
+    // Synchronization helper
+    void sync_day_start(sim_shm_t* shm, int day) {
+        atomic_store(&shm->sync.ready_count, 0);
+        atomic_store(&shm->sync.day_seq, (unsigned int)day);
+        atomic_store(&shm->sync.barrier_active, 1);
+        
+        uint32_t req = atomic_load(&shm->sync.required_count);
+        LOG_INFO("Waiting for day %d synchronization (0/%u)...", day, req);
+        
+        while (g_running) {
+            uint32_t ready = atomic_load(&shm->sync.ready_count);
+            if (ready >= req) break;
+            usleep(10000); // 10ms poll
+        }
+        
+        atomic_store(&shm->sync.barrier_active, 0);
+        LOG_INFO("Day %d synchronized. Starting...", day);
+    }
+
+    // Sync Day 1
+    sync_day_start(g_shm, current_day);
+
     while (g_running) {
         // Update Time
         update_sim_time(g_shm, current_day, current_hour, current_min);
@@ -480,6 +539,7 @@ int main(int argc, char** argv) {
                         // Will break next iter
                 } else {
                     LOG_INFO("Day %d begin", current_day);
+                    sync_day_start(g_shm, current_day);
                 }
             } else if (current_hour < 8 || current_hour >= 17) {
                  // Log hourly when closed
