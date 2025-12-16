@@ -173,6 +173,7 @@ typedef enum {
  */
 typedef struct msg_ticket_req_s {
     pid_t requester_pid;
+    pid_t requester_tid;
     service_type_t service_type;
 } msg_ticket_req_t;
 

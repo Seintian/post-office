@@ -133,9 +133,7 @@ int worker_run(int worker_id, int service_type) {
 
     // Register myself in SHM (Use PID as thread ID roughly or just placeholder)
     atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_FREE);
-    atomic_store(&shm->workers[worker_id].pid, getpid()); // All threads share PID. Maybe TID? 
-    // SHM expects pid_t. gettid() is Linux specific. 
-    // We can stick with PID (process ID) for now, as killing process kills all threads.
+    atomic_store(&shm->workers[worker_id].pid, getpid());
     atomic_store(&shm->workers[worker_id].service_type, service_type);
 
     int last_synced_day = 0;
@@ -168,6 +166,8 @@ int worker_run(int worker_id, int service_type) {
             .sem_flg = 0
         };
 
+        LOG_DEBUG("Worker %d entering wait state for service type %d...", worker_id, service_type);
+        
         // Revised approach:
         // Use a short timeout for semop (if possible with semtimedop) or polling.
         // Linux supports semtimedop. _GNU_SOURCE is defined.
@@ -187,6 +187,7 @@ int worker_run(int worker_id, int service_type) {
 
         // We have acquired a user. Decrement the waiting count.
         atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
+        LOG_DEBUG("Worker %d acquired a user task", worker_id);
 
         if (!g_running) break;
 
@@ -212,6 +213,7 @@ int worker_run(int worker_id, int service_type) {
 
         uint32_t ticket = val - 1;
         atomic_store(&shm->workers[worker_id].current_ticket, ticket);
+        LOG_DEBUG("Worker %d retrieved ticket %u from shared queue", worker_id, ticket);
 
         get_sim_time(shm, &day, &hour, &min);
         // Working Hours Check: 08:00 to 17:00
@@ -259,6 +261,7 @@ int worker_run(int worker_id, int service_type) {
                 service_time_ms = (int)(service_time_ms * 1.5);
             }
         }
+        LOG_DEBUG("Worker %d simulating service for %d ms", worker_id, service_time_ms);
 
         usleep((unsigned int)service_time_ms * 1000);
 

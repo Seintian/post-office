@@ -1,11 +1,3 @@
-/**
- * @file users_manager.c
- * @brief Event-Driven Users Manager Process Implementation (Threaded).
- * 
- * Listens for signals to dynamically manage user population:
- * - SIGUSR1: Adds batch_size users to population
- * - SIGUSR2: Removes batch_size users from population
- */
 #define _POSIX_C_SOURCE 200809L
 
 #include <postoffice/log/logger.h>
@@ -16,6 +8,7 @@
 #include <postoffice/random/random.h>
 #include "../ipc/simulation_ipc.h"
 #include "../user/runtime/user_loop.h"
+#include <postoffice/concurrency/threadpool.h>
 
 #include <errno.h>
 #include <string.h>
@@ -29,6 +22,7 @@
 #include <utils/signals.h>
 #include <getopt.h>
 #include <pthread.h>
+#include <stdatomic.h>
 
 // Global state for signal handlers
 static volatile sig_atomic_t g_running = 1;
@@ -39,22 +33,24 @@ static volatile sig_atomic_t g_sigusr2_received = 0;
 static int g_initial_users = 5;
 static int g_batch_size = 5;
 static sim_shm_t* g_shm = NULL;
+static threadpool_t* g_pool = NULL;
 
 // Active user tracking
 typedef struct {
-    pthread_t thread;
-    bool active;
+    volatile atomic_bool active; // Slot allocation status
+    volatile atomic_bool should_run; // Cancellation flag passed to user_run
     int id;
 } user_slot_t;
 
 static user_slot_t g_users[1000];
-static int g_active_count = 0;
+static atomic_int g_active_count = 0;
 static int g_target_users = 0;
 
 typedef struct {
     int id;
     int service_type;
-} user_thread_arg_t;
+    int slot_idx;
+} user_task_arg_t;
 
 static void handle_sigusr1(int sig, siginfo_t* info, void* context) {
     (void)sig; (void)info; (void)context;
@@ -104,84 +100,89 @@ static void get_sim_time(sim_shm_t* shm, int *d, int *h, int *m) {
     *m = packed & 0xFF;
 }
 
-static void* user_thread_entry(void* arg) {
-    user_thread_arg_t* args = (user_thread_arg_t*)arg;
-    pthread_cleanup_push(free, args);
-    user_run(args->id, args->service_type, g_shm);
-    pthread_cleanup_pop(1);
-    return NULL;
+static void user_task_wrapper(void* arg) {
+    user_task_arg_t* args = (user_task_arg_t*)arg;
+    int slot = args->slot_idx;
+
+    user_run(args->id, args->service_type, g_shm, &g_users[slot].should_run);
+    
+    // Cleanup
+    atomic_store(&g_users[slot].active, false);
+    atomic_fetch_sub(&g_active_count, 1);
+    
+    int day, hour, min;
+    get_sim_time(g_shm, &day, &hour, &min);
+    // LOG_DEBUG("[Day %d %02d:%02d] User task %d (slot %d) finished", day, hour, min, args->id, slot); // Too noisy?
+
+    free(args);
 }
 
 static void spawn_user(void) {
-    if (g_active_count >= 1000) {
+    if (atomic_load(&g_active_count) >= 1000) {
         LOG_ERROR("Cannot spawn more users (max 1000)");
         return;
     }
 
-    // Find first free slot (simplistic, usually appending is fine if we compact or just find first !active)
-    // But we use g_active_count as index if we compact. 
-    // Let's use g_active_count as simple stack pointer if possible, but reaping messes it up.
-    // Better: Scan for free slot.
+    // Find first free slot
     int slot = -1;
     for (int i = 0; i < 1000; i++) {
-        if (!g_users[i].active) {
+        // Atomic CAS to claim slot
+        bool expected = false;
+        if (atomic_compare_exchange_strong(&g_users[i].active, &expected, true)) {
             slot = i;
             break;
         }
     }
-    
-    if (slot == -1) return;
+
+    if (slot == -1) {
+        LOG_DEBUG("No free slot found for new user");
+        return;
+    }
 
     static int next_service_type = 0;
     int stype = next_service_type;
     next_service_type = (next_service_type + 1) % SIM_MAX_SERVICE_TYPES;
 
-    user_thread_arg_t* arg = malloc(sizeof(user_thread_arg_t));
+    user_task_arg_t* arg = malloc(sizeof(user_task_arg_t));
+    if (!arg) {
+         atomic_store(&g_users[slot].active, false);
+         return;
+    }
+
     arg->id = (int)(po_rand_u32() & 0x7FFFFFFF);
     arg->service_type = stype;
+    arg->slot_idx = slot;
 
-    if (pthread_create(&g_users[slot].thread, NULL, user_thread_entry, arg) == 0) {
-        g_users[slot].active = true;
-        g_users[slot].id = arg->id;
-        g_active_count++;
-        LOG_DEBUG("Spawned user thread ID %d (total: %d/%d)", arg->id, g_active_count, g_target_users);
+    atomic_store(&g_users[slot].should_run, true);
+    g_users[slot].id = arg->id;
+
+    if (tp_submit(g_pool, user_task_wrapper, arg) == 0) {
+        atomic_fetch_add(&g_active_count, 1);
+        LOG_DEBUG("Spawned user %d (slot %d) (total: %d/%d)", arg->id, slot, atomic_load(&g_active_count), g_target_users);
     } else {
-        LOG_ERROR("Failed to create user thread");
+        LOG_ERROR("Failed to submit user task");
+        atomic_store(&g_users[slot].active, false);
         free(arg);
     }
 }
 
 static void remove_user(void) {
-    if (g_active_count <= 0) return;
+    if (atomic_load(&g_active_count) <= 0) return;
 
-    // Find last active user (LIFO-ish to match stack behavior roughly)
+    // Signal random or last user to stop. 
+    // LIFO for consistency with old behavior
     for (int i = 999; i >= 0; i--) {
-        if (g_users[i].active) {
-            // Cancel thread
-            pthread_cancel(g_users[i].thread);
-            pthread_join(g_users[i].thread, NULL);
-            g_users[i].active = false;
-            g_active_count--;
-            LOG_INFO("Terminated user thread slot %d", i);
+        if (atomic_load(&g_users[i].active) && atomic_load(&g_users[i].should_run)) {
+            atomic_store(&g_users[i].should_run, false); 
+            // Decrease count logically here? No, let wrapper do it.
+            // But we can verify later.
+            LOG_INFO("Signaled user slot %d to stop", i);
             return;
         }
     }
 }
 
-static void reap_zombies(void) {
-    // Check for threads that have exited naturally
-    for (int i = 0; i < 1000; i++) {
-        if (g_users[i].active) {
-            int rc = pthread_tryjoin_np(g_users[i].thread, NULL);
-            if (rc == 0) {
-                // Thread finished
-                g_users[i].active = false;
-                g_active_count--;
-                LOG_DEBUG("Reaped user thread slot %d (remaining: %d/%d)", i, g_active_count, g_target_users);
-            }
-        }
-    }
-}
+static int g_pool_size = 1000;
 
 static void parse_args(int argc, char** argv) {
     static struct option long_options[] = {
@@ -189,11 +190,12 @@ static void parse_args(int argc, char** argv) {
         {"batch", required_argument, 0, 'b'},
         {"loglevel", required_argument, 0, 'l'},
         {"pid", required_argument, 0, 'p'}, 
+        {"pool-size", required_argument, 0, 's'},
         {0, 0, 0, 0}
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "i:b:l:p:", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "i:b:l:p:s:", long_options, NULL)) != -1) {
         switch (opt) {
             case 'i': {
                 char *endptr;
@@ -216,6 +218,14 @@ static void parse_args(int argc, char** argv) {
                 break;
             case 'p':
                 break;
+            case 's': {
+                char *endptr;
+                long val = strtol(optarg, &endptr, 10);
+                if (*endptr == '\0' && val > 1) { // Min 2
+                    g_pool_size = (int)val;
+                }
+                break;
+            }
         }
     }
 }
@@ -223,6 +233,7 @@ static void parse_args(int argc, char** argv) {
 int main(int argc, char** argv) {
     parse_args(argc, argv);
 
+    // ... (logger) ...
     // 1. Init Logger
     int level = LOG_INFO;
     char *env = getenv("PO_LOG_LEVEL");
@@ -233,35 +244,17 @@ int main(int argc, char** argv) {
 
     po_logger_config_t log_cfg = {
         .level = level,
-        .ring_capacity = 4096, // Increased for multiple threads
+        .ring_capacity = 4096, 
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
         .cacheline_bytes = PO_CACHE_LINE_MAX
     };
     if (po_logger_init(&log_cfg) != 0) return 1;
-    // Append to users.log (User threads will share this logger instance)
-    // Actually, user_run calls user_init which inits logger... 
-    // We MUST prevent user_run from initializing the logger again if it's already running in the same process.
-    // The user_loop.c implementation of user_init does po_logger_init.
-    // po_logger_init fails if already initialized.
-    // So we should Initialize ONCE here, and modify user_loop.c to SKIP init if logger is active?
-    // Or simpler: user_loop.c is designed for process per user.
-    // We need to modify user_loop.c to be thread-friendly (global init split).
-    // BUT user_loop.c is used by user.c too.
-    // If we assume user_run is just logic, we should strip init from it or make it conditional.
-    // Since we are refactoring, let's assume we can modify user_loop.c as well.
-    // FOR NOW: Let's let user_init fail gracefully?
-    // po_logger_init returns non-zero if already initialized. 
-    // user_init prints to stderr "user: logger init failed" and returns -1. 
-    // This would kill the thread.
-    // WE MUST MODIFY user_loop.c.
-    
-    // Let's assume for this step we just init here.
+
     if (po_logger_add_sink_file("logs/users_manager.log", false) != 0) {
         LOG_WARN("Failed to add log file sink");
     }
-    // Also add sink for users.log here, so all threads write to it.
-    po_logger_add_sink_file("logs/users.log", true); // Append (truncated by director)
+    po_logger_add_sink_file("logs/users.log", true); 
 
     // Attach SHM for time
     g_shm = sim_ipc_shm_attach();
@@ -277,10 +270,20 @@ int main(int argc, char** argv) {
     setup_signals();
     po_rand_seed_auto();
 
+    // Initialize Thread Pool
+    // Size = 1000 to allow all potential users to run concurrently
+    g_pool = tp_create(g_pool_size, 2000);
+    if (!g_pool) {
+        LOG_FATAL("Failed to create thread pool");
+        sim_ipc_shm_detach(g_shm);
+        po_logger_shutdown();
+        return 1;
+    }
+
     g_target_users = g_initial_users;
     
-    LOG_INFO("[Day %d %02d:%02d] Users Manager started (PID: %d) [THREADED], initial=%d", 
-             day, hour, min, getpid(), g_initial_users);
+    LOG_INFO("[Day %d %02d:%02d] Users Manager started (PID: %d) [THREADPOOL], initial=%d, pool=%d", 
+             day, hour, min, getpid(), g_initial_users, g_pool_size);
 
     // Initial Spawn
     for (int i = 0; i < g_target_users && g_running; i++) {
@@ -307,17 +310,19 @@ int main(int argc, char** argv) {
 
     while (g_running) {
         sync_check_day();
-        reap_zombies();
+        // Zombies are auto-reaped by wrapper now, but we verify active count
 
-        // Respawn if below target
-        while (g_active_count < g_target_users && g_running) {
+        // Respawn if below target (and verify we aren't saturating spawn attempts)
+        while (atomic_load(&g_active_count) < g_target_users && g_running) {
             spawn_user();
+            usleep(1000); // Slight throttle
         }
 
         // Handle SIGUSR1 (Add Users)
         if (g_sigusr1_received) {
             g_sigusr1_received = 0;
             g_target_users += g_batch_size;
+            if (g_target_users > 1000) g_target_users = 1000;
             LOG_INFO("SIGUSR1: Adding %d users (new target: %d)", g_batch_size, g_target_users);
         }
 
@@ -339,12 +344,14 @@ int main(int argc, char** argv) {
     }
 
     LOG_INFO("Shutting down. Terminating all users...");
+    // Signal all to stop
     for (int i = 0; i < 1000; i++) {
-        if (g_users[i].active) {
-            pthread_cancel(g_users[i].thread);
-            pthread_join(g_users[i].thread, NULL);
+        if (atomic_load(&g_users[i].active)) {
+            atomic_store(&g_users[i].should_run, false);
         }
     }
+
+    tp_destroy(g_pool, true);
 
     sim_ipc_shm_detach(g_shm);
     po_logger_shutdown();

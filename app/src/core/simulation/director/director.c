@@ -128,6 +128,9 @@ static void spawn_process(const char* bin, char *const argv[]) {
     }
 }
 
+static int g_ti_pool_size = 64; // Default Ticket Issuer pool
+static int g_um_pool_size = 1000; // Default Users Manager pool
+
 static void load_config_into_shm(const char *config_path) {
     if (!config_path) {
         LOG_WARN("No configuration file provided via arguments. Using defaults.");
@@ -142,17 +145,9 @@ static void load_config_into_shm(const char *config_path) {
     // Load config strictly
     if (po_config_load_strict(config_path, &cfg) != 0) {
         LOG_ERROR("Failed to load config strictly from %s: %s", config_path, po_strerror(errno));
-        // We might want to exit here if "check errors" implies hard failure?
-        // User said "check workers, Main and Director eventual errors with logs".
-        // Let's log severe error.
-        // Fallback to defaults to keep running? Or exit?
-        // "there must be nothing hardcoded" implies we rely on the file.
-        // If file fails, we probably shouldn't guess.
-        // But for safety, let's keep defaults but be very loud.
         g_shm->params.sim_duration_days = 10;
         g_shm->params.tick_nanos = 2500000;
         g_shm->params.explode_threshold = 100;
-        // Fix Leak: Must free cfg (which might be partially allocated)
         po_config_free(&cfg);
         return;
     }
@@ -184,11 +179,10 @@ static void load_config_into_shm(const char *config_path) {
         g_shm->params.explode_threshold = 100;
     }
     
-    // [workers] NOF_WORKERS (Informational or override if we refactored main)
+    // [workers] NOF_WORKERS
     int n_workers_cfg = 0;
     if (po_config_get_int(cfg, "workers", "NOF_WORKERS", &n_workers_cfg) == 0 && n_workers_cfg > 0) {
         if (g_n_workers == 0) {
-            // Not set by CLI, use config
             g_n_workers = (uint32_t)n_workers_cfg;
             LOG_INFO("Using workers count from config: %u", g_n_workers);
         } else if ((uint32_t)n_workers_cfg != g_n_workers) {
@@ -200,12 +194,16 @@ static void load_config_into_shm(const char *config_path) {
     int n_new_users = 0;
     if (po_config_get_int(cfg, "users_manager", "N_NEW_USERS", &n_new_users) == 0 && n_new_users > 0) {
         g_n_users_batch = n_new_users;
-        // Default initial to batch if not specified otherwise
         g_n_users_initial = n_new_users;
+    }
+    
+    // [users_manager] POOL_SIZE
+    int um_pool = 0;
+    if (po_config_get_int(cfg, "users_manager", "POOL_SIZE", &um_pool) == 0 && um_pool > 0) {
+        g_um_pool_size = um_pool;
     }
 
     // [users] NOF_USERS
-    // Override initial users if specified
     int nof_users = 0;
     if (po_config_get_int(cfg, "users", "NOF_USERS", &nof_users) == 0 && nof_users > 0) {
         g_n_users_initial = nof_users;
@@ -213,7 +211,7 @@ static void load_config_into_shm(const char *config_path) {
 
     LOG_INFO("Config: Users initial=%d, batch=%d", g_n_users_initial, g_n_users_batch);
 
-    // [users]
+    // [users] requests/probs
     int n_requests = 0;
     if (po_config_get_int(cfg, "users", "N_REQUESTS", &n_requests) == 0 && n_requests > 0) {
         char buf[16];
@@ -231,9 +229,16 @@ static void load_config_into_shm(const char *config_path) {
     if (po_config_get_str(cfg, "users", "P_SERV_MAX", &p_max) == 0 && p_max) {
         setenv("PO_USER_P_MAX", p_max, 1);
     }
+    
+    // [ticket_issuer] POOL_SIZE
+    int ti_pool = 0;
+    if (po_config_get_int(cfg, "ticket_issuer", "POOL_SIZE", &ti_pool) == 0 && ti_pool > 0) {
+        g_ti_pool_size = ti_pool;
+    }
 
-    LOG_INFO("Loaded Config: Duration=%u days, Tick=%lu ns, Explode=%u",
-             g_shm->params.sim_duration_days, g_shm->params.tick_nanos, g_shm->params.explode_threshold);
+    LOG_INFO("Loaded Config: Duration=%u, Tick=%lu, Explode=%u, TI_Pool=%d, UM_Pool=%d",
+             g_shm->params.sim_duration_days, g_shm->params.tick_nanos, g_shm->params.explode_threshold,
+             g_ti_pool_size, g_um_pool_size);
 
     po_config_free(&cfg);
 }
@@ -336,10 +341,6 @@ int main(int argc, char** argv) {
     sim_ipc_shm_destroy();
     
     // Initialize Simulation IPC (Shared Memory)
-    // Use n_workers from arguments (default 6)
-    // NOTE: If we want config-based worker count, we should parse config HERE, before SHM size calc.
-    // For now, assume CLI provides workers or defaults.
-    
     g_shm = sim_ipc_shm_create(g_n_workers);
     if (!g_shm) {
         LOG_FATAL("Failed to create shared memory: %s", strerror(errno));
@@ -374,6 +375,7 @@ int main(int argc, char** argv) {
         exit(EXIT_FAILURE);
     }
     LOG_INFO("Semaphores initialized (ID: %d)", semid);
+    LOG_DEBUG("IPC: Semaphores created with ID %d for %d service types", semid, SIM_MAX_SERVICE_TYPES);
 
     // 4. Centralized IPC Creation
     FILE* f_workers = fopen("logs/workers.log", "w"); 
@@ -418,8 +420,10 @@ int main(int argc, char** argv) {
 
     // Spawn Ticket Issuer
     char fd_str[16];
+    char ti_pool_str[16];
     snprintf(fd_str, sizeof(fd_str), "%d", issuer_sock_fd);
-    char *args_issuer[] = {(char*)bin_issuer, "-l", (char*)g_log_level_str, "--socket-fd", fd_str, NULL};
+    snprintf(ti_pool_str, sizeof(ti_pool_str), "%d", g_ti_pool_size);
+    char *args_issuer[] = {(char*)bin_issuer, "-l", (char*)g_log_level_str, "--socket-fd", fd_str, "--pool-size", ti_pool_str, NULL};
     spawn_process(bin_issuer, args_issuer);
 
     // 6. Spawn Workers (Single Process, Multi-threaded)
@@ -427,13 +431,18 @@ int main(int argc, char** argv) {
     char workers_count_str[16];
     snprintf(workers_count_str, sizeof(workers_count_str), "%u", g_n_workers);
     char *args_worker[] = {(char*)bin_worker, "-l", (char*)g_log_level_str, "-w", workers_count_str, NULL};
+    LOG_DEBUG("Preparing to spawn %s with args: -l %s -w %s", bin_worker, g_log_level_str, workers_count_str);
     spawn_process(bin_worker, args_worker);
 
+
+
     // Spawn Users Manager
-    char initial_str[16], batch_str[16];
+    char initial_str[16], batch_str[16], um_pool_str[16];
     snprintf(initial_str, sizeof(initial_str), "%d", g_n_users_initial);
     snprintf(batch_str, sizeof(batch_str), "%d", g_n_users_batch);
-    char *args_manager[] = {(char*)bin_manager, "-l", (char*)g_log_level_str, "--initial", initial_str, "--batch", batch_str, NULL};
+    snprintf(um_pool_str, sizeof(um_pool_str), "%d", g_um_pool_size);
+    char *args_manager[] = {(char*)bin_manager, "-l", (char*)g_log_level_str, "--initial", initial_str, "--batch", batch_str, "--pool-size", um_pool_str, NULL};
+    LOG_DEBUG("Preparing to spawn %s with args: -l %s --initial %s --batch %s --pool-size %s", bin_manager, g_log_level_str, initial_str, batch_str, um_pool_str);
     spawn_process(bin_manager, args_manager);
 
     po_task_queue_t task_queue;
@@ -519,6 +528,7 @@ int main(int argc, char** argv) {
 
         // Advance 1 minute
         current_min++;
+        LOG_TRACE("Tick: Day %d %02d:%02d", current_day, current_hour, current_min);
         // Check limits before logging day change
 
         // 1. Timeout

@@ -41,5 +41,5 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    return user_run(user_id, service_type, shm);
+    return user_run(user_id, service_type, shm, NULL);
 }

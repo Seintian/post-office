@@ -47,6 +47,7 @@ LOG_DIR                = $(POSTOFFICE_LIBS_DIR)/log
 SYSINFO_DIR            = $(POSTOFFICE_LIBS_DIR)/sysinfo
 BACKTRACE_DIR          = $(POSTOFFICE_LIBS_DIR)/backtrace
 VECTOR_DIR             = $(POSTOFFICE_LIBS_DIR)/vector
+CONCURRENCY_DIR        = $(POSTOFFICE_LIBS_DIR)/concurrency
 
 ## Third-party Libraries
 INIH_DIR               = $(THIRDPARTY_LIBS_DIR)/inih
@@ -77,7 +78,7 @@ EXPLODE_INI_PATH       = $(CONFIG_DIR)/explode.ini
 # *** Compiler flags *** #
 
 INCLUDES_I = -I$(INCLUDE_DIR) -I$(POSTOFFICE_INCLUDE_DIR) -I$(THIRDPARTY_INCLUDE_DIR)
-LIBS_I     = -I$(POSTOFFICE_LIBS_DIR) -I$(POSTOFFICE_LIBS_DIR)/tui -I$(THIRDPARTY_LIBS_DIR)
+LIBS_I     = -Ilibs -I$(POSTOFFICE_LIBS_DIR) -I$(POSTOFFICE_LIBS_DIR)/tui -I$(THIRDPARTY_LIBS_DIR)
 CORE_I     = -I$(CORE_SRC_DIR)/main -I$(CORE_SRC_DIR)/simulation
 SRC_I      = -I$(SRC_DIR)
 
@@ -149,7 +150,7 @@ CONFIG ?= $(shell \
 		printf "%s" "$$CONFIG";)
 
 # Default logger level (TRACE, DEBUG, INFO, WARN, ERROR, FATAL)
-LOG_LEVEL ?= TRACE
+LOG_LEVEL ?= DEBUG
 
 # Arguments for main process
 MAIN_ARGS = --config "$(CONFIG)" --loglevel "$(LOG_LEVEL)"
@@ -191,6 +192,7 @@ LOG_SRC         = $(wildcard $(LOG_DIR)/*.c)
 SYSINFO_SRC     = $(wildcard $(SYSINFO_DIR)/*.c)
 BACKTRACE_SRC     = $(wildcard $(BACKTRACE_DIR)/*.c)
 VECTOR_SRC        = $(wildcard $(VECTOR_DIR)/*.c)
+CONCURRENCY_SRC   = $(wildcard $(CONCURRENCY_DIR)/*.c)
 
 ## Third-party Libraries
 INIH_SRC        = $(wildcard $(INIH_DIR)/*.c)
@@ -249,6 +251,7 @@ LOG_OBJS            = $(patsubst $(LOG_DIR)/%.c,$(BUILD_DIR)/log/%.o,$(LOG_SRC))
 SYSINFO_OBJS        = $(patsubst $(SYSINFO_DIR)/%.c,$(BUILD_DIR)/sysinfo/%.o,$(SYSINFO_SRC))
 BACKTRACE_OBJS      = $(patsubst $(BACKTRACE_DIR)/%.c,$(BUILD_DIR)/backtrace/%.o,$(BACKTRACE_SRC))
 VECTOR_OBJS         = $(patsubst $(VECTOR_DIR)/%.c,$(BUILD_DIR)/vector/%.o,$(VECTOR_SRC))
+CONCURRENCY_OBJS    = $(patsubst $(CONCURRENCY_DIR)/%.c,$(BUILD_DIR)/concurrency/%.o,$(CONCURRENCY_SRC))
 
 ## Third-party Libraries
 INIH_OBJS           = $(patsubst $(INIH_DIR)/%.c,$(BUILD_DIR)/inih/%.o,$(INIH_SRC))
@@ -262,7 +265,7 @@ DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(RANDOM_OBJS) $(HASHTABLE_OBJS
                       $(PRIME_OBJS) $(LOG_C_OBJS) $(METRICS_OBJS) \
 					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
 					  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS) $(SYSINFO_OBJS) \
-					  $(BACKTRACE_OBJS) $(VECTOR_OBJS)
+					  $(BACKTRACE_OBJS) $(VECTOR_OBJS) $(CONCURRENCY_OBJS)
 
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
@@ -521,12 +524,12 @@ $(BUILD_DIR)/director/schedule/%.o: $(DIRECTOR_SCHED_DIR)/%.c
 # Rule for ticket_issuer application objects
 $(BUILD_DIR)/ticket_issuer/%.o: $(TICKET_ISSUER_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 # Rule for users_manager application objects
 $(BUILD_DIR)/users_manager/%.o: $(USERS_MANAGER_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 # Rule for utils objects
 $(BUILD_DIR)/utils/%.o: $(UTILS_DIR)/%.c
@@ -608,6 +611,10 @@ $(BUILD_DIR)/backtrace/%.o: $(BACKTRACE_DIR)/%.c
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 $(BUILD_DIR)/vector/%.o: $(VECTOR_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+$(BUILD_DIR)/concurrency/%.o: $(CONCURRENCY_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 

@@ -23,6 +23,7 @@
 #include <time.h>
 #include <utils/signals.h>
 #include <stdatomic.h>
+#include <sys/syscall.h>
 
 static volatile sig_atomic_t g_running = 1;
 
@@ -89,7 +90,7 @@ int user_standalone_init(sim_shm_t** out_shm) {
     return 0;
 }
 
-int user_run(int user_id, int service_type, sim_shm_t* shm) {
+int user_run(int user_id, int service_type, sim_shm_t* shm, volatile _Atomic bool *active_flag) {
     if (!shm) {
         LOG_FATAL("user_run called with NULL shm");
         return EXIT_FAILURE;
@@ -109,6 +110,8 @@ int user_run(int user_id, int service_type, sim_shm_t* shm) {
     LOG_INFO("User %d starting with %d requests (TID: %ld)", user_id, n_requests, (long)gettid());
 
     for (int req = 0; req < n_requests && g_running; req++) {
+        if (active_flag && !atomic_load(active_flag)) break;
+
         // Optional: Random delay between requests
         if (req > 0) {
             usleep((unsigned int)po_rand_range_i64(100000, 500000)); // 100-500ms
@@ -125,9 +128,16 @@ int user_run(int user_id, int service_type, sim_shm_t* shm) {
 
         int sock_fd = -1;
         for (int i = 0; i < 100 && g_running; i++) {
+            if (active_flag && !atomic_load(active_flag)) break;
             sock_fd = po_socket_connect_unix(sock_path);
             if (sock_fd >= 0) break;
+            LOG_DEBUG("Connect attempt %d failed, retrying...", i+1);
             usleep(20000); // 20ms retry
+        }
+
+        if (active_flag && !atomic_load(active_flag)) {
+            if (sock_fd >= 0) po_socket_close(sock_fd);
+            break;
         }
 
         if (sock_fd < 0 && g_running) {
@@ -142,9 +152,16 @@ int user_run(int user_id, int service_type, sim_shm_t* shm) {
             break;
         }
 
+        // Set Receive Timeout to allow flag checking
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 100000; // 100ms
+        setsockopt(sock_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+
         // Request Ticket
         msg_ticket_req_t msg_req = {
             .requester_pid = getpid(),
+            .requester_tid = (pid_t)syscall(SYS_gettid),
             .service_type = (service_type_t)service_type
         };
         ssize_t sent = po_socket_send(sock_fd, &msg_req, sizeof(msg_req), 0);
@@ -158,10 +175,12 @@ int user_run(int user_id, int service_type, sim_shm_t* shm) {
         ssize_t n = -1;
         int attempts = 0;
         while (attempts++ < 100 && g_running) {
+            if (active_flag && !atomic_load(active_flag)) break;
+
             n = po_socket_recv(sock_fd, &resp, sizeof(resp), 0);
             if (n == sizeof(resp)) break;
-            if (n == PO_SOCKET_WOULDBLOCK) {
-                usleep(5000);
+            if (n == PO_SOCKET_WOULDBLOCK || (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
+                // Timeout or non-blocking
                 continue;
             }
             break;
@@ -221,8 +240,6 @@ int user_run(int user_id, int service_type, sim_shm_t* shm) {
             atomic_fetch_add(&shm->queues[service_type].waiting_count, 1);
 
             // Push Ticket to Shared Queue
-            // Note: EXPLODE_THRESHOLD=100 ensures we rarely wrap/overflow 128 buffer 
-            // if users respect it. 
             queue_status_t *q = &shm->queues[service_type];
             unsigned int tail = atomic_fetch_add(&q->tail, 1);
             unsigned int idx = tail % 128;
@@ -239,6 +256,7 @@ int user_run(int user_id, int service_type, sim_shm_t* shm) {
                 .sem_op = 1, // Increment
                 .sem_flg = 0
             };
+            LOG_DEBUG("User %d waiting for queue semaphore (type %d)...", user_id, service_type);
             while (semop(semid, &sb, 1) == -1) {
                 if (errno == EINTR) {
                     if (!g_running) {
@@ -255,6 +273,8 @@ int user_run(int user_id, int service_type, sim_shm_t* shm) {
             LOG_WARN("User %d failed to get semid", user_id);
             break;
         }
+        
+        LOG_DEBUG("User %d entered queue for service %d", user_id, service_type);
 
         // Wait for Service
         bool served = false;
@@ -274,6 +294,7 @@ int user_run(int user_id, int service_type, sim_shm_t* shm) {
             }
 
             if (!served) {
+                // LOG_DEBUG("User %d still waiting for service...", user_id); // Too spammy? Maybe un-comment if deep debug needed
                 usleep(50000);
             }
         }
