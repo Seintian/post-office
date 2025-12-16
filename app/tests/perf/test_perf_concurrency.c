@@ -89,6 +89,53 @@ static uint64_t get_counter_value_from_report(const char *counter_name) {
     return value;
 }
 
+// Global thread functions to replace nested ones
+static void *timer_thread_global(void *arg) {
+    (void)arg;
+    pthread_barrier_wait(&g_barrier);
+    
+    for (int i = 0; i < 100; i++) {
+        po_perf_timer_start("concurrent_timer");
+        struct timespec ts = {0, 10000}; // 10 microseconds
+        nanosleep(&ts, NULL);
+        po_perf_timer_stop("concurrent_timer");
+    }
+    
+    return NULL;
+}
+
+static void *histogram_thread_global(void *arg) {
+    int thread_id = *(int *)arg;
+    pthread_barrier_wait(&g_barrier);
+    
+    for (int i = 0; i < 100; i++) {
+        uint64_t value = (uint64_t)((thread_id * 100 + i) % 15000);
+        po_perf_histogram_record("concurrent_hist", value);
+    }
+    
+    return NULL;
+}
+
+typedef struct {
+    int thread_id;
+    const char *counter_name;
+} add_thread_args_t;
+
+static void *add_thread_global(void *arg) {
+    add_thread_args_t *args = (add_thread_args_t *)arg;
+    int thread_id = args->thread_id;
+    const char *counter_name = args->counter_name;
+    
+    pthread_barrier_wait(&g_barrier);
+    
+    for (int i = 0; i < 100; i++) {
+        po_perf_counter_add(counter_name, (uint64_t)(thread_id + 1));
+    }
+    
+    return NULL;
+}
+
+
 TEST_GROUP(PERF_CONCURRENCY);
 
 TEST_SETUP(PERF_CONCURRENCY) {
@@ -295,24 +342,9 @@ TEST(PERF_CONCURRENCY, TIMER_CONCURRENCY) {
     
     pthread_barrier_init(&g_barrier, NULL, NUM_THREADS);
     
-    // Thread function for timer test
-    void *timer_thread(void *arg) {
-        (void)arg;
-        pthread_barrier_wait(&g_barrier);
-        
-        for (int i = 0; i < 100; i++) {
-            po_perf_timer_start("concurrent_timer");
-            struct timespec ts = {0, 10000}; // 10 microseconds
-            nanosleep(&ts, NULL);
-            po_perf_timer_stop("concurrent_timer");
-        }
-        
-        return NULL;
-    }
-    
     pthread_t threads[NUM_THREADS];
     for (int i = 0; i < NUM_THREADS; i++) {
-        pthread_create(&threads[i], NULL, timer_thread, NULL);
+        pthread_create(&threads[i], NULL, timer_thread_global, NULL);
     }
     
     for (int i = 0; i < NUM_THREADS; i++) {
@@ -333,25 +365,12 @@ TEST(PERF_CONCURRENCY, HISTOGRAM_CONCURRENCY) {
     
     pthread_barrier_init(&g_barrier, NULL, NUM_THREADS);
     
-    // Thread function for histogram test
-    void *histogram_thread(void *arg) {
-        int thread_id = *(int *)arg;
-        pthread_barrier_wait(&g_barrier);
-        
-        for (int i = 0; i < 100; i++) {
-            uint64_t value = (uint64_t)((thread_id * 100 + i) % 15000);
-            po_perf_histogram_record("concurrent_hist", value);
-        }
-        
-        return NULL;
-    }
-    
     pthread_t threads[NUM_THREADS];
     int thread_ids[NUM_THREADS];
     
     for (int i = 0; i < NUM_THREADS; i++) {
         thread_ids[i] = i;
-        pthread_create(&threads[i], NULL, histogram_thread, &thread_ids[i]);
+        pthread_create(&threads[i], NULL, histogram_thread_global, &thread_ids[i]);
     }
     
     for (int i = 0; i < NUM_THREADS; i++) {
@@ -381,23 +400,13 @@ TEST(PERF_CONCURRENCY, COUNTER_ADD_CONCURRENCY) {
     
     pthread_barrier_init(&g_barrier, NULL, NUM_THREADS);
     
-    void *add_thread(void *arg) {
-        int thread_id = *(int *)arg;
-        pthread_barrier_wait(&g_barrier);
-        
-        for (int i = 0; i < 100; i++) {
-            po_perf_counter_add(counter_name, (uint64_t)(thread_id + 1));
-        }
-        
-        return NULL;
-    }
-    
     pthread_t threads[NUM_THREADS];
-    int thread_ids[NUM_THREADS];
+    add_thread_args_t thread_args[NUM_THREADS];
     
     for (int i = 0; i < NUM_THREADS; i++) {
-        thread_ids[i] = i;
-        pthread_create(&threads[i], NULL, add_thread, &thread_ids[i]);
+        thread_args[i].thread_id = i;
+        thread_args[i].counter_name = counter_name;
+        pthread_create(&threads[i], NULL, add_thread_global, &thread_args[i]);
     }
     
     for (int i = 0; i < NUM_THREADS; i++) {

@@ -120,10 +120,28 @@ int main(int argc, char** argv) {
 
     LOG_INFO("Poller initialized. Waiting for connections...");
 
+    int last_synced_day = 0;
+    
+    // Helper for sync
+    void sync_check_day(void) {
+        if (atomic_load(&shm->sync.barrier_active)) {
+            unsigned int barrier_day = atomic_load(&shm->sync.day_seq);
+            if ((int)barrier_day > last_synced_day) {
+                atomic_fetch_add(&shm->sync.ready_count, 1);
+                last_synced_day = (int)barrier_day;
+                while (g_running && atomic_load(&shm->sync.barrier_active)) {
+                    usleep(1000); 
+                }
+            }
+        }
+    }
+
     // 5. Main Loop
     struct epoll_event events[32];
     while (g_running) {
-        int n_events = poller_wait(poller, events, 32, 500); // 500ms timeout
+        sync_check_day();
+
+        int n_events = poller_wait(poller, events, 32, 100); // 100ms timeout for sync check
         if (n_events < 0) {
             if (errno == EINTR) continue;
             LOG_ERROR("poller_wait failed: %s", po_strerror(errno));

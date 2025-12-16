@@ -512,6 +512,7 @@ TEST(LOGSTORE, CONCURRENT_APPENDS) {
             free(out);
         }
     }
+    usleep(100000); // Allow worker to finish freeing
 }
 
 TEST(LOGSTORE, LOGGER_SINK_ATTACHED_WRITES_FILE) {

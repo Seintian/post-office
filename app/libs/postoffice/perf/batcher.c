@@ -90,10 +90,16 @@ int perf_batcher_enqueue(po_perf_batcher_t *b, void *item) {
 
     // Signal consumer: increment counter by 1
     uint64_t inc = 1;
-    if (write(b->efd, &inc, sizeof(inc)) != sizeof(inc)) {
-        // if this fails, we consider it an internal error
+    ssize_t ret;
+    do {
+        ret = write(b->efd, &inc, sizeof(inc));
+    } while (ret < 0 && errno == EINTR);
+
+    if (ret != sizeof(inc)) {
+        // if this fails, we consider it an internal error but item is enqueued
+        // return 0 to avoid double-free by caller
         errno = EIO;
-        return -1;
+        return 0;
     }
 
     if (b->flags & PERF_BATCHER_METRICS)

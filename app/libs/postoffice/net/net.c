@@ -25,8 +25,8 @@ static perf_zcpool_t *g_rx_pool;
 static pthread_mutex_t g_zcpool_create_lock = PTHREAD_MUTEX_INITIALIZER;
 static atomic_uint g_tx_users = 0;
 static atomic_uint g_rx_users = 0;
-static atomic_bool g_tx_shutting = ATOMIC_VAR_INIT(false);
-static atomic_bool g_rx_shutting = ATOMIC_VAR_INIT(false);
+static atomic_bool g_tx_shutting = false;
+static atomic_bool g_rx_shutting = false;
 
 int net_init_zerocopy(size_t tx_buffers, size_t rx_buffers, size_t buf_size) {
     /* Protect init/shutdown races with a mutex. Simple and sufficient for

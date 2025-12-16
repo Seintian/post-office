@@ -663,8 +663,12 @@ int po_perf_report(FILE *out) {
     size_t nc = atomic_load(&ctx.shm->num_counters);
     if (nc > 0) {
         print_line(out, "-- Counters --");
-        shm_counter_t *local_c = malloc(nc * sizeof(shm_counter_t));
-        memcpy(local_c, ctx.shm->counters, nc * sizeof(shm_counter_t));
+        void *ptr = NULL;
+        if (posix_memalign(&ptr, PO_CACHE_LINE_MAX, (nc * sizeof(shm_counter_t) + PO_CACHE_LINE_MAX - 1) & ~(size_t)(PO_CACHE_LINE_MAX - 1)) != 0) ptr = NULL;
+        shm_counter_t *local_c = ptr;
+        if (local_c) { // Check if allocation was successful
+            memcpy(local_c, ctx.shm->counters, nc * sizeof(shm_counter_t));
+        }
         qsort(local_c, nc, sizeof(shm_counter_t), compare_shm_counters);
         
         for (size_t i = 0; i < nc; i++) {

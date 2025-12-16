@@ -120,6 +120,14 @@ _Static_assert(sizeof(sim_time_t) % PO_CACHE_LINE_MAX == 0, "sim_time_t size mis
 /**
  * @brief Main Shared Memory Structure.
  */
+typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) sync_control_s {
+    atomic_int barrier_active; // 1 = Waiting for sync, 0 = Running
+    atomic_uint ready_count;   // Number of processes ready
+    atomic_uint required_count;// Total expected processes
+    atomic_uint day_seq;       // Current day sequence
+} sync_control_t;
+_Static_assert(sizeof(sync_control_t) % PO_CACHE_LINE_MAX == 0, "sync_control_t size mismatch");
+
 /**
  * @brief Main Shared Memory Structure.
  */
@@ -138,10 +146,13 @@ typedef struct simulation_shm_s {
     // 4. Statistics
     global_stats_t stats;
 
-    // 5. Live Data - Queues
+    // 5. Synchronization
+    sync_control_t sync;
+
+    // 6. Live Data - Queues
     queue_status_t queues[SIM_MAX_SERVICE_TYPES];
 
-    // 6. Live Data - Workers (Flexible Array Member)
+    // 7. Live Data - Workers (Flexible Array Member)
     // Must be at the end.
     worker_status_t workers[];
 } sim_shm_t;

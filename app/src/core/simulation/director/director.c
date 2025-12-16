@@ -380,6 +380,10 @@ int main(int argc, char** argv) {
     if (f_workers) fclose(f_workers);
     else LOG_WARN("Failed to truncate logs/workers.log");
 
+    FILE* f_users = fopen("logs/users.log", "w");
+    if (f_users) fclose(f_users);
+    else LOG_WARN("Failed to truncate logs/users.log");
+
     // Secure socket path logic
     const char* user_home = getenv("HOME");
     char sock_path[512];
@@ -418,20 +422,12 @@ int main(int argc, char** argv) {
     char *args_issuer[] = {(char*)bin_issuer, "-l", (char*)g_log_level_str, "--socket-fd", fd_str, NULL};
     spawn_process(bin_issuer, args_issuer);
 
-    // 6. Spawn Workers
-    LOG_INFO("Spawning %u Worker processes...", g_n_workers);
-    for (uint32_t i = 0; i < g_n_workers; i++) {
-        char id_buf[16];
-        snprintf(id_buf, sizeof(id_buf), "%u", i);
-
-        // Assign service type round-robin
-        int stype = i % SIM_MAX_SERVICE_TYPES;
-        char stype_buf[16];
-        snprintf(stype_buf, sizeof(stype_buf), "%d", stype);
-        
-        char *args_worker[] = {(char*)bin_worker, "-l", (char*)g_log_level_str, "-i", id_buf, "-s", stype_buf, NULL};
-        spawn_process(bin_worker, args_worker);
-    }
+    // 6. Spawn Workers (Single Process, Multi-threaded)
+    LOG_INFO("Spawning Worker process with %u threads...", g_n_workers);
+    char workers_count_str[16];
+    snprintf(workers_count_str, sizeof(workers_count_str), "%u", g_n_workers);
+    char *args_worker[] = {(char*)bin_worker, "-l", (char*)g_log_level_str, "-w", workers_count_str, NULL};
+    spawn_process(bin_worker, args_worker);
 
     // Spawn Users Manager
     char initial_str[16], batch_str[16];
@@ -489,11 +485,18 @@ int main(int argc, char** argv) {
         atomic_store(&shm->sync.barrier_active, 1);
         
         uint32_t req = atomic_load(&shm->sync.required_count);
-        LOG_INFO("Waiting for day %d synchronization (0/%u)...", day, req);
+        LOG_INFO("Waiting for day %d synchronization...", day);
         
+        int poll_counter = 0;
         while (g_running) {
             uint32_t ready = atomic_load(&shm->sync.ready_count);
             if (ready >= req) break;
+            
+            // Log progress every ~1 second (10ms * 100)
+            if (++poll_counter % 100 == 0) {
+                LOG_DEBUG("Day %d Sync: %u/%u ready", day, ready, req);
+            }
+            
             usleep(10000); // 10ms poll
         }
         

@@ -1,16 +1,36 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "runtime/worker_loop.h"
+// Actually we need the constant. It's usually in simulation_protocol or ipc.
+// Let's assume SIM_MAX_SERVICE_TYPES is available via headers or defined.
+// worker_loop.h doesn't expose it. It's in ipc/simulation_protocol.h
+#include "../ipc/simulation_protocol.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <getopt.h>
+
+typedef struct {
+    int id;
+    int service_type;
+} worker_thread_arg_t;
+
+static void* worker_thread_entry(void* arg) {
+    worker_thread_arg_t* args = (worker_thread_arg_t*)arg;
+    worker_run(args->id, args->service_type);
+    free(args);
+    return NULL;
+}
 
 int main(int argc, char** argv) {
     int worker_id = -1;
     int service_type = -1;
+    int n_workers = 0;
 
     int opt;
-    while ((opt = getopt(argc, argv, "l:i:s:")) != -1) {
+    while ((opt = getopt(argc, argv, "l:i:s:w:")) != -1) {
         char *endptr;
         long val;
         switch (opt) {
@@ -25,14 +45,50 @@ int main(int argc, char** argv) {
                 val = strtol(optarg, &endptr, 10);
                 if (*endptr == '\0' && val >= 0) service_type = (int)val;
                 break;
+            case 'w':
+                val = strtol(optarg, &endptr, 10);
+                if (*endptr == '\0' && val > 0) n_workers = (int)val;
+                break;
             default: break;
         }
     }
 
-    if (worker_id == -1 || service_type == -1) {
-        fprintf(stderr, "Usage: %s -i <worker_id> -s <service_type>\n", argv[0]);
+    // Initialize Global Resources (Shared Memory, Semaphores, Logger)
+    if (worker_global_init() != 0) {
+        fprintf(stderr, "Failed to initialize worker globals\n");
         return 1;
     }
 
-    return worker_run(worker_id, service_type);
+    if (n_workers > 0) {
+        // Multi-threaded mode
+        pthread_t* threads = malloc(sizeof(pthread_t) * (size_t)n_workers);
+        if (!threads) return 1;
+
+        printf("Spawning %d worker threads...\n", n_workers); // stdout for supervisor info
+
+        for (int i = 0; i < n_workers; i++) {
+            worker_thread_arg_t* arg = malloc(sizeof(worker_thread_arg_t));
+            arg->id = i;
+            arg->service_type = i % SIM_MAX_SERVICE_TYPES; // Round robin assignment
+            
+            if (pthread_create(&threads[i], NULL, worker_thread_entry, arg) != 0) {
+                perror("pthread_create");
+            }
+        }
+
+        // Wait for all
+        for (int i = 0; i < n_workers; i++) {
+            pthread_join(threads[i], NULL);
+        }
+        free(threads);
+
+    } else if (worker_id != -1 && service_type != -1) {
+        // Single mode (legacy compatibility)
+        worker_run(worker_id, service_type);
+    } else {
+        fprintf(stderr, "Usage: %s -w <n_workers> OR -i <id> -s <type>\n", argv[0]);
+        return 1;
+    }
+
+    return 0;
 }

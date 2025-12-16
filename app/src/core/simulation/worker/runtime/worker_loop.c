@@ -42,8 +42,11 @@ static void get_sim_time(sim_shm_t* shm, int *d, int *h, int *m) {
     *m = packed & 0xFF;
 }
 
-// Internal init helper
-static int worker_init(int worker_id, int service_type, sim_shm_t** out_shm, int* out_semid) {
+static sim_shm_t* g_shm_worker = NULL;
+static int g_semid_worker = -1;
+
+// Global initialization (called once by main thread)
+int worker_global_init(void) {
     // Collect system information for optimizations
     po_sysinfo_t sysinfo;
     size_t cacheline_size = 64; // default
@@ -83,31 +86,18 @@ static int worker_init(int worker_id, int service_type, sim_shm_t** out_shm, int
     }
 
     // Attach SHM
-    sim_shm_t* shm = sim_ipc_shm_attach();
-    if (!shm) {
+    g_shm_worker = sim_ipc_shm_attach();
+    if (!g_shm_worker) {
         LOG_FATAL("worker: failed to attach SHM");
-        return -1;
-    }
-    *out_shm = shm;
-
-    // Validation
-    if (worker_id < 0 || (uint32_t)worker_id >= shm->params.n_workers) {
-        LOG_FATAL("Worker ID %d out of range (n_workers=%u)", worker_id, shm->params.n_workers);
-        return -1;
-    }
-
-    if (service_type < 0 || service_type >= SIM_MAX_SERVICE_TYPES) {
-        LOG_FATAL("Invalid service type %d", service_type);
         return -1;
     }
 
     // Get Semaphores
-    int semid = sim_ipc_sem_get();
-    if (semid == -1) {
-        LOG_ERROR("worker %d: failed to get semaphores", worker_id);
+    g_semid_worker = sim_ipc_sem_get();
+    if (g_semid_worker == -1) {
+        LOG_ERROR("worker: failed to get semaphores");
         return -1;
     }
-    *out_semid = semid;
 
     setup_signals();
     po_rand_seed_auto();
@@ -116,24 +106,36 @@ static int worker_init(int worker_id, int service_type, sim_shm_t** out_shm, int
 }
 
 int worker_run(int worker_id, int service_type) {
-    sim_shm_t* shm = NULL;
-    int semid = -1;
+    if (!g_shm_worker || g_semid_worker == -1) {
+        LOG_FATAL("Worker globals not initialized");
+        return EXIT_FAILURE;
+    }
 
-    if (worker_init(worker_id, service_type, &shm, &semid) != 0) {
-        if (shm) sim_ipc_shm_detach(shm);
-        po_logger_shutdown();
+    sim_shm_t* shm = g_shm_worker;
+    int semid = g_semid_worker;
+
+    // Validation
+    if (worker_id < 0 || (uint32_t)worker_id >= shm->params.n_workers) {
+        LOG_FATAL("Worker ID %d out of range (n_workers=%u)", worker_id, shm->params.n_workers);
+        return EXIT_FAILURE;
+    }
+
+    if (service_type < 0 || service_type >= SIM_MAX_SERVICE_TYPES) {
+        LOG_FATAL("Invalid service type %d", service_type);
         return EXIT_FAILURE;
     }
 
     int day, hour, min;
     get_sim_time(shm, &day, &hour, &min);
 
-    LOG_INFO("[Day %d %02d:%02d] Worker %d started (PID: %d) type %d", 
-             day, hour, min, worker_id, getpid(), service_type);
+    LOG_INFO("[Day %d %02d:%02d] Worker %d started (TID: %ld) type %d", 
+             day, hour, min, worker_id, (long)gettid(), service_type); // Using gettid if available or just logging
 
-    // Register myself in SHM
+    // Register myself in SHM (Use PID as thread ID roughly or just placeholder)
     atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_FREE);
-    atomic_store(&shm->workers[worker_id].pid, getpid());
+    atomic_store(&shm->workers[worker_id].pid, getpid()); // All threads share PID. Maybe TID? 
+    // SHM expects pid_t. gettid() is Linux specific. 
+    // We can stick with PID (process ID) for now, as killing process kills all threads.
     atomic_store(&shm->workers[worker_id].service_type, service_type);
 
     int last_synced_day = 0;
@@ -166,16 +168,6 @@ int worker_run(int worker_id, int service_type) {
             .sem_flg = 0
         };
 
-        // Blocking wait
-        // Use timed wait or periodic check to allow sync checking?
-        // semop is blocking. If we block here, we might miss the sync barrier if we are idle!
-        // The Director waits for EVERYONE. If a worker is blocked on semop (idle), it won't see the barrier.
-        // THIS IS A DEADLOCK RISK.
-        // Worker must be "ready" if it's idle.
-        // If worker is idle, it is effectively ready for next day.
-        // But we need to signal it.
-        // If we use IPC_NOWAIT and sleep?
-        
         // Revised approach:
         // Use a short timeout for semop (if possible with semtimedop) or polling.
         // Linux supports semtimedop. _GNU_SOURCE is defined.
@@ -193,8 +185,7 @@ int worker_run(int worker_id, int service_type) {
             break;
         }
 
-        // We have acquired a user. Decrement the waiting count to reflect they are no longer "waiting" but "being served".
-        // This makes the EXPLODE check (waiting_count) represent instantaneous queue size, not cumulative.
+        // We have acquired a user. Decrement the waiting count.
         atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
 
         if (!g_running) break;
@@ -224,14 +215,11 @@ int worker_run(int worker_id, int service_type) {
 
         get_sim_time(shm, &day, &hour, &min);
         // Working Hours Check: 08:00 to 17:00
-        // Workers act only during working hours.
         if (hour < 8 || hour >= 17) {
-            // Office Closed
             if (atomic_load(&shm->workers[worker_id].state) != WORKER_STATUS_OFFLINE) {
                 atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_OFFLINE);
             }
 
-            // Precise Wait until 08:00
             int current_total_mins = hour * 60 + min;
             int target_total_mins = 8 * 60; // 08:00
             int mins_to_wait = 0;
@@ -255,7 +243,6 @@ int worker_run(int worker_id, int service_type) {
             continue;
         }
 
-        // Ensure status is FREE if not busy
         if (atomic_load(&shm->workers[worker_id].state) == WORKER_STATUS_OFFLINE) {
             atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_FREE);
         }
@@ -269,7 +256,6 @@ int worker_run(int worker_id, int service_type) {
         double cpu_util = -1.0;
         if (po_sysinfo_sampler_get(&cpu_util, NULL) == 0) {
             if (cpu_util > 90.0) {
-                // Increase service time to reduce system load
                 service_time_ms = (int)(service_time_ms * 1.5);
             }
         }
@@ -278,15 +264,6 @@ int worker_run(int worker_id, int service_type) {
 
         // Done
         atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_FREE);
-        // Reset current ticket? Not strictly needed but good for cleanliness
-        // atomic_store(&shm->workers[worker_id].current_ticket, 0); 
-        // Actually keep it until next valid? Or 0 to signal 'not serving'.
-        // User checks 'current_ticket == ticket'. If we leave it, user 'served' logic might be confused?
-        // User loop:
-        // if (current_t == ticket) served=true;
-        // then while(current_t == ticket) { still_serving=true }
-        // So when we change it, user exits. 
-        // If we change it to 0, user exits. Correct.
         atomic_store(&shm->workers[worker_id].current_ticket, 0xFFFFFFFF); // Invalid
 
         atomic_fetch_add(&shm->stats.total_services_completed, 1);
@@ -300,9 +277,5 @@ int worker_run(int worker_id, int service_type) {
     LOG_INFO("Worker %d shutting down...", worker_id);
     atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_OFFLINE);
 
-    sim_ipc_shm_detach(shm);
-    po_logger_shutdown();
-    po_metrics_shutdown();
-    po_perf_shutdown(stdout);
     return EXIT_SUCCESS;
 }

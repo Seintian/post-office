@@ -44,11 +44,10 @@ static void get_sim_time(sim_shm_t* shm, int *d, int *h, int *m) {
     *m = packed & 0xFF;
 }
 
-static int user_init(int user_id, sim_shm_t** out_shm) {
-    (void)user_id;
+// Standalone initialization
+int user_standalone_init(sim_shm_t** out_shm) {
     // Collect system information for optimizations
     po_sysinfo_t sysinfo;
-    
     size_t cacheline_size = 64; // default
     if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
         cacheline_size = (size_t)sysinfo.dcache_lnsize;
@@ -90,12 +89,9 @@ static int user_init(int user_id, sim_shm_t** out_shm) {
     return 0;
 }
 
-int user_run(int user_id, int service_type) {
-    sim_shm_t* shm = NULL;
-
-    if (user_init(user_id, &shm) != 0) {
-        if (shm) sim_ipc_shm_detach(shm);
-        po_logger_shutdown();
+int user_run(int user_id, int service_type, sim_shm_t* shm) {
+    if (!shm) {
+        LOG_FATAL("user_run called with NULL shm");
         return EXIT_FAILURE;
     }
 
@@ -110,7 +106,7 @@ int user_run(int user_id, int service_type) {
         if (val > 0) n_requests = (int)val;
     }
 
-    LOG_INFO("User %d starting with %d requests", user_id, n_requests);
+    LOG_INFO("User %d starting with %d requests (TID: %ld)", user_id, n_requests, (long)gettid());
 
     for (int req = 0; req < n_requests && g_running; req++) {
         // Optional: Random delay between requests
@@ -308,9 +304,6 @@ int user_run(int user_id, int service_type) {
     }
 
 shutdown:
-    sim_ipc_shm_detach(shm);
-    po_logger_shutdown();
-    po_metrics_shutdown();
-    po_perf_shutdown(stdout);
+    // No detach here, managed by caller or thread exit (OS)
     return 0;
 }

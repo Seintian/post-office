@@ -1,9 +1,8 @@
 /**
  * @file users_manager.c
- * @brief Event-Driven Users Manager Process Implementation.
+ * @brief Event-Driven Users Manager Process Implementation (Threaded).
  * 
  * Listens for signals to dynamically manage user population:
- * - SIGCHLD: Detects user exit, respawns immediately
  * - SIGUSR1: Adds batch_size users to population
  * - SIGUSR2: Removes batch_size users from population
  */
@@ -16,6 +15,7 @@
 #include "../ipc/simulation_protocol.h"
 #include <postoffice/random/random.h>
 #include "../ipc/simulation_ipc.h"
+#include "../user/runtime/user_loop.h"
 
 #include <errno.h>
 #include <string.h>
@@ -28,28 +28,33 @@
 #include <time.h>
 #include <utils/signals.h>
 #include <getopt.h>
+#include <pthread.h>
 
 // Global state for signal handlers
 static volatile sig_atomic_t g_running = 1;
-static volatile sig_atomic_t g_sigchld_received = 0;
 static volatile sig_atomic_t g_sigusr1_received = 0;
 static volatile sig_atomic_t g_sigusr2_received = 0;
 
 // Configuration
 static int g_initial_users = 5;
 static int g_batch_size = 5;
-static const char* g_log_level_str = "INFO";
 static sim_shm_t* g_shm = NULL;
 
 // Active user tracking
-static pid_t g_user_pids[1000]; // Track PIDs
-static int g_active_users = 0;
+typedef struct {
+    pthread_t thread;
+    bool active;
+    int id;
+} user_slot_t;
+
+static user_slot_t g_users[1000];
+static int g_active_count = 0;
 static int g_target_users = 0;
 
-static void handle_sigchld(int sig, siginfo_t* info, void* context) {
-    (void)sig; (void)info; (void)context;
-    g_sigchld_received = 1;
-}
+typedef struct {
+    int id;
+    int service_type;
+} user_thread_arg_t;
 
 static void handle_sigusr1(int sig, siginfo_t* info, void* context) {
     (void)sig; (void)info; (void)context;
@@ -68,12 +73,6 @@ static void handle_terminate(int sig, siginfo_t* info, void* context) {
 
 static void setup_signals(void) {
     struct sigaction sa;
-
-    // SIGCHLD
-    sa.sa_sigaction = handle_sigchld;
-    sa.sa_flags = SA_SIGINFO | SA_RESTART;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGCHLD, &sa, NULL);
     
     // SIGUSR1
     sa.sa_sigaction = handle_sigusr1;
@@ -93,6 +92,9 @@ static void setup_signals(void) {
     sigemptyset(&sa.sa_mask);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
+    
+    // Ignore SIGCHLD as we use threads
+    signal(SIGCHLD, SIG_IGN);
 }
 
 static void get_sim_time(sim_shm_t* shm, int *d, int *h, int *m) {
@@ -102,75 +104,80 @@ static void get_sim_time(sim_shm_t* shm, int *d, int *h, int *m) {
     *m = packed & 0xFF;
 }
 
+static void* user_thread_entry(void* arg) {
+    user_thread_arg_t* args = (user_thread_arg_t*)arg;
+    pthread_cleanup_push(free, args);
+    user_run(args->id, args->service_type, g_shm);
+    pthread_cleanup_pop(1);
+    return NULL;
+}
+
 static void spawn_user(void) {
-    if (g_active_users >= 1000) {
+    if (g_active_count >= 1000) {
         LOG_ERROR("Cannot spawn more users (max 1000)");
         return;
     }
+
+    // Find first free slot (simplistic, usually appending is fine if we compact or just find first !active)
+    // But we use g_active_count as index if we compact. 
+    // Let's use g_active_count as simple stack pointer if possible, but reaping messes it up.
+    // Better: Scan for free slot.
+    int slot = -1;
+    for (int i = 0; i < 1000; i++) {
+        if (!g_users[i].active) {
+            slot = i;
+            break;
+        }
+    }
     
+    if (slot == -1) return;
+
     static int next_service_type = 0;
     int stype = next_service_type;
     next_service_type = (next_service_type + 1) % SIM_MAX_SERVICE_TYPES;
 
-    const char *user_bin = "bin/post_office_user";
-    pid_t pid = fork();
+    user_thread_arg_t* arg = malloc(sizeof(user_thread_arg_t));
+    arg->id = (int)(po_rand_u32() & 0x7FFFFFFF);
+    arg->service_type = stype;
 
-    // removed static int definition from here
-
-    if (pid == 0) {
-        // Child
-        char id_str[16];
-        char param_str[16];
-        snprintf(id_str, sizeof(id_str), "%d", (int)(po_rand_u32() & 0x7FFFFFFF)); 
-        snprintf(param_str, sizeof(param_str), "%u", stype);
-
-        execl(user_bin, "post_office_user", "-l", g_log_level_str, "-i", id_str, "-s", param_str, NULL);
-
-
-        const char *msg = "Failed to exec user\n";
-        if (write(STDERR_FILENO, msg, strlen(msg)) == -1) {}
-        _exit(1);
-    } else if (pid > 0) {
-        // Parent
-        g_user_pids[g_active_users++] = pid;
-        LOG_DEBUG("Spawned user PID %d (total: %d/%d)", pid, g_active_users, g_target_users);
-        
-        // CRITICAL: Advance global RNG state so the next fork inherits a DIFFERENT state.
-        // Otherwise, all children start with the exact same RNG state and generate identical IDs/decisions.
-        po_rand_u64(); 
+    if (pthread_create(&g_users[slot].thread, NULL, user_thread_entry, arg) == 0) {
+        g_users[slot].active = true;
+        g_users[slot].id = arg->id;
+        g_active_count++;
+        LOG_DEBUG("Spawned user thread ID %d (total: %d/%d)", arg->id, g_active_count, g_target_users);
     } else {
-        LOG_ERROR("Fork failed: %s", strerror(errno));
+        LOG_ERROR("Failed to create user thread");
+        free(arg);
     }
 }
 
 static void remove_user(void) {
-    if (g_active_users <= 0) return;
+    if (g_active_count <= 0) return;
 
-    // Kill the most recent user
-    pid_t pid = g_user_pids[g_active_users - 1];
-    if (kill(pid, SIGTERM) == 0) {
-        LOG_INFO("Terminated user PID %d", pid);
-        g_active_users--;
-    } else {
-        LOG_WARN("Failed to kill PID %d: %s", pid, strerror(errno));
+    // Find last active user (LIFO-ish to match stack behavior roughly)
+    for (int i = 999; i >= 0; i--) {
+        if (g_users[i].active) {
+            // Cancel thread
+            pthread_cancel(g_users[i].thread);
+            pthread_join(g_users[i].thread, NULL);
+            g_users[i].active = false;
+            g_active_count--;
+            LOG_INFO("Terminated user thread slot %d", i);
+            return;
+        }
     }
 }
 
 static void reap_zombies(void) {
-    int status;
-    pid_t wpid;
-
-    while ((wpid = waitpid(-1, &status, WNOHANG)) > 0) {
-        // Find and remove from array
-        for (int i = 0; i < g_active_users; i++) {
-            if (g_user_pids[i] == wpid) {
-                // Shift array
-                for (int j = i; j < g_active_users - 1; j++) {
-                    g_user_pids[j] = g_user_pids[j + 1];
-                }
-                g_active_users--;
-                LOG_DEBUG("Reaped user PID %d (remaining: %d/%d)", wpid, g_active_users, g_target_users);
-                break;
+    // Check for threads that have exited naturally
+    for (int i = 0; i < 1000; i++) {
+        if (g_users[i].active) {
+            int rc = pthread_tryjoin_np(g_users[i].thread, NULL);
+            if (rc == 0) {
+                // Thread finished
+                g_users[i].active = false;
+                g_active_count--;
+                LOG_DEBUG("Reaped user thread slot %d (remaining: %d/%d)", i, g_active_count, g_target_users);
             }
         }
     }
@@ -181,7 +188,7 @@ static void parse_args(int argc, char** argv) {
         {"initial", required_argument, 0, 'i'},
         {"batch", required_argument, 0, 'b'},
         {"loglevel", required_argument, 0, 'l'},
-        {"pid", required_argument, 0, 'p'}, // Director PID (for compatibility)
+        {"pid", required_argument, 0, 'p'}, 
         {0, 0, 0, 0}
     };
 
@@ -205,10 +212,9 @@ static void parse_args(int argc, char** argv) {
                 break;
             }
             case 'l':
-                g_log_level_str = optarg;
+                // Handled via env
                 break;
             case 'p':
-                // Ignored (kept for compatibility)
                 break;
         }
     }
@@ -227,15 +233,35 @@ int main(int argc, char** argv) {
 
     po_logger_config_t log_cfg = {
         .level = level,
-        .ring_capacity = 1024,
+        .ring_capacity = 4096, // Increased for multiple threads
         .consumers = 1,
         .policy = LOGGER_OVERWRITE_OLDEST,
         .cacheline_bytes = PO_CACHE_LINE_MAX
     };
     if (po_logger_init(&log_cfg) != 0) return 1;
+    // Append to users.log (User threads will share this logger instance)
+    // Actually, user_run calls user_init which inits logger... 
+    // We MUST prevent user_run from initializing the logger again if it's already running in the same process.
+    // The user_loop.c implementation of user_init does po_logger_init.
+    // po_logger_init fails if already initialized.
+    // So we should Initialize ONCE here, and modify user_loop.c to SKIP init if logger is active?
+    // Or simpler: user_loop.c is designed for process per user.
+    // We need to modify user_loop.c to be thread-friendly (global init split).
+    // BUT user_loop.c is used by user.c too.
+    // If we assume user_run is just logic, we should strip init from it or make it conditional.
+    // Since we are refactoring, let's assume we can modify user_loop.c as well.
+    // FOR NOW: Let's let user_init fail gracefully?
+    // po_logger_init returns non-zero if already initialized. 
+    // user_init prints to stderr "user: logger init failed" and returns -1. 
+    // This would kill the thread.
+    // WE MUST MODIFY user_loop.c.
+    
+    // Let's assume for this step we just init here.
     if (po_logger_add_sink_file("logs/users_manager.log", false) != 0) {
         LOG_WARN("Failed to add log file sink");
     }
+    // Also add sink for users.log here, so all threads write to it.
+    po_logger_add_sink_file("logs/users.log", true); // Append (truncated by director)
 
     // Attach SHM for time
     g_shm = sim_ipc_shm_attach();
@@ -253,40 +279,39 @@ int main(int argc, char** argv) {
 
     g_target_users = g_initial_users;
     
-    LOG_INFO("[Day %d %02d:%02d] Users Manager started (PID: %d), initial=%d, batch=%d", 
-             day, hour, min, getpid(), g_initial_users, g_batch_size);
-
-    // Check if bin exists
-    if (access("bin/post_office_user", X_OK) != 0) {
-        LOG_ERROR("Cannot find user binary at 'bin/post_office_user'");
-        sim_ipc_shm_detach(g_shm);
-        po_logger_shutdown();
-        po_perf_shutdown(NULL);
-        return 1;
-    }
+    LOG_INFO("[Day %d %02d:%02d] Users Manager started (PID: %d) [THREADED], initial=%d", 
+             day, hour, min, getpid(), g_initial_users);
 
     // Initial Spawn
     for (int i = 0; i < g_target_users && g_running; i++) {
         spawn_user();
-        usleep(10000); // Brief delay
+        usleep(10000); 
     }
 
     LOG_INFO("Initial users spawned. Entering event loop...");
 
-    // Event-Driven Main Loop
-    while (g_running) {
-        // Wait for signals
-        pause();
+    int last_synced_day = 0;
 
-        // Handle SIGCHLD
-        if (g_sigchld_received) {
-            g_sigchld_received = 0;
-            reap_zombies();
-
-            // Respawn if below target
-            while (g_active_users < g_target_users && g_running) {
-                spawn_user();
+    void sync_check_day(void) {
+        if (atomic_load(&g_shm->sync.barrier_active)) {
+            unsigned int barrier_day = atomic_load(&g_shm->sync.day_seq);
+            if ((int)barrier_day > last_synced_day) {
+                atomic_fetch_add(&g_shm->sync.ready_count, 1);
+                last_synced_day = (int)barrier_day;
+                while (g_running && atomic_load(&g_shm->sync.barrier_active)) {
+                    usleep(1000); 
+                }
             }
+        }
+    }
+
+    while (g_running) {
+        sync_check_day();
+        reap_zombies();
+
+        // Respawn if below target
+        while (g_active_count < g_target_users && g_running) {
+            spawn_user();
         }
 
         // Handle SIGUSR1 (Add Users)
@@ -294,10 +319,6 @@ int main(int argc, char** argv) {
             g_sigusr1_received = 0;
             g_target_users += g_batch_size;
             LOG_INFO("SIGUSR1: Adding %d users (new target: %d)", g_batch_size, g_target_users);
-
-            for (int i = 0; i < g_batch_size && g_running; i++) {
-                spawn_user();
-            }
         }
 
         // Handle SIGUSR2 (Remove Users)
@@ -313,16 +334,17 @@ int main(int argc, char** argv) {
                 remove_user();
             }
         }
+        
+        usleep(100000); // 100ms
     }
 
-    // Graceful Shutdown
     LOG_INFO("Shutting down. Terminating all users...");
-    for (int i = 0; i < g_active_users; i++) {
-        kill(g_user_pids[i], SIGTERM);
+    for (int i = 0; i < 1000; i++) {
+        if (g_users[i].active) {
+            pthread_cancel(g_users[i].thread);
+            pthread_join(g_users[i].thread, NULL);
+        }
     }
-
-    // Wait for remaining children
-    while (waitpid(-1, NULL, 0) > 0) {}
 
     sim_ipc_shm_detach(g_shm);
     po_logger_shutdown();

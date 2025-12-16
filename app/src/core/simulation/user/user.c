@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "../ipc/simulation_ipc.h" // For sim_shm_t definition
+
 int main(int argc, char** argv) {
     int user_id = -1;
     int service_type = -1;
@@ -34,5 +36,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    return user_run(user_id, service_type);
+    sim_shm_t* shm = NULL;
+    if (user_standalone_init(&shm) != 0) {
+        return 1;
+    }
+
+    return user_run(user_id, service_type, shm);
 }
