@@ -1,26 +1,27 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "simulation_ipc.h"
+
+#include <errno.h>
 #include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/msg.h>
-#include <sys/ipc.h>
-#include <sys/sem.h>
-#include <sys/types.h>
-#include <unistd.h>
+#include <postoffice/log/logger.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include <postoffice/log/logger.h>
+#include <sys/ipc.h>
+#include <sys/mman.h>
+#include <sys/msg.h>
+#include <sys/sem.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 /* --- Private Helpers --- */
 
 static key_t _get_ipc_key(void) {
     // Generate a user-specific lock file path for ftok
     char keypath[512];
-    const char* user_home = getenv("HOME");
+    const char *user_home = getenv("HOME");
 
     if (user_home) {
         snprintf(keypath, sizeof(keypath), "%s/.postoffice/ipc.key", user_home);
@@ -54,10 +55,9 @@ static key_t _get_ipc_key(void) {
     return key;
 }
 
-
 /* --- Public API --- */
 
-sim_shm_t* sim_ipc_shm_create(size_t n_workers) {
+sim_shm_t *sim_ipc_shm_create(size_t n_workers) {
     LOG_INFO("sim_ipc_shm_create() - Creating SHM: %s with %zu workers", SIM_SHM_NAME, n_workers);
 
     const int max_retries = 3;
@@ -75,7 +75,8 @@ sim_shm_t* sim_ipc_shm_create(size_t n_workers) {
         shm_fd = shm_open(SIM_SHM_NAME, O_RDWR | O_CREAT | O_EXCL, 0666);
         if (shm_fd == -1) {
             if (errno == EEXIST) {
-                LOG_WARN("sim_ipc_shm_create() - SHM exists, retrying unlink... (%d/%d)", retry_count + 1, max_retries);
+                LOG_WARN("sim_ipc_shm_create() - SHM exists, retrying unlink... (%d/%d)",
+                         retry_count + 1, max_retries);
                 usleep(100000); // Wait 100ms
                 retry_count++;
                 continue;
@@ -107,13 +108,30 @@ sim_shm_t* sim_ipc_shm_create(size_t n_workers) {
         // 6. Initialize Parameters
         sim_shm_t *shm = (sim_shm_t *)ptr;
         shm->params.n_workers = (uint32_t)n_workers;
-        
+
         // Initialize time
         atomic_init(&shm->time_control.sim_active, true);
-        uint64_t initial_time = ((uint64_t)DEFAULT_START_DAY << 16) | 
-                                ((uint64_t)DEFAULT_START_HOUR << 8) | 0ULL;
+        uint64_t initial_time =
+            ((uint64_t)DEFAULT_START_DAY << 16) | ((uint64_t)DEFAULT_START_HOUR << 8) | 0ULL;
         atomic_init(&shm->time_control.packed_time, initial_time);
         atomic_init(&shm->time_control.elapsed_nanos, 0);
+
+        // Initialize Synchronization Primitives (PTHREAD_PROCESS_SHARED)
+        pthread_mutexattr_t mattr;
+        pthread_mutexattr_init(&mattr);
+        pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
+        pthread_mutex_init(&shm->sync.mutex, &mattr);
+        pthread_mutexattr_destroy(&mattr);
+
+        pthread_condattr_t cattr;
+        pthread_condattr_init(&cattr);
+        pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
+        // Using CLOCK_MONOTONIC for robust timed waits if needed
+        pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
+
+        pthread_cond_init(&shm->sync.cond_workers_ready, &cattr);
+        pthread_cond_init(&shm->sync.cond_day_start, &cattr);
+        pthread_condattr_destroy(&cattr);
 
         close(shm_fd);
         LOG_INFO("sim_ipc_shm_create() - SHM Created at %p (size: %zu)", ptr, total_size);
@@ -124,7 +142,7 @@ sim_shm_t* sim_ipc_shm_create(size_t n_workers) {
     return NULL;
 }
 
-sim_shm_t* sim_ipc_shm_attach(void) {
+sim_shm_t *sim_ipc_shm_attach(void) {
     LOG_INFO("sim_ipc_shm_attach() - Attaching to SHM: %s", SIM_SHM_NAME);
 
     int shm_fd = shm_open(SIM_SHM_NAME, O_RDWR, 0666);
@@ -160,8 +178,9 @@ sim_shm_t* sim_ipc_shm_attach(void) {
     // Basic validation
     size_t expected = sizeof(sim_shm_t) + (shm->params.n_workers * sizeof(worker_status_t));
     if (total_size != expected) {
-         LOG_WARN("sim_ipc_shm_attach() - Size mismatch warning: Mapped %zu, Expected %zu based on n_workers=%u", 
-            total_size, expected, shm->params.n_workers);
+        LOG_WARN("sim_ipc_shm_attach() - Size mismatch warning: Mapped %zu, Expected %zu based on "
+                 "n_workers=%u",
+                 total_size, expected, shm->params.n_workers);
     }
 
     LOG_INFO("sim_ipc_shm_attach() - Attached at %p (n_workers=%u)", ptr, shm->params.n_workers);
@@ -173,14 +192,16 @@ sim_shm_t* sim_ipc_shm_attach(void) {
  * @param shm Pointer to SHM.
  * @return 0 on success, -1 on failure.
  */
-int sim_ipc_shm_detach(sim_shm_t* shm) {
-    if (!shm) return -1;
-    
-    /* 
+int sim_ipc_shm_detach(sim_shm_t *shm) {
+    if (!shm)
+        return -1;
+
+    /*
        To unmap correctly we should know the original size.
        However, munmap expects the length.
        Since we don't store the length in the process (unless we cache it),
-       we can re-calculate it from shm->params.n_workers because we still have access to the mapped memory at this point.
+       we can re-calculate it from shm->params.n_workers because we still have access to the mapped
+       memory at this point.
     */
     size_t size = sizeof(sim_shm_t) + (shm->params.n_workers * sizeof(worker_status_t));
 
@@ -221,7 +242,8 @@ int sim_ipc_sem_create(int n_sems) {
     }
 
     key_t key = _get_ipc_key();
-    if (key == -1) return -1;
+    if (key == -1)
+        return -1;
 
     int semid = -1;
 
@@ -247,7 +269,7 @@ int sim_ipc_sem_create(int n_sems) {
         }
         free(values);
         return semid;
-    } 
+    }
 
     if (errno == EEXIST) {
         // Already exists - connect and RESET
@@ -273,7 +295,8 @@ int sim_ipc_sem_create(int n_sems) {
 
 int sim_ipc_sem_get(void) {
     key_t key = _get_ipc_key();
-    if (key == -1) return -1;
+    if (key == -1)
+        return -1;
     int semid = semget(key, 0, 0660);
     if (semid == -1) {
         // Silent fail on ENOENT is okay for probers, but explicit failure otherwise
@@ -283,5 +306,3 @@ int sim_ipc_sem_get(void) {
     }
     return semid;
 }
-
-

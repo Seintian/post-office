@@ -1,11 +1,11 @@
 #ifndef PO_SIMULATION_PROTOCOL_H
 #define PO_SIMULATION_PROTOCOL_H
 
+#include <postoffice/perf/cache.h> // For PO_CACHE_LINE_MAX
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/types.h>
-#include <postoffice/perf/cache.h> // For PO_CACHE_LINE_MAX
 
 /**
  * @file simulation_protocol.h
@@ -54,10 +54,10 @@ typedef enum {
  * Aligned to cache line to avoid false sharing.
  */
 typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) worker_status_s {
-    atomic_int state;            // worker_state_t
-    atomic_uint current_ticket;  // Ticket # being served
-    atomic_int service_type;     // Current service type
-    atomic_int pid;              // Worker PID (atomic access)
+    atomic_int state;           // worker_state_t
+    atomic_uint current_ticket; // Ticket # being served
+    atomic_int service_type;    // Current service type
+    atomic_int pid;             // Worker PID (atomic access)
 } worker_status_t;
 // Compile-time check to ensure no false sharing (size must be multiple of cache line)
 _Static_assert(sizeof(worker_status_t) % PO_CACHE_LINE_MAX == 0, "worker_status_t size mismatch");
@@ -67,8 +67,8 @@ _Static_assert(sizeof(worker_status_t) % PO_CACHE_LINE_MAX == 0, "worker_status_
  * Aligned to cache line.
  */
 typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) queue_status_s {
-    atomic_uint waiting_count;   // Users currently in queue
-    atomic_uint total_served;    // Cumulative users served
+    atomic_uint waiting_count; // Users currently in queue
+    atomic_uint total_served;  // Cumulative users served
 
     // Ticket Queue for User->Worker handoff
     atomic_uint head;
@@ -101,17 +101,17 @@ typedef struct sim_params_s {
 
 /**
  * @brief Global Time & Control.
- * 
+ *
  * We pack day (16 bits), hour (8 bits), minute (8 bits) into a single 64-bit atomic
  * to ensure readers always see a consistent snapshot of time.
- * 
+ *
  * bits 0-7:   minute (0-59)
  * bits 8-15:  hour (0-23)
  * bits 16-31: day (1-65535)
  * bits 32-63: reserved / epoch counter
  */
 typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) sim_time_s {
-    atomic_uint_least64_t packed_time; 
+    atomic_uint_least64_t packed_time;
     atomic_int elapsed_nanos; // Accumulator for minute steps
     atomic_bool sim_active;   // Global run flag
 } sim_time_t;
@@ -120,11 +120,21 @@ _Static_assert(sizeof(sim_time_t) % PO_CACHE_LINE_MAX == 0, "sim_time_t size mis
 /**
  * @brief Main Shared Memory Structure.
  */
+#include <pthread.h>
+
+/**
+ * @brief Main Shared Memory Structure.
+ */
 typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) sync_control_s {
-    atomic_int barrier_active; // 1 = Waiting for sync, 0 = Running
-    atomic_uint ready_count;   // Number of processes ready
-    atomic_uint required_count;// Total expected processes
-    atomic_uint day_seq;       // Current day sequence
+    atomic_int barrier_active;  // 1 = Waiting for sync, 0 = Running
+    atomic_uint ready_count;    // Number of processes ready
+    atomic_uint required_count; // Total expected processes
+    atomic_uint day_seq;        // Current day sequence
+
+    // Process-Shared Synchronization Primitives
+    pthread_mutex_t mutex;
+    pthread_cond_t cond_workers_ready; // Workers signal this
+    pthread_cond_t cond_day_start;     // Director signals this
 } sync_control_t;
 _Static_assert(sizeof(sync_control_t) % PO_CACHE_LINE_MAX == 0, "sync_control_t size mismatch");
 
@@ -141,7 +151,7 @@ typedef struct simulation_shm_s {
 
     // 3. Global Sequence for Tickets
     atomic_uint ticket_seq;
-    char _pad1[PO_CACHE_LINE_MAX - sizeof(atomic_uint)]; 
+    char _pad1[PO_CACHE_LINE_MAX - sizeof(atomic_uint)];
 
     // 4. Statistics
     global_stats_t stats;
@@ -163,9 +173,9 @@ typedef struct simulation_shm_s {
  * @brief Message types for Ticket Issuer Protocol.
  */
 typedef enum {
-    MSG_TYPE_TICKET_REQ  = 0x10,
+    MSG_TYPE_TICKET_REQ = 0x10,
     MSG_TYPE_TICKET_RESP = 0x11,
-    MSG_TYPE_ERR         = 0xFF
+    MSG_TYPE_ERR = 0xFF
 } msg_type_t;
 
 /**

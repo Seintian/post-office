@@ -1,31 +1,34 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "worker_loop.h"
-#include <postoffice/log/logger.h>
-#include <utils/errors.h>
-#include <postoffice/perf/cache.h>
-#include <postoffice/random/random.h>
-#include <postoffice/metrics/metrics.h>
-#include <postoffice/perf/perf.h>
-#include <postoffice/sysinfo/sysinfo.h>
-#include "../../ipc/simulation_ipc.h"
-#include "../../ipc/simulation_protocol.h"
 
 #include <errno.h>
+#include <postoffice/log/logger.h>
+#include <postoffice/metrics/metrics.h>
+#include <postoffice/perf/cache.h>
+#include <postoffice/perf/perf.h>
+#include <postoffice/random/random.h>
+#include <postoffice/sysinfo/sysinfo.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/sem.h>
 #include <time.h>
+#include <unistd.h>
+#include <utils/errors.h>
 #include <utils/signals.h>
-#include <stdatomic.h>
+
+#include "../../ipc/simulation_ipc.h"
+#include "../../ipc/simulation_protocol.h"
 
 static volatile sig_atomic_t g_running = 1;
 
-static void handle_signal(int sig, siginfo_t* info, void* context) {
-    (void)sig; (void)info; (void)context;
+static void handle_signal(int sig, siginfo_t *info, void *context) {
+    (void)sig;
+    (void)info;
+    (void)context;
     g_running = 0;
 }
 
@@ -35,14 +38,14 @@ static void setup_signals(void) {
     }
 }
 
-static void get_sim_time(sim_shm_t* shm, int *d, int *h, int *m) {
+static void get_sim_time(sim_shm_t *shm, int *d, int *h, int *m) {
     uint64_t packed = atomic_load(&shm->time_control.packed_time);
     *d = (packed >> 16) & 0xFFFF;
     *h = (packed >> 8) & 0xFF;
     *m = packed & 0xFF;
 }
 
-static sim_shm_t* g_shm_worker = NULL;
+static sim_shm_t *g_shm_worker = NULL;
 static int g_semid_worker = -1;
 
 // Global initialization (called once by main thread)
@@ -53,7 +56,7 @@ int worker_global_init(void) {
     if (po_sysinfo_collect(&sysinfo) == 0 && sysinfo.dcache_lnsize > 0) {
         cacheline_size = (size_t)sysinfo.dcache_lnsize;
     }
-    
+
     // Start system info sampler for runtime adaptation
     po_sysinfo_sampler_init();
 
@@ -65,16 +68,15 @@ int worker_global_init(void) {
     char *env = getenv("PO_LOG_LEVEL");
     if (env) {
         int l = po_logger_level_from_str(env);
-        if (l != -1) level = l;
+        if (l != -1)
+            level = l;
     }
 
-    po_logger_config_t log_cfg = {
-        .level = level,
-        .ring_capacity = 4096,
-        .consumers = 1,
-        .policy = LOGGER_OVERWRITE_OLDEST,
-        .cacheline_bytes = cacheline_size
-    };
+    po_logger_config_t log_cfg = {.level = level,
+                                  .ring_capacity = 4096,
+                                  .consumers = 1,
+                                  .policy = LOGGER_OVERWRITE_OLDEST,
+                                  .cacheline_bytes = cacheline_size};
     if (po_logger_init(&log_cfg) != 0) {
         fprintf(stderr, "worker: logger init failed\n");
         return -1;
@@ -111,7 +113,7 @@ int worker_run(int worker_id, int service_type) {
         return EXIT_FAILURE;
     }
 
-    sim_shm_t* shm = g_shm_worker;
+    sim_shm_t *shm = g_shm_worker;
     int semid = g_semid_worker;
 
     // Validation
@@ -128,8 +130,8 @@ int worker_run(int worker_id, int service_type) {
     int day, hour, min;
     get_sim_time(shm, &day, &hour, &min);
 
-    LOG_INFO("[Day %d %02d:%02d] Worker %d started (TID: %ld) type %d", 
-             day, hour, min, worker_id, (long)gettid(), service_type); // Using gettid if available or just logging
+    LOG_INFO("[Day %d %02d:%02d] Worker %d started (TID: %ld) type %d", day, hour, min, worker_id,
+             (long)gettid(), service_type); // Using gettid if available or just logging
 
     // Register myself in SHM (Use PID as thread ID roughly or just placeholder)
     atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_FREE);
@@ -140,34 +142,43 @@ int worker_run(int worker_id, int service_type) {
 
     // Helper for sync
     void sync_check_day(void) {
-        if (atomic_load(&shm->sync.barrier_active)) {
-            unsigned int barrier_day = atomic_load(&shm->sync.day_seq);
-            if ((int)barrier_day > last_synced_day) {
-                // We haven't synced for this day yet
-                atomic_fetch_add(&shm->sync.ready_count, 1);
-                last_synced_day = (int)barrier_day;
-                
-                // Wait for release
-                while (g_running && atomic_load(&shm->sync.barrier_active)) {
-                    usleep(1000); // 1ms poll
-                }
+        // Optimistic check (check without lock first)
+        if (!atomic_load(&shm->sync.barrier_active))
+            return;
+
+        // Lock and re-check
+        pthread_mutex_lock(&shm->sync.mutex);
+
+        // Check if barrier is active AND we are in a new day
+        unsigned int barrier_day = atomic_load(&shm->sync.day_seq);
+        if (atomic_load(&shm->sync.barrier_active) && (int)barrier_day > last_synced_day) {
+
+            // Mark myself as ready
+            atomic_fetch_add(&shm->sync.ready_count, 1);
+            last_synced_day = (int)barrier_day;
+
+            // Wake director
+            pthread_cond_signal(&shm->sync.cond_workers_ready);
+
+            // Wait for release
+            while (g_running && atomic_load(&shm->sync.barrier_active)) {
+                pthread_cond_wait(&shm->sync.cond_day_start, &shm->sync.mutex);
             }
         }
-    }
 
+        pthread_mutex_unlock(&shm->sync.mutex);
+    }
     // Main Loop
     while (g_running) {
         sync_check_day();
 
         // Wait for a user in my service queue
-        struct sembuf sb = {
-            .sem_num = (unsigned short)service_type,
-            .sem_op = -1, // Decrement (Wait for user)
-            .sem_flg = 0
-        };
+        struct sembuf sb = {.sem_num = (unsigned short)service_type,
+                            .sem_op = -1, // Decrement (Wait for user)
+                            .sem_flg = 0};
 
         LOG_DEBUG("Worker %d entering wait state for service type %d...", worker_id, service_type);
-        
+
         // Revised approach:
         // Use a short timeout for semop (if possible with semtimedop) or polling.
         // Linux supports semtimedop. _GNU_SOURCE is defined.
@@ -178,7 +189,8 @@ int worker_run(int worker_id, int service_type) {
                 continue;
             }
             if (errno == EINTR) {
-                if (!g_running) break;
+                if (!g_running)
+                    break;
                 continue;
             }
             LOG_ERROR("worker %d: semop failed (errno=%d)", worker_id, errno);
@@ -189,7 +201,8 @@ int worker_run(int worker_id, int service_type) {
         atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
         LOG_DEBUG("Worker %d acquired a user task", worker_id);
 
-        if (!g_running) break;
+        if (!g_running)
+            break;
 
         // Servicing
         atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_BUSY);
@@ -203,10 +216,13 @@ int worker_run(int worker_id, int service_type) {
         uint32_t val = 0;
         int spin_count = 0;
         while ((val = atomic_load(&q->tickets[idx])) == 0) {
-            if (!g_running) break;
-            if (++spin_count > 1000) usleep(100);
+            if (!g_running)
+                break;
+            if (++spin_count > 1000)
+                usleep(100);
         }
-        if (val == 0) break; // shutting down
+        if (val == 0)
+            break; // shutting down
 
         // Clear slot
         atomic_store(&q->tickets[idx], 0);
@@ -222,26 +238,7 @@ int worker_run(int worker_id, int service_type) {
                 atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_OFFLINE);
             }
 
-            int current_total_mins = hour * 60 + min;
-            int target_total_mins = 8 * 60; // 08:00
-            int mins_to_wait = 0;
-
-            if (hour >= 17) {
-                int mins_until_midnight = (24 * 60) - current_total_mins;
-                mins_to_wait = mins_until_midnight + target_total_mins;
-            } else { // hour < 8
-                mins_to_wait = target_total_mins - current_total_mins;
-            }
-
-            if (mins_to_wait > 0) {
-                uint64_t total_nanos = (uint64_t)mins_to_wait * shm->params.tick_nanos;
-                struct timespec ts_sleep;
-                ts_sleep.tv_sec = (time_t)(total_nanos / 1000000000ULL);
-                ts_sleep.tv_nsec = (long)(total_nanos % 1000000000ULL);
-                nanosleep(&ts_sleep, NULL);
-            } else {
-                usleep(10000);
-            }
+            usleep(10000);
             continue;
         }
 
@@ -249,7 +246,8 @@ int worker_run(int worker_id, int service_type) {
             atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_FREE);
         }
 
-        LOG_DEBUG("[Day %d %02d:%02d] Worker %d servicing ticket %u...", day, hour, min, worker_id, ticket);
+        LOG_DEBUG("[Day %d %02d:%02d] Worker %d servicing ticket %u...", day, hour, min, worker_id,
+                  ticket);
 
         // Simulate Service Time (e.g., 50ms - 500ms)
         int service_time_ms = (int)po_rand_range_i64(50, 500);
@@ -273,8 +271,8 @@ int worker_run(int worker_id, int service_type) {
         atomic_fetch_add(&shm->queues[service_type].total_served, 1);
 
         get_sim_time(shm, &day, &hour, &min);
-        LOG_DEBUG("[Day %d %02d:%02d] Worker %d finished service ticket %u", 
-                    day, hour, min, worker_id, ticket);
+        LOG_DEBUG("[Day %d %02d:%02d] Worker %d finished service ticket %u", day, hour, min,
+                  worker_id, ticket);
     }
 
     LOG_INFO("Worker %d shutting down...", worker_id);

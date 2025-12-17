@@ -1,14 +1,15 @@
 #include "utils/configs.h"
 
 #include <errno.h>
+#include <postoffice/perf/perf.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "thirdparty/inih/ini.h"
+
 #include "hashset/hashset.h"
 #include "hashtable/hashtable.h"
-#include "thirdparty/inih/ini.h"
 #include "utils/errors.h"
-#include <postoffice/perf/perf.h>
 
 // djb2 string hash
 static unsigned long str_hash(const void *s) {
@@ -81,30 +82,31 @@ static int ini_handler_cb(void *user, const char *section, const char *name, con
     if (!full_key)
         return STOP_PARSING;
 
-    char *value_copy = strdup(value);
-    if (!value_copy) {
-        free(full_key);
-        return STOP_PARSING;
-    }
-
     if (po_hashtable_contains_key(ctx->entries, full_key)) {
         free(full_key);
-        free(value_copy);
 
         if (ctx->strict) {
             errno = INIH_EDUPKEY;
             return STOP_PARSING;
         }
-    } else if (po_hashtable_put(ctx->entries, full_key, value_copy) != 1) {
-        free(value_copy);
-        free(full_key);
-        return STOP_PARSING;
+    } else {
+        char *value_copy = strdup(value);
+        if (!value_copy) {
+            free(full_key);
+            return STOP_PARSING;
+        }
+
+        if (po_hashtable_put(ctx->entries, full_key, value_copy) != 1) {
+            free(value_copy);
+            free(full_key);
+            return STOP_PARSING;
+        }
     }
 
     // Section Handling
     // If strict, we want to detect if we switched back to an already seen section (Duplicate Block)
     // But multiple keys in ONE block is fine.
-    
+
     // Check if section changed from last one
     bool section_changed = false;
     if (!ctx->last_section || strcmp(ctx->last_section, section) != 0) {
@@ -113,25 +115,27 @@ static int ini_handler_cb(void *user, const char *section, const char *name, con
 
     if (section_changed) {
         char *section_key = strdup(section);
-        if (!section_key) return STOP_PARSING;
+        if (!section_key)
+            return STOP_PARSING;
 
         // If we changed to a section we have SEEN before, that's a duplicate BLOCK.
         if (po_hashset_contains(ctx->sections, section_key)) {
-             free(section_key);
-             if (ctx->strict) {
-                 errno = INIH_EDUPSECTION;
-                 return STOP_PARSING;
-             }
+            free(section_key);
+            if (ctx->strict) {
+                errno = INIH_EDUPSECTION;
+                return STOP_PARSING;
+            }
         } else {
-             // New section, add to set
-             if (po_hashset_add(ctx->sections, section_key) != 1) {
-                 free(section_key);
-                 return STOP_PARSING;
-             }
+            // New section, add to set
+            if (po_hashset_add(ctx->sections, section_key) != 1) {
+                free(section_key);
+                return STOP_PARSING;
+            }
         }
-        
+
         // Update last_section
-        if (ctx->last_section) free(ctx->last_section);
+        if (ctx->last_section)
+            free(ctx->last_section);
         ctx->last_section = strdup(section);
     }
     // Else: same section, continue.
@@ -152,7 +156,7 @@ static int _po_config_load(const char *filename, po_config_t **cfg_out, bool str
     ctx->strict = strict;
     ctx->entries = po_hashtable_create(&str_cmp, &str_hash);
     ctx->sections = po_hashset_create(&str_cmp, &str_hash);
-    ctx->last_section = NULL; 
+    ctx->last_section = NULL;
 
     if (!ctx->entries || !ctx->sections) {
         if (ctx->entries)
@@ -232,8 +236,9 @@ void po_config_free(po_config_t **cfg) {
         clear_keys(config->sections);
         po_hashset_destroy(&config->sections);
     }
-    
-    if (config->last_section) free(config->last_section);
+
+    if (config->last_section)
+        free(config->last_section);
 
     free(config);
     *cfg = NULL;
@@ -329,19 +334,20 @@ int po_config_set_str(po_config_t *cfg, const char *section, const char *key, co
             errno = ENOMEM;
             return -1;
         }
-        
+
         // We need to free the OLD value after replacing, but we lose the pointer then.
         // So get it first.
         char *old_val = po_hashtable_get(cfg->entries, full_key);
-        
+
         if (po_hashtable_replace(cfg->entries, full_key, new_val) != 1) {
-             // Should not happen if contains_key is true
-             free(new_val);
-             free(full_key);
-             return -1;
+            // Should not happen if contains_key is true
+            free(new_val);
+            free(full_key);
+            return -1;
         }
-        
-        if (old_val) free(old_val);
+
+        if (old_val)
+            free(old_val);
         free(full_key); // Now we can free the search key
     } else {
         // Insert new
@@ -351,35 +357,36 @@ int po_config_set_str(po_config_t *cfg, const char *section, const char *key, co
             errno = ENOMEM;
             return -1;
         }
-        
+
         if (po_hashtable_put(cfg->entries, full_key, val_copy) != 1) {
             free(full_key);
             free(val_copy);
             return -1;
         }
-        
+
         // Also ensure section exists
         if (section && *section) {
-             if (!po_hashset_contains(cfg->sections, section)) {
-                 char *sec_copy = strdup(section);
-                 if (sec_copy) {
-                     po_hashset_add(cfg->sections, sec_copy);
-                 }
-             }
+            if (!po_hashset_contains(cfg->sections, section)) {
+                char *sec_copy = strdup(section);
+                if (sec_copy) {
+                    po_hashset_add(cfg->sections, sec_copy);
+                }
+            }
         }
     }
-    
+
     return 0;
 }
 
 void po_config_foreach(const po_config_t *cfg, po_config_entry_cb cb, void *user_data) {
     po_hashtable_iter_t *it = po_hashtable_iterator(cfg->entries);
-    if (!it) return;
+    if (!it)
+        return;
 
     while (po_hashtable_iter_next(it)) {
         const char *full_key = po_hashtable_iter_key(it);
         const char *val = po_hashtable_iter_value(it);
-        
+
         // Split section.key
         // full_key format: "section.key" or "key" (if no section)
         const char *dot = strchr(full_key, '.');
@@ -392,7 +399,7 @@ void po_config_foreach(const po_config_t *cfg, po_config_entry_cb cb, void *user
             if (sec_buf) {
                 memcpy(sec_buf, full_key, sec_len);
                 sec_buf[sec_len] = '\0';
-                
+
                 cb(sec_buf, dot + 1, val, user_data);
                 free(sec_buf);
             }
@@ -400,9 +407,9 @@ void po_config_foreach(const po_config_t *cfg, po_config_entry_cb cb, void *user
             cb("", full_key, val, user_data);
         }
     }
-    
-    free(it); // Assuming iterator needs freeing? 
-    // `po_hashtable_iterator` returns `po_hashtable_iter_t *`. 
+
+    free(it); // Assuming iterator needs freeing?
+    // `po_hashtable_iterator` returns `po_hashtable_iter_t *`.
     // Checked `hashtable.c`? No, header says "Allocate an iterator".
     // Usually iterators need freeing. `free(it)` is likely correct.
 }
