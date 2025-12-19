@@ -92,6 +92,13 @@ int user_standalone_init(sim_shm_t **out_shm) {
     return 0;
 }
 
+void user_standalone_cleanup(sim_shm_t *shm) {
+    if (shm) {
+        sim_ipc_shm_detach(shm);
+    }
+    po_logger_shutdown();
+}
+
 int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic bool *active_flag) {
     if (!shm) {
         LOG_FATAL("user_run called with NULL shm");
@@ -227,22 +234,28 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
             }
 
             if (mins_to_wait > 0) {
-                // Wait loop with 100ms granularity to allow cancellation
-                // params.tick_nanos = ns per sim minute
-                uint64_t total_nanos = (uint64_t)mins_to_wait * shm->params.tick_nanos;
-                uint64_t total_us = total_nanos / 1000;
-
-                while (total_us > 0 && g_running) {
+                // Wait loop synchronized with Director's tick
+                int target_day = day;
+                if (hour >= 17) target_day++; 
+                
+                pthread_mutex_lock(&shm->time_control.mutex);
+                while (g_running) {
                     if (active_flag && !atomic_load(active_flag))
                         break;
-
-                    uint64_t step = 100000; // 100ms
-                    if (step > total_us)
-                        step = total_us;
-
-                    usleep((useconds_t)step);
-                    total_us -= step;
+                        
+                    get_sim_time(shm, &day, &hour, &min);
+                    // Check if we reached 08:00 of the next/target day
+                    // Simpler check: Just wait until office is open (8 <= hour < 17)
+                    if (hour >= 8 && hour < 17) {
+                        break;
+                    }
+                    
+                    struct timespec ts;
+                    clock_gettime(CLOCK_MONOTONIC, &ts);
+                    ts.tv_sec += 1;
+                    pthread_cond_timedwait(&shm->time_control.cond_tick, &shm->time_control.mutex, &ts);
                 }
+                pthread_mutex_unlock(&shm->time_control.mutex);
             } else {
                 usleep(10000); // Fallback
             }
@@ -254,65 +267,33 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
                   req + 1, n_requests);
 
         // Enter Queue
-        int semid = sim_ipc_sem_get();
-        if (semid != -1) {
-            atomic_fetch_add(&shm->queues[service_type].waiting_count, 1);
+        // Use Mutex/Cond instead of Semaphores
+        queue_status_t *q = &shm->queues[service_type];
+        
+        atomic_fetch_add(&q->waiting_count, 1);
 
-            // Push Ticket to Shared Queue
-            queue_status_t *q = &shm->queues[service_type];
-            unsigned int tail = atomic_fetch_add(&q->tail, 1);
-            unsigned int idx = tail % 128;
-            // Wait for slot (should be 0)
-            while (atomic_load(&q->tickets[idx]) != 0) {
-                // Busy wait / yield.
-                // In a robust system we handles wrap better or larger buffer.
-                usleep(100);
-            }
-            atomic_store(&q->tickets[idx], resp.ticket_number + 1);
-
-            struct sembuf sb = {.sem_num = (unsigned short)service_type,
-                                .sem_op = 1, // Increment
-                                .sem_flg = 0};
-            LOG_DEBUG("User %d waiting for queue semaphore (type %d)...", user_id, service_type);
-
-            struct timespec ts_sem = {0, 100000000}; // 100ms
-
-            while (true) {
-                if (active_flag && !atomic_load(active_flag)) {
-                    atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
-                    goto shutdown;
-                }
-
-                if (semtimedop(semid, &sb, 1, &ts_sem) == 0) {
-                    break; // Success
-                }
-
-                if (errno == EAGAIN) {
-                    // Timeout, loop and check flags
-                    continue;
-                }
-
-                if (errno == EINTR) {
-                    if (!g_running) {
-                        atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
-                        goto shutdown;
-                    }
-                    continue;
-                }
-
-                LOG_WARN("User %d semop failed (errno=%d)", user_id, errno);
-                atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
-                goto shutdown;
-            }
-        } else {
-            LOG_WARN("User %d failed to get semid", user_id);
-            break;
+        // Push Ticket to Shared Queue
+        unsigned int tail = atomic_fetch_add(&q->tail, 1);
+        unsigned int idx = tail % 128;
+        // Wait for slot (should be 0)
+        while (atomic_load(&q->tickets[idx]) != 0) {
+            // Busy wait / yield.
+            usleep(100);
         }
+        atomic_store(&q->tickets[idx], resp.ticket_number + 1);
 
+        // Signal Worker
+        pthread_mutex_lock(&q->mutex);
+        LOG_TRACE("User %d signaling cond_added for service %d", user_id, service_type);
+        pthread_cond_signal(&q->cond_added);
+        pthread_mutex_unlock(&q->mutex);
+        
         LOG_DEBUG("User %d entered queue for service %d", user_id, service_type);
 
         // Wait for Service
         bool served = false;
+        
+        pthread_mutex_lock(&q->mutex);
         while (g_running && !served) {
             if (active_flag && !atomic_load(active_flag))
                 break;
@@ -332,11 +313,17 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
             }
 
             if (!served) {
-                // LOG_DEBUG("User %d still waiting for service...", user_id); // Too spammy? Maybe
-                // un-comment if deep debug needed
-                usleep(50000);
+                // Wait for any worker to change state (pick up ticket)
+                // Worker broadcasts cond_served when picking up ticket too.
+                LOG_TRACE("User %d waiting on cond_served (waiting for pickup)", user_id);
+                struct timespec ts;
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                ts.tv_sec += 1;
+                pthread_cond_timedwait(&q->cond_served, &q->mutex, &ts);
+                LOG_TRACE("User %d woke up from cond_served (waiting for pickup)", user_id);
             }
         }
+        pthread_mutex_unlock(&q->mutex);
 
         // Double check cancellation before processing service result
         if (active_flag && !atomic_load(active_flag)) {
@@ -344,6 +331,7 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
         }
 
         if (served) {
+            pthread_mutex_lock(&q->mutex);
             while (g_running) {
                 if (active_flag && !atomic_load(active_flag))
                     break;
@@ -361,8 +349,15 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
                               user_id);
                     break;
                 }
-                usleep(50000);
+                // Wait for completion signal
+                LOG_TRACE("User %d waiting on cond_served (waiting for completion)", user_id);
+                struct timespec ts;
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                ts.tv_sec += 1;
+                pthread_cond_timedwait(&q->cond_served, &q->mutex, &ts);
+                LOG_TRACE("User %d woke up from cond_served (waiting for completion)", user_id);
             }
+            pthread_mutex_unlock(&q->mutex);
         } else {
             get_sim_time(shm, &day, &hour, &min);
             LOG_WARN("[Day %d %02d:%02d] User %d gave up or sim ended", day, hour, min, user_id);
@@ -370,7 +365,6 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
         }
     }
 
-shutdown:
     // No detach here, managed by caller or thread exit (OS)
     return 0;
 }

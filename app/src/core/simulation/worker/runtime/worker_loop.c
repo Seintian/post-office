@@ -107,6 +107,14 @@ int worker_global_init(void) {
     return 0;
 }
 
+void worker_global_cleanup(void) {
+    if (g_shm_worker) {
+        sim_ipc_shm_detach(g_shm_worker);
+        g_shm_worker = NULL;
+    }
+    po_logger_shutdown();
+}
+
 int worker_run(int worker_id, int service_type) {
     if (!g_shm_worker || g_semid_worker == -1) {
         LOG_FATAL("Worker globals not initialized");
@@ -114,7 +122,6 @@ int worker_run(int worker_id, int service_type) {
     }
 
     sim_shm_t *shm = g_shm_worker;
-    int semid = g_semid_worker;
 
     // Validation
     if (worker_id < 0 || (uint32_t)worker_id >= shm->params.n_workers) {
@@ -161,8 +168,13 @@ int worker_run(int worker_id, int service_type) {
             pthread_cond_signal(&shm->sync.cond_workers_ready);
 
             // Wait for release
-            while (g_running && atomic_load(&shm->sync.barrier_active)) {
-                pthread_cond_wait(&shm->sync.cond_day_start, &shm->sync.mutex);
+            // Check day_seq to ensure we don't get stuck if barrier flips 0->1 immediately for next day
+            struct timespec ts;
+            while (g_running && atomic_load(&shm->sync.barrier_active) && 
+                   atomic_load(&shm->sync.day_seq) == barrier_day) {
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                ts.tv_sec += 1; // 1s timeout
+                pthread_cond_timedwait(&shm->sync.cond_day_start, &shm->sync.mutex, &ts);
             }
         }
 
@@ -172,54 +184,59 @@ int worker_run(int worker_id, int service_type) {
     while (g_running) {
         sync_check_day();
 
-        // Wait for a user in my service queue
-        struct sembuf sb = {.sem_num = (unsigned short)service_type,
-                            .sem_op = -1, // Decrement (Wait for user)
-                            .sem_flg = 0};
+        queue_status_t *q = &shm->queues[service_type];
 
-        LOG_DEBUG("Worker %d entering wait state for service type %d...", worker_id, service_type);
+        // Wait for a user using Condition Variable (Zero CPU Idle)
+        pthread_mutex_lock(&q->mutex);
+        while (atomic_load(&q->waiting_count) == 0 && g_running) {
+             if (atomic_load(&shm->sync.barrier_active)) {
+                 LOG_TRACE("Worker %d detected active barrier while waiting", worker_id);
+                 break; // Sync barrier requested
+             }
+             LOG_TRACE("Worker %d waiting on cond_added for service %d", worker_id, service_type);
+             
+             struct timespec ts;
+             clock_gettime(CLOCK_MONOTONIC, &ts);
+             ts.tv_sec += 1;
+             pthread_cond_timedwait(&q->cond_added, &q->mutex, &ts);
+             
+             LOG_TRACE("Worker %d woke up from cond_added", worker_id);
+        }
 
-        // Revised approach:
-        // Use a short timeout for semop (if possible with semtimedop) or polling.
-        // Linux supports semtimedop. _GNU_SOURCE is defined.
-        struct timespec ts_sem = {0, 100000000}; // 100ms
-        if (semtimedop(semid, &sb, 1, &ts_sem) == -1) {
-            if (errno == EAGAIN) {
-                // Timeout, check sync and loop
-                continue;
-            }
-            if (errno == EINTR) {
-                if (!g_running)
-                    break;
-                continue;
-            }
-            LOG_ERROR("worker %d: semop failed (errno=%d)", worker_id, errno);
+        if (atomic_load(&shm->sync.barrier_active)) {
+            pthread_mutex_unlock(&q->mutex);
+            continue; // Handle sync
+        }
+
+        if (!g_running) {
+            pthread_mutex_unlock(&q->mutex);
             break;
         }
 
         // We have acquired a user. Decrement the waiting count.
-        atomic_fetch_sub(&shm->queues[service_type].waiting_count, 1);
-        LOG_DEBUG("Worker %d acquired a user task", worker_id);
+        atomic_fetch_sub(&q->waiting_count, 1);
+        pthread_mutex_unlock(&q->mutex);
 
-        if (!g_running)
-            break;
+        LOG_DEBUG("Worker %d acquired a user task", worker_id);
 
         // Servicing
         atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_BUSY);
 
         // Pop Ticket
-        queue_status_t *q = &shm->queues[service_type];
         unsigned int head = atomic_fetch_add(&q->head, 1);
         unsigned int idx = head % 128;
 
-        // Wait for data
+        // Wait for data (Should be immediate if logic is correct)
         uint32_t val = 0;
         int spin_count = 0;
         while ((val = atomic_load(&q->tickets[idx])) == 0) {
             if (!g_running)
                 break;
-            if (++spin_count > 1000)
-                usleep(100);
+            // Busy wait to avoid context switch latency
+             if (++spin_count > 100000) {
+                 usleep(1); // Emergency yield
+                 spin_count = 0;
+             }
         }
         if (val == 0)
             break; // shutting down
@@ -237,7 +254,7 @@ int worker_run(int worker_id, int service_type) {
             if (atomic_load(&shm->workers[worker_id].state) != WORKER_STATUS_OFFLINE) {
                 atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_OFFLINE);
             }
-
+            // Just wait a bit and retry (or better, wait on cond variable with timeout?)
             usleep(10000);
             continue;
         }
@@ -249,19 +266,38 @@ int worker_run(int worker_id, int service_type) {
         LOG_DEBUG("[Day %d %02d:%02d] Worker %d servicing ticket %u...", day, hour, min, worker_id,
                   ticket);
 
+        // Notify Users that I picked up the ticket (Use broadcast on served/change?)
+        // The user waits for completion, but also waits to see who picked it up.
+        // We can broadcast `cond_served` here too so users can check if their ticket is picked up.
+        pthread_mutex_lock(&q->mutex);
+        LOG_TRACE("Worker %d signaling cond_served (start of service)", worker_id);
+        pthread_cond_broadcast(&q->cond_served);
+        pthread_mutex_unlock(&q->mutex);
+
         // Simulate Service Time (e.g., 50ms - 500ms)
+        // BUSY WAIT implementation for High CPU Load
         int service_time_ms = (int)po_rand_range_i64(50, 500);
 
         // Runtime Adaptation: Throttle if CPU is overloaded
         double cpu_util = -1.0;
         if (po_sysinfo_sampler_get(&cpu_util, NULL) == 0) {
-            if (cpu_util > 90.0) {
-                service_time_ms = (int)(service_time_ms * 1.5);
+            if (cpu_util > 95.0) { // Higher threshold
+                 // service_time_ms = (int)(service_time_ms * 1.5);
             }
         }
         LOG_DEBUG("Worker %d simulating service for %d ms", worker_id, service_time_ms);
 
-        usleep((unsigned int)service_time_ms * 1000);
+        // Busy wait loop
+        struct timespec ts_start, ts_now;
+        clock_gettime(CLOCK_MONOTONIC, &ts_start);
+        long elapsed_ms = 0;
+        while (elapsed_ms < service_time_ms && g_running) {
+             clock_gettime(CLOCK_MONOTONIC, &ts_now);
+             elapsed_ms = (ts_now.tv_sec - ts_start.tv_sec) * 1000 + 
+                          (ts_now.tv_nsec - ts_start.tv_nsec) / 1000000;
+             // Burn CPU
+             for(volatile int k=0; k<1000; k++); 
+        }
 
         // Done
         atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_FREE);
@@ -269,6 +305,12 @@ int worker_run(int worker_id, int service_type) {
 
         atomic_fetch_add(&shm->stats.total_services_completed, 1);
         atomic_fetch_add(&shm->queues[service_type].total_served, 1);
+
+        // Notify Completion
+        pthread_mutex_lock(&q->mutex);
+        LOG_TRACE("Worker %d signaling cond_served (completion)", worker_id);
+        pthread_cond_broadcast(&q->cond_served);
+        pthread_mutex_unlock(&q->mutex);
 
         get_sim_time(shm, &day, &hour, &min);
         LOG_DEBUG("[Day %d %02d:%02d] Worker %d finished service ticket %u", day, hour, min,

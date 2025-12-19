@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <sys/prctl.h>
 #include <unistd.h>
 #include <utils/errors.h>
 #include <utils/signals.h>
@@ -113,6 +114,9 @@ static void spawn_process(const char *bin, char *const argv[]) {
     pid_t p = fork();
     if (p == 0) {
         // Child
+        // Ensure child dies if parent dies
+        prctl(PR_SET_PDEATHSIG, SIGTERM);
+        
         execv(bin, argv);
 
         // If execv fails, use unsafe write to stderr to avoid lock corruption
@@ -518,6 +522,13 @@ int main(int argc, char **argv) {
         atomic_store(&shm->sync.day_seq, (unsigned int)day);
         atomic_store(&shm->sync.barrier_active, 1);
 
+        // Wake up sleeping workers so they can join the barrier
+        for (int i = 0; i < SIM_MAX_SERVICE_TYPES; i++) {
+            pthread_mutex_lock(&shm->queues[i].mutex);
+            pthread_cond_broadcast(&shm->queues[i].cond_added);
+            pthread_mutex_unlock(&shm->queues[i].mutex);
+        }
+
         uint32_t req = atomic_load(&shm->sync.required_count);
         LOG_INFO("Waiting for day %d synchronization...", day);
 
@@ -553,8 +564,11 @@ int main(int argc, char **argv) {
     sync_day_start(g_shm, current_day);
 
     while (g_running) {
-        // Update Time
+        // Update Time Synchronously
+        pthread_mutex_lock(&g_shm->time_control.mutex);
         update_sim_time(g_shm, current_day, current_hour, current_min);
+        pthread_cond_broadcast(&g_shm->time_control.cond_tick);
+        pthread_mutex_unlock(&g_shm->time_control.mutex);
 
         // Sleep for 1 "tick" (1 simulated minute)
         // Convert tick_nanos to microseconds for usleep
@@ -620,6 +634,14 @@ int main(int argc, char **argv) {
     LOG_INFO("Director stopping...");
     atomic_store(&g_shm->time_control.sim_active, false);
 
+    // Wake up everyone (Workers and Users)
+    for (int i = 0; i < SIM_MAX_SERVICE_TYPES; i++) {
+        pthread_mutex_lock(&g_shm->queues[i].mutex);
+        pthread_cond_broadcast(&g_shm->queues[i].cond_added); // Wake workers
+        pthread_cond_broadcast(&g_shm->queues[i].cond_served); // Wake users
+        pthread_mutex_unlock(&g_shm->queues[i].mutex);
+    }
+
     if (bridge_started) {
         bridge_mainloop_stop();
         pthread_join(bridge_thread, NULL);
@@ -633,12 +655,10 @@ int main(int argc, char **argv) {
             kill(p, SIGTERM);
     }
     // Final wait/cleanup
-    usleep(100000);
-    // Force kill if needed
     for (size_t i = 0; i < count; i++) {
         pid_t p = (pid_t)(intptr_t)po_vector_at(g_child_pids, i);
         if (p > 0)
-            waitpid(p, NULL, WNOHANG);
+            waitpid(p, NULL, 0); // Blocking wait
     }
 
     po_vector_destroy(g_child_pids);

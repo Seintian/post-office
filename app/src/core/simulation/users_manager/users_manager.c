@@ -304,9 +304,19 @@ int main(int argc, char **argv) {
             if ((int)barrier_day > last_synced_day) {
                 atomic_fetch_add(&g_shm->sync.ready_count, 1);
                 last_synced_day = (int)barrier_day;
-                while (g_running && atomic_load(&g_shm->sync.barrier_active)) {
-                    usleep(1000);
+                
+                // Signal readiness
+                pthread_mutex_lock(&g_shm->sync.mutex);
+                pthread_cond_signal(&g_shm->sync.cond_workers_ready);
+
+                struct timespec ts;
+                while (g_running && atomic_load(&g_shm->sync.barrier_active) &&
+                       atomic_load(&g_shm->sync.day_seq) == barrier_day) {
+                    clock_gettime(CLOCK_MONOTONIC, &ts);
+                    ts.tv_sec += 1;
+                    pthread_cond_timedwait(&g_shm->sync.cond_day_start, &g_shm->sync.mutex, &ts);
                 }
+                pthread_mutex_unlock(&g_shm->sync.mutex);
             }
         }
     }

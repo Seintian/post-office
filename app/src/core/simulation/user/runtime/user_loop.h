@@ -1,26 +1,27 @@
 #ifndef USER_LOOP_H
 #define USER_LOOP_H
 
-#include "../../ipc/simulation_ipc.h"
-
-#include <stdbool.h>
 #include <stdatomic.h>
+#include <stdbool.h>
+#include "../../ipc/simulation_protocol.h"
 
 /**
- * Run the user logic loop.
- * @param user_id User ID.
- * @param service_type Service type.
+ * Initialize standalone user process resources (logger, metrics, shm).
+ */
+int user_standalone_init(sim_shm_t **out_shm);
+
+/**
+ * Cleanup standalone user process resources.
+ */
+void user_standalone_cleanup(sim_shm_t *shm);
+
+/**
+ * Run the user loop.
+ * @param user_id Unique ID for this user.
+ * @param service_type Service type the user needs.
  * @param shm Pointer to attached shared memory.
- * @param active_flag Optional cancellation flag (thread pool usage).
- * @return 0 on success.
+ * @param active_flag Optional flag to monitor for cancellation.
  */
-int user_run(int user_id, int service_type, sim_shm_t* shm, volatile _Atomic bool *active_flag);
-
-/**
- * Initialize resources for standalone user process (logger, SHM, signals).
- * @param[out] out_shm Receives pointer to attached SHM.
- * @return 0 on success.
- */
-int user_standalone_init(sim_shm_t** out_shm);
+int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic bool *active_flag);
 
 #endif

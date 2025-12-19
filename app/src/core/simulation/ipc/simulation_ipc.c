@@ -121,6 +121,13 @@ sim_shm_t *sim_ipc_shm_create(size_t n_workers) {
         pthread_mutexattr_init(&mattr);
         pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
         pthread_mutex_init(&shm->sync.mutex, &mattr);
+        // Initialize Time Mutex
+        pthread_mutex_init(&shm->time_control.mutex, &mattr);
+        
+        // Initialize Queue Mutexes
+        for (int i = 0; i < SIM_MAX_SERVICE_TYPES; i++) {
+            pthread_mutex_init(&shm->queues[i].mutex, &mattr);
+        }
         pthread_mutexattr_destroy(&mattr);
 
         pthread_condattr_t cattr;
@@ -131,6 +138,14 @@ sim_shm_t *sim_ipc_shm_create(size_t n_workers) {
 
         pthread_cond_init(&shm->sync.cond_workers_ready, &cattr);
         pthread_cond_init(&shm->sync.cond_day_start, &cattr);
+        // Initialize Time Tick Cond
+        pthread_cond_init(&shm->time_control.cond_tick, &cattr);
+
+        // Initialize Queue Condition Variables
+        for (int i = 0; i < SIM_MAX_SERVICE_TYPES; i++) {
+            pthread_cond_init(&shm->queues[i].cond_added, &cattr);
+            pthread_cond_init(&shm->queues[i].cond_served, &cattr);
+        }
         pthread_condattr_destroy(&cattr);
 
         close(shm_fd);

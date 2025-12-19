@@ -87,8 +87,10 @@ int main(int argc, char** argv) {
         worker_run(worker_id, service_type);
     } else {
         fprintf(stderr, "Usage: %s -w <n_workers> OR -i <id> -s <type>\n", argv[0]);
+        worker_global_cleanup();
         return 1;
     }
 
+    worker_global_cleanup();
     return 0;
 }

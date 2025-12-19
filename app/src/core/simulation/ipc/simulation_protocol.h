@@ -70,6 +70,11 @@ typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) queue_status_s {
     atomic_uint waiting_count; // Users currently in queue
     atomic_uint total_served;  // Cumulative users served
 
+    // Synchronization for this queue
+    pthread_mutex_t mutex;
+    pthread_cond_t cond_added;   // For workers to wait for tickets
+    pthread_cond_t cond_served;  // For users to wait for completion
+
     // Ticket Queue for User->Worker handoff
     atomic_uint head;
     atomic_uint tail;
@@ -114,6 +119,10 @@ typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) sim_time_s {
     atomic_uint_least64_t packed_time;
     atomic_int elapsed_nanos; // Accumulator for minute steps
     atomic_bool sim_active;   // Global run flag
+    
+    // Time Synchronization
+    pthread_mutex_t mutex;
+    pthread_cond_t cond_tick;
 } sim_time_t;
 _Static_assert(sizeof(sim_time_t) % PO_CACHE_LINE_MAX == 0, "sim_time_t size mismatch");
 

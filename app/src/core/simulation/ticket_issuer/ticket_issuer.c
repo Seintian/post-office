@@ -53,9 +53,20 @@ static void sync_check_day(sim_shm_t *shm, int *last_synced_day) {
         if ((int)barrier_day > *last_synced_day) {
             atomic_fetch_add(&shm->sync.ready_count, 1);
             *last_synced_day = (int)barrier_day;
-            while (g_running && atomic_load(&shm->sync.barrier_active)) {
-                usleep(1000);
+            
+            // Signal readiness
+            pthread_mutex_lock(&shm->sync.mutex);
+            pthread_cond_signal(&shm->sync.cond_workers_ready);
+            
+            // Wait for release, ensuring we are waiting for THIS day's barrier
+            struct timespec ts;
+            while (g_running && atomic_load(&shm->sync.barrier_active) &&
+                   atomic_load(&shm->sync.day_seq) == barrier_day) {
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                ts.tv_sec += 1;
+                pthread_cond_timedwait(&shm->sync.cond_day_start, &shm->sync.mutex, &ts);
             }
+            pthread_mutex_unlock(&shm->sync.mutex);
         }
     }
 }

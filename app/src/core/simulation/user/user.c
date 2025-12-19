@@ -41,5 +41,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    return user_run(user_id, service_type, shm, NULL);
+    int ret = user_run(user_id, service_type, shm, NULL);
+    user_standalone_cleanup(shm);
+    return ret;
 }

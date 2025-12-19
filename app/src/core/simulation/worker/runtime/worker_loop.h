@@ -10,6 +10,11 @@
 int worker_global_init(void);
 
 /**
+ * Cleanup global resources for the worker process.
+ */
+void worker_global_cleanup(void);
+
+/**
  * Run the worker loop.
  * @param worker_id Unique ID for this worker (0 to N-1).
  * @param service_type Service type this worker handles.
