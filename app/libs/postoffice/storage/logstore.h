@@ -101,6 +101,16 @@ typedef struct po_logstore_cfg {
  * and spawns background flush machinery. Returns NULL on error (errno set) and
  * does not leak partial resources.
  */
+/**
+ * @brief Open a log store with explicit configuration.
+ *
+ * Performs directory setup (creating if absent), initializes LMDB environment
+ * and spawns background flush machinery. Returns NULL on error (errno set) and
+ * does not leak partial resources.
+ * @param[in] cfg Configuration structure.
+ * @return Handle to opened logstore or NULL.
+ * @note Thread-safe: No (Must be unique/exclusive per call).
+ */
 po_logstore_t *po_logstore_open_cfg(const po_logstore_cfg *cfg);
 
 /**
@@ -109,6 +119,12 @@ po_logstore_t *po_logstore_open_cfg(const po_logstore_cfg *cfg);
  * Provides sane default batching / fsync settings suitable for development or
  * low-throughput environments. For performance tuning use
  * ::po_logstore_open_cfg().
+ * @param[in] dir Base directory.
+ * @param[in] bucket Bucket name.
+ * @param[in] map_size LMDB map size.
+ * @param[in] ring_capacity Ring buffer capacity.
+ * @return Handle or NULL.
+ * @note Thread-safe: No.
  */
 po_logstore_t *po_logstore_open(const char *dir, const char *bucket, size_t map_size,
                                 size_t ring_capacity);
@@ -122,9 +138,15 @@ void po_logstore_close(po_logstore_t **ls);
  * cycle. Keys must not exceed `max_key_bytes` (if non-zero). Values must not
  * exceed `max_value_bytes` (if non-zero).
  *
+ * @param[in] ls Store handle.
+ * @param[in] key Key data.
+ * @param[in] keylen Key length.
+ * @param[in] val Value data.
+ * @param[in] vallen Value length.
  * @return 0 on success (enqueued), -1 on validation, allocation, or queue full
  *         error (errno set: EINVAL size constraints, ENOSPC internal queue full,
  *         ENOMEM allocation, LMDB codes for environment issues, etc.).
+ * @note Thread-safe: Yes.
  */
 int po_logstore_append(po_logstore_t *ls, const void *key, size_t keylen, const void *val,
                        size_t vallen);
@@ -137,13 +159,14 @@ int po_logstore_append(po_logstore_t *ls, const void *key, size_t keylen, const 
  * an explicit free function may be provided in implementation (not shown here)
  * or the buffer could be malloc-backed—consult implementation for lifetime.
  *
- * @param ls      Store handle.
- * @param key     Key bytes.
- * @param keylen  Key length in bytes.
- * @param out_val Output pointer to allocated value buffer (set on success).
- * @param out_len Output length of value in bytes.
+ * @param[in] ls      Store handle.
+ * @param[in] key     Key bytes.
+ * @param[in] keylen  Key length in bytes.
+ * @param[out] out_val Output pointer to allocated value buffer (set on success).
+ * @param[out] out_len Output length of value in bytes.
  * @return 0 on success (value found), -1 if not found or on error (errno = ENOENT
  *         for missing, or LMDB / I/O error code).
+ * @note Thread-safe: Yes.
  */
 int po_logstore_get(po_logstore_t *ls, const void *key, size_t keylen, void **out_val,
                     size_t *out_len);
@@ -154,6 +177,9 @@ int po_logstore_get(po_logstore_t *ls, const void *key, size_t keylen, void **ou
  * Log line keys may encode a time + sequence pair ensuring uniqueness. The
  * sink is idempotent if attached more than once (duplicate suppress logic
  * resides in the logger subsystem or here depending on implementation).
+ * @param[in] ls Store handle.
+ * @return 0 on success, -1 on failure.
+ * @note Thread-safe: Yes.
  */
 int po_logstore_attach_logger(po_logstore_t *ls);
 
@@ -176,11 +202,12 @@ typedef struct po_logstore_integrity_stats {
  * corrupt records are removed. Scanning continues in the presence of corrupt
  * entries unless a fatal I/O error occurs.
  *
- * @param ls               Store handle.
- * @param prune_nonexistent Non-zero to delete stale entries.
- * @param out_stats        Optional stats output (may be NULL).
+ * @param[in] ls               Store handle.
+ * @param[in] prune_nonexistent Non-zero to delete stale entries.
+ * @param[out] out_stats        Optional stats output (may be NULL).
  * @return 0 on success (even if pruning removed entries); -1 on unrecoverable
  *         I/O error (errno set).
+ * @note Thread-safe: No (Recommended exclusive use).
  */
 int po_logstore_integrity_scan(po_logstore_t *ls, int prune_nonexistent,
                                po_logstore_integrity_stats *out_stats);
@@ -190,6 +217,7 @@ int po_logstore_integrity_scan(po_logstore_t *ls, int prune_nonexistent,
  *
  * Used exclusively for test harnesses to simulate stale or orphaned index
  * entries ahead of an integrity scan. Not for production use.
+ * @return 0 on success, -1 on error.
  */
 int po_logstore_debug_put_index(po_logstore_t *ls, const void *key, size_t keylen, uint64_t offset,
                                 uint32_t len);

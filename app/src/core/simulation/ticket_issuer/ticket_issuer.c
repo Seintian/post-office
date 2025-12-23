@@ -27,6 +27,12 @@
 
 static volatile sig_atomic_t g_running = 1;
 
+/**
+ * @brief Signal handler for graceful shutdown.
+ * @param[in] sig Signal number.
+ * @param[in] info Signal info.
+ * @param[in] context User context.
+ */
 static void handle_signal(int sig, siginfo_t *info, void *context) {
     (void)sig;
     (void)info;
@@ -34,12 +40,22 @@ static void handle_signal(int sig, siginfo_t *info, void *context) {
     g_running = 0;
 }
 
+/**
+ * @brief Register signal handlers using sigutil.
+ */
 static void setup_signals(void) {
     if (sigutil_handle_terminating(handle_signal, 0) != 0) {
         LOG_WARN("Failed to register signal handlers");
     }
 }
 
+/**
+ * @brief Extract current simulation time from SHM.
+ * @param[in] shm Shared memory pointer.
+ * @param[out] d Day.
+ * @param[out] h Hour.
+ * @param[out] m Minute.
+ */
 static void get_sim_time(sim_shm_t *shm, int *d, int *h, int *m) {
     uint64_t packed = atomic_load(&shm->time_control.packed_time);
     *d = (packed >> 16) & 0xFFFF;
@@ -47,6 +63,14 @@ static void get_sim_time(sim_shm_t *shm, int *d, int *h, int *m) {
     *m = packed & 0xFF;
 }
 
+/**
+ * @brief Check for barrier synchronization at day start.
+ * 
+ * If a barrier is active for a new day, increment ready count and wait for release.
+ *
+ * @param[in] shm Shared memory pointer.
+ * @param[in,out] last_synced_day Last synced day tracker.
+ */
 static void sync_check_day(sim_shm_t *shm, int *last_synced_day) {
     if (atomic_load(&shm->sync.barrier_active)) {
         unsigned int barrier_day = atomic_load(&shm->sync.day_seq);
@@ -76,29 +100,38 @@ typedef struct {
     sim_shm_t *shm;
 } client_ctx_t;
 
+/**
+ * @brief Handle a single client connection task in thread pool.
+ * @param[in] arg Pointer to client_ctx_t (takes ownership).
+ */
 static void handle_client_task(void *arg) {
     client_ctx_t *ctx = (client_ctx_t *)arg;
     int client_fd = ctx->client_fd;
     sim_shm_t *shm = ctx->shm;
     free(ctx);
 
-    msg_ticket_req_t req;
-    ssize_t n = -1;
-    int attempts = 0;
-    while (attempts++ < 100) {
-        n = po_socket_recv(client_fd, &req, sizeof(req), 0);
-        if (n == sizeof(req))
-            break;
-        if (n == PO_SOCKET_WOULDBLOCK) {
-            usleep(100);
-            continue;
-        }
-        break;
-    }
+    // Receive protocolmessage with header
+    po_header_t hdr;
+    zcp_buffer_t *payload = NULL;
+    int ret = net_recv_message(client_fd, &hdr, &payload);
 
-    if (n == sizeof(req)) {
+    if (ret == 0 && payload) {
+        // Validate message type and size
+        if (hdr.msg_type != MSG_TYPE_TICKET_REQ || hdr.payload_len != sizeof(msg_ticket_req_t)) {
+            LOG_ERROR("Invalid message: type=%u, len=%u (expected type=%u, len=%zu)",
+                hdr.msg_type, hdr.payload_len, MSG_TYPE_TICKET_REQ, sizeof(msg_ticket_req_t));
+            net_zcp_release_rx(payload);
+            po_socket_close(client_fd);
+            return;
+        }
+
+        // Extract request
+        msg_ticket_req_t req;
+        memcpy(&req, payload, sizeof(req));
+        net_zcp_release_rx(payload);
+
         LOG_DEBUG("Request received from PID %d (TID %d), assigning ticket...", req.requester_pid,
-                  req.requester_tid);
+            req.requester_tid);
         uint32_t ticket = atomic_fetch_add(&shm->ticket_seq, 1);
         LOG_DEBUG("Assigned ticket %u", ticket);
         if (ticket == UINT32_MAX)
@@ -107,18 +140,29 @@ static void handle_client_task(void *arg) {
         int day, hour, min;
         get_sim_time(shm, &day, &hour, &min);
         LOG_INFO("[Day %d %02d:%02d] Issued ticket %u to PID %d for service %d", day, hour, min,
-                 ticket, req.requester_pid, req.service_type);
+            ticket, req.requester_pid, req.service_type);
 
+        // Send response with protocol header
         msg_ticket_resp_t resp = {.ticket_number = ticket, .assigned_service = req.service_type};
-        ssize_t sent = po_socket_send(client_fd, &resp, sizeof(resp), MSG_NOSIGNAL);
-        if (sent != sizeof(resp)) {
-            LOG_ERROR("Failed to send ticket response");
+        ret = net_send_message(client_fd, MSG_TYPE_TICKET_RESP, PO_FLAG_NONE, 
+            (const uint8_t *)&resp, (uint32_t)sizeof(resp));
+        if (ret != 0) {
+            LOG_ERROR("Failed to send ticket response (ret=%d, errno=%d: %s)", ret, errno, strerror(errno));
+        } else {
+            atomic_fetch_add(&shm->stats.total_tickets_issued, 1);
         }
-        atomic_fetch_add(&shm->stats.total_tickets_issued, 1);
+    } else {
+        LOG_DEBUG("Failed to receive message from client (ret=%d)", ret);
     }
     po_socket_close(client_fd);
 }
 
+/**
+ * @brief Ticket Issuer entry point.
+ * @param[in] argc Argument count.
+ * @param[in] argv Argument vector.
+ * @return 0 on success, >0 on failure.
+ */
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
@@ -178,6 +222,15 @@ int main(int argc, char **argv) {
     }
 
     LOG_INFO("Ticket Issuer started on FD %d, Pool Size: %zu", server_fd, pool_size);
+
+    // Initialize zero-copy pools for protocol messaging
+    if (net_init_zerocopy(128, 128, 4096) != 0) {
+        LOG_FATAL("Failed to initialize zero-copy pools");
+        close(server_fd);
+        sim_ipc_shm_detach(shm);
+        po_logger_shutdown();
+        return 1;
+    }
 
     setup_signals();
 
@@ -272,6 +325,7 @@ int main(int argc, char **argv) {
     LOG_INFO("Ticket Issuer shutting down...");
     close(server_fd);
     sim_ipc_shm_detach(shm);
+    net_shutdown_zerocopy();
     po_logger_shutdown();
     po_perf_shutdown(NULL);
     return 0;

@@ -109,26 +109,66 @@
 extern "C" {
 #endif
 
-int po_metrics_init(void);
+/**
+ * @brief Initialize the metrics subsystem.
+ *
+ * Configures the underlying perf subsystem with default capacities tailored
+ * for the application's typical usage (counters, timers, histograms).
+ *
+ * @param[in] counters Number of counters to allocate (0 for default).
+ * @param[in] timers Number of timers to allocate (0 for default).
+ * @param[in] histograms Number of histograms to allocate (0 for default).
+ * @return 0 on success, -1 on error (errno set by po_perf_init).
+ *
+ * @note Thread-safe: No (Must be called once during application startup).
+ */
+int po_metrics_init(int counters, int timers, int histograms);
+
+/**
+ * @brief Shutdown the metrics subsystem.
+ *
+ * Releases all resources allocated by the perf subsystem.
+ *
+ * @note Thread-safe: No (Must be called once during application shutdown).
+ */
 void po_metrics_shutdown(void);
 
-/* Lightweight per-scope timing helper for histogram recording without
- * depending on perf internals for elapsed retrieval. Usage:
- *   PO_METRIC_TICK(start_ts);
- *   ... work ...
- *   uint64_t dur = PO_METRIC_ELAPSED_NS(start_ts);
+/**
+ * @struct po_metric_tick_t
+ * @brief Lightweight timestamp wrapper for elapsed time measurement.
  */
 typedef struct {
-    uint64_t ns;
+    uint64_t ns; /**< Timestamp in nanoseconds (CLOCK_MONOTONIC) */
 } po_metric_tick_t;
 
+/**
+ * @brief Get the current time in nanoseconds.
+ *
+ * Uses CLOCK_MONOTONIC.
+ *
+ * @return Current time in nanoseconds.
+ *
+ * @note Thread-safe: Yes.
+ */
 static inline uint64_t po_metric_now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
 }
 
+/**
+ * @def PO_METRIC_TICK(var)
+ * @brief Capture the current timestamp into a variable.
+ * @param var Variable name to declare and initialize.
+ */
 #define PO_METRIC_TICK(var) po_metric_tick_t var = {po_metric_now_ns()}
+
+/**
+ * @def PO_METRIC_ELAPSED_NS(var)
+ * @brief Calculate elapsed nanoseconds since a captured tick.
+ * @param var Variable containing the start timestamp.
+ * @return Elapsed nanoseconds.
+ */
 #define PO_METRIC_ELAPSED_NS(var) (po_metric_now_ns() - (var).ns)
 
 #ifdef PO_METRICS_DISABLED

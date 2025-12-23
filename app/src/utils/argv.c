@@ -38,6 +38,12 @@ void po_args_destroy(po_args_t *args) {
     args->syslog_ident = NULL;
 }
 
+/**
+ * @brief Parse log level string to integer.
+ * @param[in] arg String argument (e.g. "INFO", "3").
+ * @param[out] out_lvl Output integer level.
+ * @return 0 on success, -1 on failure.
+ */
 static int parse_loglevel(const char *arg, int *out_lvl) {
     if (!arg) return -1;
 
@@ -61,6 +67,15 @@ static int parse_loglevel(const char *arg, int *out_lvl) {
     return 0;
 }
 
+/**
+ * @brief Handle a single parsed option.
+ * @param[in] opt Option character/code.
+ * @param[in,out] args Arguments structure.
+ * @param[in] fd File descriptor for output.
+ * @param[in] prog_name Program name.
+ * @param[in] optarg_value Option argument (if any).
+ * @return 0 on success, 1 on early exit (help/version), -1 on error.
+ */
 static int po_handle_option(int opt, po_args_t *args, int fd, const char *prog_name, const char *optarg_value) {
     switch (opt) {
     case 'h':

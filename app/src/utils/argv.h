@@ -45,6 +45,7 @@ typedef struct {
 /**
  * @brief Initialize a `po_args_t` structure with default values.
  * @param args Pointer to struct to initialize (must not be NULL).
+ * @note Thread-safe: Yes (operates on stack/local memory).
  */
 void po_args_init(po_args_t *args) __nonnull((1));
 
@@ -61,6 +62,7 @@ void po_args_init(po_args_t *args) __nonnull((1));
  * @param fd    Optional file descriptor used for early diagnostics (>=0) or -1.
  * @return 0 on success; non-zero on parse error. If `help` or `version` is
  *         set, the return may still be 0 (caller decides to exit early).
+ * @note Thread-safe: Yes (operates on stack/local memory, assumes argv is constant).
  */
 int po_args_parse(po_args_t *args, int argc, char **argv, int fd) __nonnull((1, 3));
 
@@ -68,12 +70,14 @@ int po_args_parse(po_args_t *args, int argc, char **argv, int fd) __nonnull((1, 
  * @brief Print usage information to the given file descriptor.
  * @param fd        File descriptor (e.g., STDOUT_FILENO / STDERR_FILENO).
  * @param prog_name Program name for usage banner (must not be NULL).
+ * @note Thread-safe: Yes (reentrant).
  */
 void po_args_print_usage(int fd, const char *prog_name) __nonnull((2));
 
 /**
  * @brief Release any dynamically allocated fields inside the struct.
  * @param args Arguments struct to clean (must not be NULL). Safe to call multiple times.
+ * @note Thread-safe: Yes, provided `args` is not accessed concurrently.
  */
 void po_args_destroy(po_args_t *args) __nonnull((1));
 

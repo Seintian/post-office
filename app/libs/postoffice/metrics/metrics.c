@@ -10,10 +10,12 @@
 #define METRICS_DEFAULT_TIMERS 16
 #define METRICS_DEFAULT_HISTOGRAMS 8
 
-int po_metrics_init(void) {
-    return po_perf_init(METRICS_DEFAULT_COUNTERS, 
-                        METRICS_DEFAULT_TIMERS, 
-                        METRICS_DEFAULT_HISTOGRAMS);
+int po_metrics_init(int counters, int timers, int histograms) {
+    return po_perf_init(
+        (size_t)(counters > 0 ? counters : METRICS_DEFAULT_COUNTERS), 
+        (size_t)(timers > 0 ? timers : METRICS_DEFAULT_TIMERS), 
+        (size_t)(histograms > 0 ? histograms : METRICS_DEFAULT_HISTOGRAMS)
+    );
 }
 
 void po_metrics_shutdown(void) {

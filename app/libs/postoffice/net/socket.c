@@ -13,6 +13,13 @@
 #include <string.h>
 #include <sys/un.h>
 
+/**
+ * @brief Sets a file descriptor to close-on-exec and non-blocking mode.
+ *
+ * @param[in] fd File descriptor to modify.
+ * @return 0 on success, -1 on error.
+ * @note Thread-safe: Yes (Operates on fd flags).
+ */
 static int set_cloexec_nonblock(int fd) {
     if (fd < 0)
         return -1;

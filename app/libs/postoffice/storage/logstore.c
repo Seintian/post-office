@@ -46,6 +46,16 @@
 struct preload_ud {
     po_index_t *idx;
 };
+
+/**
+ * @brief Index preload callback.
+ * @param[in] k Key data.
+ * @param[in] klen Key length.
+ * @param[in] v Value data (offset+len).
+ * @param[in] vlen Value length.
+ * @param[in] ud User data (index pointer).
+ * @return 0 on success.
+ */
 static int preload_cb(const void *k, size_t klen, const void *v, size_t vlen, void *ud) {
     (void)ud;
     if (vlen == 12) {

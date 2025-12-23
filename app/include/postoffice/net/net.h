@@ -61,12 +61,13 @@ typedef uint8_t zcp_buffer_t;
  * This function constructs a protocol header (version, type, flags, payload length)
  * and sends the length-prefixed message (header + payload) over the socket.
  *
- * @param fd The socket file descriptor to send the message on.
- * @param msg_type The message type identifier.
- * @param flags The message flags bitmask.
- * @param payload Pointer to the payload data to send.
- * @param payload_len Length of the payload in bytes.
+ * @param[in] fd The socket file descriptor to send the message on.
+ * @param[in] msg_type The message type identifier.
+ * @param[in] flags The message flags bitmask.
+ * @param[in] payload Pointer to the payload data to send.
+ * @param[in] payload_len Length of the payload in bytes.
  * @return 0 on success, or a negative error code on failure.
+ * @note Thread-safe: Yes (Concurrent writes to same FD may interleave).
  */
 int net_send_message(int fd, uint8_t msg_type, uint8_t flags, const uint8_t *payload,
                      uint32_t payload_len) __nonnull((4));
@@ -75,12 +76,13 @@ int net_send_message(int fd, uint8_t msg_type, uint8_t flags, const uint8_t *pay
  * @brief Initialize process-wide zero-copy pools for TX/RX.
  *
  * Initializes the memory pools required for message transmission and reception.
- * Must be called before using any receive functions.
+ * Must be called before using any receive functions or ZCP acquire functions.
  *
- * @param tx_buffers Number of TX buffers.
- * @param rx_buffers Number of RX buffers.
- * @param buf_size Size of each buffer (bytes).
+ * @param[in] tx_buffers Number of TX buffers.
+ * @param[in] rx_buffers Number of RX buffers.
+ * @param[in] buf_size Size of each buffer (bytes).
  * @return 0 on success, -1 on failure.
+ * @note Thread-safe: Yes (Serialized via internal mutex).
  */
 int net_init_zerocopy(size_t tx_buffers, size_t rx_buffers, size_t buf_size);
 
@@ -88,15 +90,36 @@ int net_init_zerocopy(size_t tx_buffers, size_t rx_buffers, size_t buf_size);
  * @brief Shutdown and release process-wide zero-copy pools.
  * 
  * Safe to call even if not initialized.
+ * @note Thread-safe: Yes (Serialized via internal mutex).
  */
 void net_shutdown_zerocopy(void);
 
-/** Acquire/release TX buffers from the process-wide pool. */
+/**
+ * @brief Acquire a TX buffer from the process-wide pool.
+ * @return Pointer to buffer or NULL if empty/shutdown.
+ * @note Thread-safe: No (Underlying pool is SPSC; unsafe for concurrent ops).
+ */
 void *net_zcp_acquire_tx(void);
+
+/**
+ * @brief Release a TX buffer back to the process-wide pool.
+ * @param[in] buf Buffer to release.
+ * @note Thread-safe: No (Underlying pool is SPSC; unsafe for concurrent ops).
+ */
 void net_zcp_release_tx(void *buf);
 
-/** Acquire/release RX buffers from the process-wide pool. */
+/**
+ * @brief Acquire an RX buffer from the process-wide pool.
+ * @return Pointer to buffer or NULL if empty/shutdown.
+ * @note Thread-safe: No (Underlying pool is SPSC; unsafe for concurrent ops).
+ */
 void *net_zcp_acquire_rx(void);
+
+/**
+ * @brief Release an RX buffer back to the process-wide pool.
+ * @param[in] buf Buffer to release.
+ * @note Thread-safe: No (Underlying pool is SPSC; unsafe for concurrent ops).
+ */
 void net_zcp_release_rx(void *buf);
 
 /**
@@ -104,6 +127,14 @@ void net_zcp_release_rx(void *buf);
  *
  * The header is constructed from inputs; payload_buf must point to a buffer
  * of at least payload_len bytes acquired from the TX pool.
+ *
+ * @param[in] fd Socket fd.
+ * @param[in] msg_type Message type.
+ * @param[in] flags Flags.
+ * @param[in] payload_buf ZCP buffer.
+ * @param[in] payload_len Payload length.
+ * @return 0 success, <0 error.
+ * @note Thread-safe: Yes (Socket write), but caller must own payload_buf exclusive.
  */
 int net_send_message_zcp(int fd, uint8_t msg_type, uint8_t flags, void *payload_buf,
                          uint32_t payload_len);
@@ -114,6 +145,13 @@ int net_send_message_zcp(int fd, uint8_t msg_type, uint8_t flags, void *payload_
  * On success, returns 0 and sets header_out (host order), *payload_out to the
  * buffer pointer, and *payload_len_out to the number of bytes. Caller owns the
  * buffer and must release it via net_zcp_release_rx().
+ * 
+ * @param[in] fd Socket fd.
+ * @param[out] header_out Header buffer.
+ * @param[out] payload_out Payload buffer pointer address.
+ * @param[out] payload_len_out Length output address.
+ * @return 0 success, <0 error.
+ * @note Thread-safe: No (Acquires from SPSC RX pool).
  */
 int net_recv_message_zcp(int fd, po_header_t *header_out, void **payload_out,
                          uint32_t *payload_len_out) __nonnull((2, 3, 4));
@@ -132,10 +170,11 @@ int net_recv_message_zcp(int fd, po_header_t *header_out, void **payload_out,
  * the full message or return -1 (with errno=EAGAIN) without consuming partial data,
  * preventing stream corruption.
  *
- * @param fd The socket file descriptor to read from.
- * @param header_out Pointer to a po_header_t to fill with the received header.
- * @param payload_out Pointer to a zcp_buffer_t* that will be set to the payload buffer.
+ * @param[in] fd The socket file descriptor to read from.
+ * @param[out] header_out Pointer to a po_header_t to fill with the received header.
+ * @param[out] payload_out Pointer to a zcp_buffer_t* that will be set to the payload buffer.
  * @return 0 on success, or a negative error code on failure.
+ * @note Thread-safe: No (Acquires from SPSC RX pool).
  */
 int net_recv_message(int fd, po_header_t *header_out, zcp_buffer_t **payload_out) __nonnull((2, 3));
 

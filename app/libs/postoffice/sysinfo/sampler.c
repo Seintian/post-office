@@ -28,6 +28,11 @@ struct proc_stat_sample {
     unsigned long long total;
 };
 
+/**
+ * @brief Reads /proc/stat for system-wide CPU metrics.
+ * @param[out] s Output structure for idle/iowait/total ticks.
+ * @return 0 on success, -1 on failure.
+ */
 static int read_proc_stat(struct proc_stat_sample *s)
 {
     FILE *f = fopen("/proc/stat", "r");
@@ -54,6 +59,11 @@ static int read_proc_stat(struct proc_stat_sample *s)
     return rc;
 }
 
+/**
+ * @brief Background sampler thread loop.
+ * @param[in] arg Unused.
+ * @return NULL.
+ */
 static void *sampler_loop(void *arg)
 {
     (void)arg;

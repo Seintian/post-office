@@ -25,6 +25,12 @@
 
 static volatile sig_atomic_t g_running = 1;
 
+/**
+ * @brief Signal handler for graceful shutdown.
+ * @param[in] sig Signal number.
+ * @param[in] info Signal info.
+ * @param[in] context User context.
+ */
 static void handle_signal(int sig, siginfo_t *info, void *context) {
     (void)sig;
     (void)info;
@@ -32,12 +38,22 @@ static void handle_signal(int sig, siginfo_t *info, void *context) {
     g_running = 0;
 }
 
+/**
+ * @brief Register terminating signal handlers.
+ */
 static void setup_signals(void) {
     if (sigutil_handle_terminating(handle_signal, 0) != 0) {
         fprintf(stderr, "Failed to register signal handlers\n");
     }
 }
 
+/**
+ * @brief Extract sim time from SHM.
+ * @param[in] shm Shared memory pointer.
+ * @param[out] d Day.
+ * @param[out] h Hour.
+ * @param[out] m Minute.
+ */
 static void get_sim_time(sim_shm_t *shm, int *d, int *h, int *m) {
     uint64_t packed = atomic_load(&shm->time_control.packed_time);
     *d = (packed >> 16) & 0xFFFF;
@@ -49,6 +65,10 @@ static sim_shm_t *g_shm_worker = NULL;
 static int g_semid_worker = -1;
 
 // Global initialization (called once by main thread)
+/**
+ * @brief Initialize worker global resources (SHM, Semaphores, Logger).
+ * @return 0 on success, -1 on failure.
+ */
 int worker_global_init(void) {
     // Collect system information for optimizations
     po_sysinfo_t sysinfo;
@@ -60,7 +80,7 @@ int worker_global_init(void) {
     // Start system info sampler for runtime adaptation
     po_sysinfo_sampler_init();
 
-    if (po_metrics_init() != 0) {
+    if (po_metrics_init(0, 0, 0) != 0) {
         fprintf(stderr, "worker: metrics init failed\n");
     }
 
@@ -107,6 +127,9 @@ int worker_global_init(void) {
     return 0;
 }
 
+/**
+ * @brief Cleanup worker global resources.
+ */
 void worker_global_cleanup(void) {
     if (g_shm_worker) {
         sim_ipc_shm_detach(g_shm_worker);
@@ -115,6 +138,54 @@ void worker_global_cleanup(void) {
     po_logger_shutdown();
 }
 
+// Helper for sync
+/**
+ * @brief Check and wait for daily synchronization barrier.
+ * @param[in] shm Shared memory pointer.
+ * @param[in,out] last_synced_day Tracker for last synced day.
+ */
+static void sync_check_day(sim_shm_t *shm, int *last_synced_day) {
+    // Optimistic check (check without lock first)
+    if (!atomic_load(&shm->sync.barrier_active))
+        return;
+
+    // Lock and re-check
+    pthread_mutex_lock(&shm->sync.mutex);
+
+    // Check if barrier is active AND we are in a new day
+    unsigned int barrier_day = atomic_load(&shm->sync.day_seq);
+    if (atomic_load(&shm->sync.barrier_active) && (int)barrier_day > *last_synced_day) {
+
+        // Mark myself as ready
+        atomic_fetch_add(&shm->sync.ready_count, 1);
+        *last_synced_day = (int)barrier_day;
+
+        // Wake director
+        pthread_cond_signal(&shm->sync.cond_workers_ready);
+
+        // Wait for release
+        // Check day_seq to ensure we don't get stuck if barrier flips 0->1 immediately for next day
+        struct timespec ts;
+        while (g_running && atomic_load(&shm->sync.barrier_active) && 
+                atomic_load(&shm->sync.day_seq) == barrier_day) {
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            ts.tv_sec += 1; // 1s timeout
+            pthread_cond_timedwait(&shm->sync.cond_day_start, &shm->sync.mutex, &ts);
+        }
+    }
+
+    pthread_mutex_unlock(&shm->sync.mutex);
+}
+
+/**
+ * @brief Main worker loop.
+ * 
+ * Serves tickets from the shared queue for the assigned service type.
+ *
+ * @param[in] worker_id Unique ID of this worker.
+ * @param[in] service_type Service type to handle.
+ * @return EXIT_SUCCESS or EXIT_FAILURE.
+ */
 int worker_run(int worker_id, int service_type) {
     if (!g_shm_worker || g_semid_worker == -1) {
         LOG_FATAL("Worker globals not initialized");
@@ -147,42 +218,9 @@ int worker_run(int worker_id, int service_type) {
 
     int last_synced_day = 0;
 
-    // Helper for sync
-    void sync_check_day(void) {
-        // Optimistic check (check without lock first)
-        if (!atomic_load(&shm->sync.barrier_active))
-            return;
-
-        // Lock and re-check
-        pthread_mutex_lock(&shm->sync.mutex);
-
-        // Check if barrier is active AND we are in a new day
-        unsigned int barrier_day = atomic_load(&shm->sync.day_seq);
-        if (atomic_load(&shm->sync.barrier_active) && (int)barrier_day > last_synced_day) {
-
-            // Mark myself as ready
-            atomic_fetch_add(&shm->sync.ready_count, 1);
-            last_synced_day = (int)barrier_day;
-
-            // Wake director
-            pthread_cond_signal(&shm->sync.cond_workers_ready);
-
-            // Wait for release
-            // Check day_seq to ensure we don't get stuck if barrier flips 0->1 immediately for next day
-            struct timespec ts;
-            while (g_running && atomic_load(&shm->sync.barrier_active) && 
-                   atomic_load(&shm->sync.day_seq) == barrier_day) {
-                clock_gettime(CLOCK_MONOTONIC, &ts);
-                ts.tv_sec += 1; // 1s timeout
-                pthread_cond_timedwait(&shm->sync.cond_day_start, &shm->sync.mutex, &ts);
-            }
-        }
-
-        pthread_mutex_unlock(&shm->sync.mutex);
-    }
     // Main Loop
     while (g_running) {
-        sync_check_day();
+        sync_check_day(shm, &last_synced_day);
 
         queue_status_t *q = &shm->queues[service_type];
 
@@ -288,16 +326,8 @@ int worker_run(int worker_id, int service_type) {
         LOG_DEBUG("Worker %d simulating service for %d ms", worker_id, service_time_ms);
 
         // Busy wait loop
-        struct timespec ts_start, ts_now;
-        clock_gettime(CLOCK_MONOTONIC, &ts_start);
-        long elapsed_ms = 0;
-        while (elapsed_ms < service_time_ms && g_running) {
-             clock_gettime(CLOCK_MONOTONIC, &ts_now);
-             elapsed_ms = (ts_now.tv_sec - ts_start.tv_sec) * 1000 + 
-                          (ts_now.tv_nsec - ts_start.tv_nsec) / 1000000;
-             // Burn CPU
-             for(volatile int k=0; k<1000; k++); 
-        }
+        // Burn CPU replaced by sleep to avoid starving User processes in simulation
+        usleep((useconds_t)service_time_ms * 1000);
 
         // Done
         atomic_store(&shm->workers[worker_id].state, WORKER_STATUS_FREE);

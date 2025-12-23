@@ -89,6 +89,15 @@ static const char *const level_metrics[] = {"logger.level.trace", "logger.level.
                                             "logger.level.error", "logger.level.fatal"};
 
 // --- Directory Helper ---
+
+/**
+ * @brief Recursively create directories.
+ *
+ * @param[in] path Directory path to create (must not be NULL).
+ * @return 0 on success, -1 on error.
+ *
+ * @note Thread-safety: Unknown (depends on mkdir implementation, likely yes).
+ */
 static int mkdir_p(const char *path) {
     if (!path || !*path) return -1;
     char *subpath = strdup(path);
@@ -124,10 +133,25 @@ static int mkdir_p(const char *path) {
 }
 
 // --- Helpers ---
+
+/**
+ * @brief Get the current thread ID using syscall.
+ *
+ * @return Thread ID.
+ *
+ * @note Thread-safe: Yes.
+ */
 static inline uint64_t get_tid(void) {
     return (uint64_t)syscall(SYS_gettid);
 }
 
+/**
+ * @brief Recycle a used log record back to the free ring.
+ *
+ * @param[in] r Pointer to the record to recycle.
+ *
+ * @note Thread-safe: Yes (lock-free).
+ */
 static inline void recycle_record(log_record_t *r) {
     (void)perf_ringbuf_enqueue(g_free, r);
 }
@@ -138,6 +162,15 @@ static __thread time_t t_cache_sec = 0;
 static __thread char t_cache_ts[32]; // "YYYY-MM-DD HH:MM:SS"
 
 // Writes value to p, returns new p. No null termination.
+/**
+ * @brief Fast integer to string conversion (base 10).
+ *
+ * @param[in] v Value to convert.
+ * @param[out] p Buffer to write to (must be large enough).
+ * @return Pointer to the character after the written number.
+ *
+ * @note Thread-safe: Yes (Local buffer).
+ */
 static char *fast_utoa10(uint64_t v, char *p) {
     if (v == 0) {
         *p++ = '0';
@@ -156,6 +189,17 @@ static char *fast_utoa10(uint64_t v, char *p) {
 }
 
 // Writes value padded to width with '0', returns new p.
+/**
+ * @brief Fast integer to string conversion padded to 6 digits.
+ *
+ * Optimized for microseconds.
+ *
+ * @param[in] v Value to convert.
+ * @param[out] p Buffer to write to.
+ * @return Pointer to the character after the written number.
+ *
+ * @note Thread-safe: Yes.
+ */
 static char *fast_pad6(long v, char *p) {
     // Optimized for width=6 (microseconds)
     // v must be < 1000000
@@ -174,6 +218,15 @@ static char *fast_pad6(long v, char *p) {
     return p;
 }
 
+/**
+ * @brief Format a log record into a text line.
+ *
+ * @param[in] r Pointer to the log record.
+ * @param[out] out Output buffer.
+ * @param[in] outsz Size of the output buffer.
+ *
+ * @note Thread-safe: Yes (uses thread-local cache for timestamp).
+ */
 static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
     // Format: "%s.%06ld %lu %-5s %s:%d %s() - %s\n"
     // "YYYY-MM-DD HH:MM:SS" is 19 chars
@@ -236,18 +289,8 @@ static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
 
     // 6. Line
     p = fast_utoa10((uint64_t)r->line, p);
-    
+
     *p++ = ' ';
-
-    // 7. Func (only if not empty)
-    if (r->func[0]) {
-        const char *fn = r->func;
-        while (*fn) *p++ = *fn++;
-
-        *p++ = ' ';
-        *p++ = '-';
-        *p++ = ' ';
-    }
 
     // 9. Message
     const char *m = r->msg;
@@ -257,6 +300,14 @@ static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
     *p = '\0';
 }
 
+/**
+ * @brief Convert internal log level to syslog priority.
+ *
+ * @param[in] lvl Internal log level.
+ * @return Syslog priority.
+ *
+ * @note Thread-safe: Yes (Pure function).
+ */
 static inline int syslog_priority_for_level(uint8_t lvl) {
     switch (lvl) {
     case LOG_FATAL:
@@ -278,6 +329,13 @@ static inline int syslog_priority_for_level(uint8_t lvl) {
     }
 }
 
+/**
+ * @brief Write a log record to all configured sinks.
+ *
+ * @param[in] r Pointer to the record to write.
+ *
+ * @note Thread-safe: No (Called from consumer thread only).
+ */
 static void write_record(const log_record_t *r) {
     char line[MAX_RECORD_SIZE];
     record_format_line(r, line, sizeof(line));
@@ -291,13 +349,26 @@ static void write_record(const log_record_t *r) {
         fputs(line, g_fp);
 
     if ((g_sinks_mask & LOGGER_SINK_SYSLOG) && g_syslog_open)
-        syslog(syslog_priority_for_level(r->level), "%s:%d %s() - %s", r->file, r->line, r->func,
-               r->msg);
+        syslog(
+            syslog_priority_for_level(r->level),
+            "%s:%d %s() - %s",
+            r->file, r->line, r->func, r->msg
+        );
 
     for (custom_sink_t *c = g_custom_sinks; c; c = c->next)
         c->fn(line, c->ud);
 }
 
+/**
+ * @brief Worker thread entry point.
+ *
+ * Drains the batcher/ring buffer and writes records to sinks.
+ *
+ * @param[in] arg Unused.
+ * @return NULL.
+ *
+ * @note Thread-safety: Consumer role.
+ */
 static void *worker_main(void *arg) {
     (void)arg;
 
@@ -393,7 +464,7 @@ int po_logger_init(const po_logger_config_t *cfg) {
 
     size_t cacheline = cfg->cacheline_bytes;
     perf_ringbuf_set_cacheline(cacheline);
-    
+
     // Create ring with metrics enabled
     g_ring = perf_ringbuf_create(cfg->ring_capacity, PERF_RINGBUF_METRICS);
     if (!g_ring)
@@ -583,6 +654,15 @@ int po_logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *u
     return 0;
 }
 
+/**
+ * @brief Enqueue a record to the logger ring buffer.
+ *
+ * Handles overflow policy (drop new vs overwrite old).
+ *
+ * @param[in] rec Pointer to the record to enqueue.
+ *
+ * @note Thread-safety: Yes (lock-free).
+ */
 static void enqueue_record(log_record_t *rec) {
     if (g_batcher) {
         if (perf_batcher_enqueue(g_batcher, rec) == 0) {
@@ -614,10 +694,29 @@ static void enqueue_record(log_record_t *rec) {
         PO_METRIC_COUNTER_INC("logger.enqueue");
 }
 
+/**
+ * @brief Check if an overflow notice should be emitted.
+ *
+ * Uses a power-of-two check to limit the rate of overflow logging.
+ *
+ * @param[in] v Current count of dropped/overwritten events.
+ * @return 1 if notice should be emitted, 0 otherwise.
+ *
+ * @note Thread-safe: Yes (Pure function).
+ */
 static inline int should_emit_overflow_notice(unsigned long v) {
     return (v != 0UL) && ((v & (v - 1UL)) == 0UL);
 }
 
+/**
+ * @brief Populate a record with overflow information.
+ *
+ * @param[out] rec Record to fill.
+ * @param[in] dropped Number of dropped new messages.
+ * @param[in] overwritten Number of overwritten old messages.
+ *
+ * @note Thread-safe: Yes.
+ */
 static inline void fill_overflow_notice(log_record_t *rec, unsigned long dropped,
                                         unsigned long overwritten) {
     clock_gettime(CLOCK_REALTIME, &rec->ts);
@@ -627,9 +726,11 @@ static inline void fill_overflow_notice(log_record_t *rec, unsigned long dropped
     rec->file[0] = '\0';
     strncpy(rec->func, "logger", sizeof(rec->func) - 1);
     rec->func[sizeof(rec->func) - 1] = '\0';
-    snprintf(rec->msg, sizeof(rec->msg),
-             "logger overflow: dropped_new=%lu overwritten_old=%lu (policy=%s)", dropped,
-             overwritten, g_policy == LOGGER_DROP_NEW ? "DROP_NEW" : "OVERWRITE_OLDEST");
+    snprintf(
+        rec->msg, sizeof(rec->msg),
+        "logger overflow: dropped_new=%lu overwritten_old=%lu (policy=%s)",
+        dropped, overwritten, g_policy == LOGGER_DROP_NEW ? "DROP_NEW" : "OVERWRITE_OLDEST"
+    );
 }
 
 void po_logger_logv(po_log_level_t level, const char *file, int line, const char *func,
@@ -665,8 +766,11 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
 
     if (file) {
         size_t n = strnlen(file, sizeof(r->file) - 1);
-        memcpy(r->file, file + (n >= sizeof(r->file) ? n - (sizeof(r->file) - 1) : 0),
-               n >= sizeof(r->file) ? sizeof(r->file) - 1 : n);
+        memcpy(
+            r->file,
+            file + (n >= sizeof(r->file) ? n - (sizeof(r->file) - 1) : 0),
+            n >= sizeof(r->file) ? sizeof(r->file) - 1 : n
+        );
         r->file[sizeof(r->file) - 1] = '\0';
     } else
         r->file[0] = '\0';

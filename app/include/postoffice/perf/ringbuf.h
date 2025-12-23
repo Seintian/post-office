@@ -17,79 +17,97 @@ typedef enum {
 } perf_ringbuf_flags_t;
 
 /**
- * Create a new ring buffer.
+ * @brief Create a new ring buffer.
  *
- * @param capacity Capacity of the ring buffer (must be a power of two).
- * @param flags Creation flags (e.g. to enable metrics).
+ * @param[in] capacity Capacity of the ring buffer (must be a power of two).
+ * @param[in] flags Creation flags (e.g. to enable metrics).
  * @return Pointer to the new ring buffer, or NULL on failure.
+ *
+ * @note Thread-safe: Yes (Creation).
  */
 po_perf_ringbuf_t *perf_ringbuf_create(size_t capacity, perf_ringbuf_flags_t flags);
 
 /**
- * Destroy a ring buffer.
+ * @brief Destroy a ring buffer.
  *
- * @param rb Double pointer to the ring buffer (sets *rb to NULL).
+ * @param[in,out] rb Double pointer to the ring buffer (sets *rb to NULL).
+ *
+ * @note Thread-safe: No (Must be exclusive).
  */
 void perf_ringbuf_destroy(po_perf_ringbuf_t **rb);
 
 /**
- * Enqueue an item into the ring buffer.
+ * @brief Enqueue an item into the ring buffer.
  *
- * @param rb The ring buffer.
- * @param item The item to enqueue (opaque pointer).
+ * @param[in] rb The ring buffer (must not be NULL).
+ * @param[in] item The item to enqueue (opaque pointer).
  * @return 0 on success, -1 on failure (errno set to EAGAIN if full).
+ *
+ * @note Thread-safe: No (Single Producer Only).
  */
 int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item);
 
 /**
- * Dequeue an item from the ring buffer.
+ * @brief Dequeue an item from the ring buffer.
  *
- * @param rb The ring buffer.
- * @param out Pointer to store the dequeued item (can be NULL).
+ * @param[in] rb The ring buffer (must not be NULL).
+ * @param[out] out Pointer to store the dequeued item (can be NULL).
  * @return 0 on success, -1 on failure (empty).
+ *
+ * @note Thread-safe: No (Single Consumer Only).
  */
 int perf_ringbuf_dequeue(po_perf_ringbuf_t *rb, void **out);
 
 /**
- * Get the number of items currently in the ring buffer.
+ * @brief Get the number of items currently in the ring buffer.
  *
- * @param rb The ring buffer.
+ * @param[in] rb The ring buffer (must not be NULL).
  * @return Number of items.
+ *
+ * @note Thread-safe: Yes (Approximate if concurrent access).
  */
 size_t perf_ringbuf_count(const po_perf_ringbuf_t *rb);
 
 /**
- * Set the cacheline size for alignment.
+ * @brief Set the cacheline size for alignment.
  *
- * @param cacheline_bytes Size in bytes (default 64).
+ * @param[in] cacheline_bytes Size in bytes (default 64).
+ *
+ * @note Thread-safe: No (Should be called before creation).
  */
 void perf_ringbuf_set_cacheline(size_t cacheline_bytes);
 
 /**
- * Peek at the item at the head of the ring buffer without removing it.
+ * @brief Peek at the item at the head of the ring buffer without removing it.
  *
- * @param rb The ring buffer.
- * @param out Pointer to store the item.
+ * @param[in] rb The ring buffer (must not be NULL).
+ * @param[out] out Pointer to store the item.
  * @return 0 on success, -1 if empty.
+ *
+ * @note Thread-safe: No (Single Consumer Only).
  */
 int perf_ringbuf_peek(const po_perf_ringbuf_t *rb, void **out);
 
 /**
- * Peek at an item at a specific offset from the head.
+ * @brief Peek at an item at a specific offset from the head.
  *
- * @param rb The ring buffer.
- * @param idx Offset from head (0 = head).
- * @param out Pointer to store the item.
+ * @param[in] rb The ring buffer (must not be NULL).
+ * @param[in] idx Offset from head (0 = head).
+ * @param[out] out Pointer to store the item.
  * @return 0 on success, -1 if idx >= count.
+ *
+ * @note Thread-safe: No (Single Consumer Only).
  */
 int perf_ringbuf_peek_at(const po_perf_ringbuf_t *rb, size_t idx, void **out);
 
 /**
- * Advance the head of the ring buffer (discard items).
+ * @brief Advance the head of the ring buffer (discard items).
  *
- * @param rb The ring buffer.
- * @param n Number of items to discard.
+ * @param[in] rb The ring buffer (must not be NULL).
+ * @param[in] n Number of items to discard.
  * @return 0 on success, -1 if n > count.
+ *
+ * @note Thread-safe: No (Single Consumer Only).
  */
 int perf_ringbuf_advance(po_perf_ringbuf_t *rb, size_t n);
 

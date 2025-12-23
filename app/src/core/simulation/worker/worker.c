@@ -17,6 +17,11 @@ typedef struct {
     int service_type;
 } worker_thread_arg_t;
 
+/**
+ * @brief Thread entry point for worker logic.
+ * @param[in] arg Pointer to worker_thread_arg_t (takes ownership).
+ * @return NULL.
+ */
 static void* worker_thread_entry(void* arg) {
     worker_thread_arg_t* args = (worker_thread_arg_t*)arg;
     worker_run(args->id, args->service_type);
@@ -24,6 +29,12 @@ static void* worker_thread_entry(void* arg) {
     return NULL;
 }
 
+/**
+ * @brief Worker process entry point.
+ * @param[in] argc Arg count.
+ * @param[in] argv Arg vector.
+ * @return 0 on success, >0 on failure.
+ */
 int main(int argc, char** argv) {
     int worker_id = -1;
     int service_type = -1;

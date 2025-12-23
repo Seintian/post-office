@@ -15,6 +15,8 @@
 #include <unistd.h>
 #include <utils/errors.h>
 #include <utils/signals.h>
+#include <sys/syscall.h> // For SYS_gettid
+#include <string.h> // For parsing logs
 
 #include "../ipc/simulation_ipc.h"
 #include "../ipc/simulation_protocol.h"
@@ -30,6 +32,46 @@ static int g_initial_users = 5;
 static int g_batch_size = 5;
 static sim_shm_t *g_shm = NULL;
 static threadpool_t *g_pool = NULL;
+
+// Logging Separation
+static FILE *g_log_mgr = NULL;
+static FILE *g_log_users = NULL;
+
+static pid_t g_main_tid = 0;
+// Synchronization state
+static int g_last_synced_day = 0;
+
+/**
+ * @brief Custom log router to separate User logs from Manager logs.
+ * @param[in] line Log line to route.
+ * @param[in] udata User data (unused).
+ */
+static void log_router(const char *line, void *udata) {
+    (void)udata;
+    if (!line) return;
+
+    // Parse TID from standard format: "YYYY-MM-DD HH:MM:SS.uuuuuu TID LEVEL ..."
+    // Offset 27 is where TID starts
+    if (strlen(line) > 28) {
+        const char *p = line + 27;
+        char *end = NULL;
+        unsigned long tid = strtoul(p, &end, 10);
+
+        if (tid == (unsigned long)g_main_tid) {
+            if (g_log_mgr) {
+                fputs(line, g_log_mgr);
+                fflush(g_log_mgr); // Optional: flush for immediate visibility
+            }
+        } else {
+            if (g_log_users) {
+                fputs(line, g_log_users);
+                // g_log_users might be high volume, maybe rely on stdio buffering or explicit flush?
+                // For now, let's flush to be safe/correct
+                // fflush(g_log_users); 
+            }
+        }
+    }
+}
 
 // Active user tracking
 typedef struct {
@@ -48,6 +90,12 @@ typedef struct {
     int slot_idx;
 } user_task_arg_t;
 
+/**
+ * @brief Handler for SIGUSR1 (Add Users).
+ * @param[in] sig Signal ID.
+ * @param[in] info Signal Info.
+ * @param[in] context Context.
+ */
 static void handle_sigusr1(int sig, siginfo_t *info, void *context) {
     (void)sig;
     (void)info;
@@ -55,6 +103,12 @@ static void handle_sigusr1(int sig, siginfo_t *info, void *context) {
     g_sigusr1_received = 1;
 }
 
+/**
+ * @brief Handler for SIGUSR2 (Remove Users).
+ * @param[in] sig Signal ID.
+ * @param[in] info Signal Info.
+ * @param[in] context Context.
+ */
 static void handle_sigusr2(int sig, siginfo_t *info, void *context) {
     (void)sig;
     (void)info;
@@ -62,6 +116,12 @@ static void handle_sigusr2(int sig, siginfo_t *info, void *context) {
     g_sigusr2_received = 1;
 }
 
+/**
+ * @brief Handler for termination signals.
+ * @param[in] sig Signal ID.
+ * @param[in] info Signal Info.
+ * @param[in] context Context.
+ */
 static void handle_terminate(int sig, siginfo_t *info, void *context) {
     (void)sig;
     (void)info;
@@ -102,6 +162,10 @@ static void get_sim_time(sim_shm_t *shm, int *d, int *h, int *m) {
     *m = packed & 0xFF;
 }
 
+/**
+ * @brief Thread pool task wrapper for user logic.
+ * @param[in] arg Pointer to user_task_arg_t.
+ */
 static void user_task_wrapper(void *arg) {
     user_task_arg_t *args = (user_task_arg_t *)arg;
     int slot = args->slot_idx;
@@ -120,6 +184,9 @@ static void user_task_wrapper(void *arg) {
     free(args);
 }
 
+/**
+ * @brief Spawn a new user task if slot available.
+ */
 static void spawn_user(void) {
     if (atomic_load(&g_active_count) >= 1000) {
         LOG_ERROR("Cannot spawn more users (max 1000)");
@@ -171,6 +238,9 @@ static void spawn_user(void) {
     }
 }
 
+/**
+ * @brief Signal a user to stop (remove).
+ */
 static void remove_user(void) {
     if (atomic_load(&g_active_count) <= 0)
         return;
@@ -190,6 +260,11 @@ static void remove_user(void) {
 
 static size_t g_pool_size = 1000;
 
+/**
+ * @brief Parse command line arguments.
+ * @param[in] argc Arg count.
+ * @param[in] argv Arg vector.
+ */
 static void parse_args(int argc, char **argv) {
     static struct option long_options[] = {
         {"initial", required_argument, 0, 'i'},   {"batch", required_argument, 0, 'b'},
@@ -230,6 +305,33 @@ static void parse_args(int argc, char **argv) {
         }
         }
     }
+
+}
+
+/**
+ * @brief Synchronize with Director at day boundary.
+ */
+static void sync_check_day(void) {
+    if (atomic_load(&g_shm->sync.barrier_active)) {
+        unsigned int barrier_day = atomic_load(&g_shm->sync.day_seq);
+        if ((int)barrier_day > g_last_synced_day) {
+            atomic_fetch_add(&g_shm->sync.ready_count, 1);
+            g_last_synced_day = (int)barrier_day;
+            
+            // Signal readiness
+            pthread_mutex_lock(&g_shm->sync.mutex);
+            pthread_cond_signal(&g_shm->sync.cond_workers_ready);
+
+            struct timespec ts;
+            while (g_running && atomic_load(&g_shm->sync.barrier_active) &&
+                   atomic_load(&g_shm->sync.day_seq) == barrier_day) {
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                ts.tv_sec += 1;
+                pthread_cond_timedwait(&g_shm->sync.cond_day_start, &g_shm->sync.mutex, &ts);
+            }
+            pthread_mutex_unlock(&g_shm->sync.mutex);
+        }
+    }
 }
 
 int main(int argc, char **argv) {
@@ -245,18 +347,28 @@ int main(int argc, char **argv) {
             level = l;
     }
 
-    po_logger_config_t log_cfg = {.level = level,
-                                  .ring_capacity = 4096,
-                                  .consumers = 1,
-                                  .policy = LOGGER_OVERWRITE_OLDEST,
-                                  .cacheline_bytes = PO_CACHE_LINE_MAX};
+    po_logger_config_t log_cfg = {
+        .level = level,
+        .ring_capacity = 4096,
+        .consumers = 1,
+        .policy = LOGGER_OVERWRITE_OLDEST,
+        .cacheline_bytes = PO_CACHE_LINE_MAX
+    };
     if (po_logger_init(&log_cfg) != 0)
         return 1;
 
-    if (po_logger_add_sink_file("logs/users_manager.log", false) != 0) {
-        LOG_WARN("Failed to add log file sink");
+    // 2. Open Log Files manually
+    g_log_mgr = fopen("logs/users_manager.log", "w");
+    g_log_users = fopen("logs/users.log", "w");
+    if (!g_log_mgr || !g_log_users) {
+        LOG_WARN("Failed to open separate log files");
     }
-    po_logger_add_sink_file("logs/users.log", true);
+
+    // Capture Main TID
+    g_main_tid = (pid_t)syscall(SYS_gettid);
+
+    // Register router sink
+    po_logger_add_sink_custom(log_router, NULL);
 
     // Attach SHM for time
     g_shm = sim_ipc_shm_attach();
@@ -296,30 +408,7 @@ int main(int argc, char **argv) {
 
     LOG_INFO("Initial users spawned. Entering event loop...");
 
-    int last_synced_day = 0;
 
-    void sync_check_day(void) {
-        if (atomic_load(&g_shm->sync.barrier_active)) {
-            unsigned int barrier_day = atomic_load(&g_shm->sync.day_seq);
-            if ((int)barrier_day > last_synced_day) {
-                atomic_fetch_add(&g_shm->sync.ready_count, 1);
-                last_synced_day = (int)barrier_day;
-                
-                // Signal readiness
-                pthread_mutex_lock(&g_shm->sync.mutex);
-                pthread_cond_signal(&g_shm->sync.cond_workers_ready);
-
-                struct timespec ts;
-                while (g_running && atomic_load(&g_shm->sync.barrier_active) &&
-                       atomic_load(&g_shm->sync.day_seq) == barrier_day) {
-                    clock_gettime(CLOCK_MONOTONIC, &ts);
-                    ts.tv_sec += 1;
-                    pthread_cond_timedwait(&g_shm->sync.cond_day_start, &g_shm->sync.mutex, &ts);
-                }
-                pthread_mutex_unlock(&g_shm->sync.mutex);
-            }
-        }
-    }
 
     while (g_running) {
         sync_check_day();
@@ -370,6 +459,8 @@ int main(int argc, char **argv) {
 
     sim_ipc_shm_detach(g_shm);
     po_logger_shutdown();
+    if (g_log_mgr) fclose(g_log_mgr);
+    if (g_log_users) fclose(g_log_users);
     po_perf_shutdown(NULL);
     return 0;
 }

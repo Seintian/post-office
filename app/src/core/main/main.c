@@ -21,6 +21,14 @@
  * @param argv Argument values
  * @return 0 on success, non-zero on failure
  */
+/**
+ * @brief Parse command-line arguments and validate them.
+ * 
+ * @param[out] args Output parameter to store parsed arguments.
+ * @param[in] argc Argument count.
+ * @param[in] argv Argument values.
+ * @return 0 on success, non-zero on failure.
+ */
 static int parse_arguments(po_args_t *args, int argc, char *argv[]) {
     po_args_init(args);
     int rc = po_args_parse(args, argc, argv, STDERR_FILENO);
@@ -37,6 +45,13 @@ static int parse_arguments(po_args_t *args, int argc, char *argv[]) {
  * @param loglevel Log level to use
  * @param cacheline_size Cache line size for optimal alignment
  * @return 0 on success, non-zero on failure
+ */
+/**
+ * @brief Initialize the logger with appropriate configuration.
+ * 
+ * @param[in] loglevel Log level to use.
+ * @param[in] cacheline_size Cache line size for optimal alignment.
+ * @return 0 on success, non-zero on failure.
  */
 static int initialize_logger(int loglevel, size_t cacheline_size) {
     po_logger_config_t cfg = {
@@ -61,6 +76,12 @@ static int initialize_logger(int loglevel, size_t cacheline_size) {
  * @param args Parsed command-line arguments
  * @param is_tui True if running in TUI mode, false if headless
  */
+/**
+ * @brief Configure logger sinks based on execution mode.
+ * 
+ * @param[in] args Parsed command-line arguments.
+ * @param[in] is_tui True if running in TUI mode, false if headless.
+ */
 static void configure_logger_sinks(const po_args_t *args, bool is_tui) {
     po_logger_add_sink_file("logs/main.log", false); // overwrite
     if (!is_tui) {
@@ -78,8 +99,13 @@ static void configure_logger_sinks(const po_args_t *args, bool is_tui) {
  * 
  * @return 0 on success, non-zero on failure
  */
+/**
+ * @brief Initialize the metrics system.
+ * 
+ * @return 0 on success, non-zero on failure.
+ */
 static int initialize_metrics(void) {
-    if (po_metrics_init() != 0) {
+    if (po_metrics_init(0, 0, 0) != 0) {
         fprintf(stderr, "metrics: init failed\n");
         return 1;
     }
@@ -90,6 +116,11 @@ static int initialize_metrics(void) {
  * Collect and log exhaustive system information.
  * 
  * @param is_tui True if running in TUI mode (for context only)
+ */
+/**
+ * @brief Collect and log exhaustive system information.
+ * 
+ * @param[in] is_tui True if running in TUI mode (for context only).
  */
 static void log_system_info(bool is_tui) {
     (void)is_tui;
@@ -147,6 +178,11 @@ static void log_system_info(bool is_tui) {
  * 
  * @param args Parsed command-line arguments
  */
+/**
+ * @brief Log startup information and record startup metric.
+ * 
+ * @param[in] args Parsed command-line arguments.
+ */
 static void log_startup_info(const po_args_t *args) {
     LOG_INFO("post-office main started (level=%d)%s", 
              (int)po_logger_get_level(),
@@ -157,6 +193,11 @@ static void log_startup_info(const po_args_t *args) {
  * Clean up all resources and prepare for exit.
  * 
  * @param args Parsed command-line arguments to destroy
+ */
+/**
+ * @brief Clean up all resources and prepare for exit.
+ * 
+ * @param[in] args Parsed command-line arguments to destroy.
  */
 static void cleanup_resources(po_args_t *args) {
     /* Stop background samplers before shutting down other systems */
@@ -182,6 +223,12 @@ static void cleanup_resources(po_args_t *args) {
  * @param args Parsed command-line arguments
  * @return Exit code (always 0)
  */
+/**
+ * @brief Run TUI demo mode.
+ * 
+ * @param[in] args Parsed command-line arguments.
+ * @return Exit code (always 0).
+ */
 static int run_tui_demo_mode(po_args_t *args) {
     app_tui_run_demo();
     cleanup_resources(args);
@@ -193,6 +240,12 @@ static int run_tui_demo_mode(po_args_t *args) {
  * 
  * @param args Parsed command-line arguments
  * @return Exit code (always 0)
+ */
+/**
+ * @brief Run TUI simulation mode.
+ * 
+ * @param[in] args Parsed command-line arguments.
+ * @return Exit code (always 0).
  */
 static int run_tui_simulation_mode(po_args_t *args) {
     // Start simulation processes
@@ -213,6 +266,12 @@ static int run_tui_simulation_mode(po_args_t *args) {
  * 
  * @param args Parsed command-line arguments
  * @return Exit code (always 0)
+ */
+/**
+ * @brief Run headless simulation mode.
+ * 
+ * @param[in] args Parsed command-line arguments.
+ * @return Exit code (always 0).
  */
 static int run_headless_mode(po_args_t *args) {
     LOG_INFO("Entering headless simulation mode...");

@@ -108,6 +108,7 @@ typedef void (*signals_handler_t)(int sig, siginfo_t* info, void* context);
  * 
  * @param[in] handler_flags The signal handler mask's flags.
  * @return 0 on success, -1 on failure.
+ * @note Thread-safe: Yes (modifies process-wide handlers, thread-local masks).
  */
 int sigutil_setup(signals_handler_t handler, unsigned char flag, int handler_flags) __wur;
 
@@ -118,6 +119,7 @@ int sigutil_setup(signals_handler_t handler, unsigned char flag, int handler_fla
  * @param[in] handler The custom signal handler function.
  * @param[in] flags The signal handler mask's flags
  * @return 0 on success, -1 on failure.
+ * @note Thread-safe: Yes (sets process-wide handler).
  */
 int sigutil_handle(int signum, signals_handler_t handler, int flags) __nonnull((2)) __wur;
 
@@ -153,6 +155,7 @@ int sigutil_handle_non_terminating(signals_handler_t handler, int flags) __nonnu
  *
  * @param[in] signum The signal number.
  * @return 0 on success, -1 on failure.
+ * @note Async-signal-safe: Yes. Thread-safe: Yes (affects calling thread's mask).
  */
 int sigutil_block(int signum) __wur;
 
@@ -251,6 +254,7 @@ int sigutil_wait_any(void) __wur;
  * 
  * @note This function is used to send a signal to all children of the current
  *       process.
+ * @note Thread-safe: No (manipulates process group ID, potentially race-prone).
  */
 int sigutil_signal_children(int sig);
 

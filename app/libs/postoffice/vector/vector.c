@@ -23,7 +23,17 @@ struct po_vector {
     size_t capacity; // Current capacity of the array
 };
 
-// Internal function to ensure capacity
+/**
+ * @brief Ensure vector has at least min_capacity.
+ *
+ * Resizes if necessary using growth factor.
+ *
+ * @param[in] vec Vector handle.
+ * @param[in] min_capacity Minimum required capacity.
+ * @return 0 on success, -1 on allocation failure.
+ *
+ * @note Thread-safe: No.
+ */
 static int vector_ensure_capacity(po_vector_t *vec, size_t min_capacity) {
     if (vec->capacity >= min_capacity)
         return 1; // Already have enough capacity

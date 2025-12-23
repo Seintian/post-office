@@ -77,7 +77,11 @@ typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) queue_status_s {
 
     // Ticket Queue for User->Worker handoff
     atomic_uint head;
+    char _pad_head[PO_CACHE_LINE_MAX - sizeof(atomic_uint)];
+
     atomic_uint tail;
+    char _pad_tail[PO_CACHE_LINE_MAX - sizeof(atomic_uint)];
+
     atomic_uint tickets[128]; // 0 = empty, val = ticket+1
 } queue_status_t;
 _Static_assert(sizeof(queue_status_t) % PO_CACHE_LINE_MAX == 0, "queue_status_t size mismatch");
@@ -184,6 +188,8 @@ typedef struct simulation_shm_s {
 typedef enum {
     MSG_TYPE_TICKET_REQ = 0x10,
     MSG_TYPE_TICKET_RESP = 0x11,
+    MSG_TYPE_CTRL_CMD = 0x20,
+    MSG_TYPE_CTRL_RESP = 0x21,
     MSG_TYPE_ERR = 0xFF
 } msg_type_t;
 

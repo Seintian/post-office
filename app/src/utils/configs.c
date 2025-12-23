@@ -34,6 +34,12 @@ struct po_config {
     char *last_section;      // Track last section to allow multiple keys
 };
 
+/**
+ * @brief Construct full key "section.key".
+ * @param[in] section Section name.
+ * @param[in] key Key name.
+ * @return Malloc'd string or NULL.
+ */
 static char *get_full_key(const char *section, const char *key) {
     size_t section_len = section ? strlen(section) : 0;
     size_t key_len = strlen(key);
@@ -52,6 +58,14 @@ static bool is_empty(const char *str) {
     return !str || str[0] == '\0';
 }
 
+/**
+ * @brief Callback for INI parser.
+ * @param[in] user Config context.
+ * @param[in] section Section name.
+ * @param[in] name Key name.
+ * @param[in] value Value string.
+ * @return Non-zero to continue, 0 to stop.
+ */
 static int ini_handler_cb(void *user, const char *section, const char *name, const char *value) {
     if (!user) {
         errno = INIH_ENOUSER;

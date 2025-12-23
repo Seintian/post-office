@@ -94,8 +94,9 @@ typedef struct po_storage_config {
  * durability behavior derived from @p cfg. Safe to call exactly once; repeated
  * calls without intervening ::po_storage_shutdown() yield -1 with errno=EALREADY.
  *
- * @param cfg Configuration pointer (must be non-NULL; members validated).
+ * @param[in] cfg Configuration pointer (must be non-NULL; members validated).
  * @return 0 on success; -1 on error (errno set – see file header for classes).
+ * @note Thread-safe: No (Must be called before concurrent use).
  */
 int po_storage_init(const po_storage_config_t *cfg);
 
@@ -104,6 +105,7 @@ int po_storage_init(const po_storage_config_t *cfg);
  *
  * Flushes outstanding batches (subject to fsync policy), closes LMDB handles
  * and frees internal memory. Idempotent: safe to invoke if not initialized.
+ * @note Thread-safe: No (Must be exclusive).
  */
 void po_storage_shutdown(void);
 
@@ -111,6 +113,7 @@ void po_storage_shutdown(void);
  * @brief Obtain the default log store instance created by ::po_storage_init().
  *
  * @return Pointer to log store handle or NULL if not initialized / init failed.
+ * @note Thread-safe: Yes (Returned pointer is constant after init).
  */
 po_logstore_t *po_storage_logstore(void);
 

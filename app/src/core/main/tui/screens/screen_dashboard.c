@@ -7,12 +7,12 @@
 tui_widget_t* screen_dashboard_create(void) {
     tui_rect_t bounds = {0};
     tui_tab_container_t* tabs = tui_tab_container_create(bounds);
-    
+
     // Overview Tab
     tui_panel_t* p1 = tui_panel_create(bounds, NULL);
     tui_container_set_layout((tui_container_t*)p1, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 1));
     tui_layout_params_set_padding(&p1->base.base.layout_params, 1, 1, 1, 1);
-    
+
     // Status Panel
     tui_widget_t* sp = status_panel_create("Health Status");
     status_panel_add_stat(sp, "Director", "Running");
@@ -35,10 +35,10 @@ tui_widget_t* screen_dashboard_create(void) {
     tui_panel_t* p2 = tui_panel_create(bounds, "Processes");
     tui_container_set_layout((tui_container_t*)p2, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 1));
     tui_layout_params_set_padding(&p2->base.base.layout_params, 1, 1, 1, 1);
-    
+
     const char* headers[] = {"PID", "Name", "Status", "CPU"};
     tui_widget_t* table = entity_table_create(headers, 4);
-    
+
     const char* r1[] = {"1234", "worker-01", "busy", "45%"};
     const char* r2[] = {"1235", "worker-02", "idle", "0%"};
     const char* r3[] = {"1236", "issuer-01", "wait", "2%"};

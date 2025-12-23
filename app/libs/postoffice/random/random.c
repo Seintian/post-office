@@ -19,10 +19,28 @@
 
 static _Thread_local uint64_t s_state[4] = {0};
 
+/**
+ * @brief Rotate Left.
+ *
+ * @param[in] x Value to rotate.
+ * @param[in] k Bits to rotate.
+ * @return Rotated value.
+ *
+ * @note Thread-safe: Yes (Pure).
+ */
 static inline uint64_t rotl(const uint64_t x, int k) {
     return (x << k) | (x >> (64 - k));
 }
 
+/**
+ * @brief xoshiro256** PRNG step.
+ *
+ * Updates thread-local state.
+ *
+ * @return Next random value.
+ *
+ * @note Thread-safe: Yes (TLS).
+ */
 static uint64_t xoshiro256ss(void) {
     const uint64_t result = rotl(s_state[1] * 5, 7) * 9;
     const uint64_t t = s_state[1] << 17;
@@ -38,11 +56,26 @@ static uint64_t xoshiro256ss(void) {
     return result;
 }
 
+/**
+ * @brief Check if current thread is seeded.
+ *
+ * @return 1 if seeded, 0 otherwise.
+ *
+ * @note Thread-safe: Yes (TLS).
+ */
 static int seeded(void) {
     const uint64_t any = s_state[0] | s_state[1] | s_state[2] | s_state[3];
     return any != 0 ? 1 : 0;
 }
 
+/**
+ * @brief Mix bytes into the state to seed it.
+ *
+ * @param[in] buf Input buffer.
+ * @param[in] n Size of buffer.
+ *
+ * @note Thread-safe: Yes (TLS).
+ */
 static void seed_from_bytes(const uint8_t *buf, size_t n) {
     // If insufficient bytes, stretch with simple mixing
     uint64_t acc = UINT64_C(0x9E3779B97F4A7C15);

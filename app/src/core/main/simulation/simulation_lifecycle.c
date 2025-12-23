@@ -101,6 +101,10 @@ void simulation_stop(void) {
     }
 }
 
+/**
+ * @brief Signal handler for headless mode.
+ * @param[in] sig Signal number.
+ */
 static void handle_signal(int sig) {
     (void)sig;
     g_running = 0;

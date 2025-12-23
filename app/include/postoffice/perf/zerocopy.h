@@ -16,45 +16,63 @@ typedef enum {
 } perf_zcpool_flags_t;
 
 /**
- * Create a zerocopy pool.
+ * @brief Create a zerocopy pool.
  *
- * @param buf_count Number of buffers.
- * @param buf_size Size of each buffer.
- * @param flags Creation flags.
+ * @param[in] buf_count Number of buffers.
+ * @param[in] buf_size Size of each buffer.
+ * @param[in] flags Creation flags.
  * @return Pointer to pool or NULL.
+ *
+ * @note Thread-safe: Yes (Creation).
  */
 perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size, perf_zcpool_flags_t flags);
 
 /**
- * Destroy a zerocopy pool.
+ * @brief Destroy a zerocopy pool.
  *
- * @param p Double pointer to the pool.
+ * @param[in,out] p Double pointer to the pool. Sets *p to NULL.
+ *
+ * @note Thread-safe: No (Must be exclusive).
  */
 void perf_zcpool_destroy(perf_zcpool_t **p);
 
 /**
- * Acquire a buffer from the pool.
+ * @brief Acquire a buffer from the pool.
  *
- * @param p The pool.
+ * @param[in] p The pool (must not be NULL).
  * @return Pointer to the buffer, or NULL if empty/error.
+ *
+ * @note Thread-safe: No (Single Consumer Only).
  */
 void *perf_zcpool_acquire(perf_zcpool_t *p);
 
 /**
- * Release a buffer back to the pool.
+ * @brief Release a buffer back to the pool.
  *
- * @param p The pool.
- * @param buffer The buffer to release.
+ * @param[in] p The pool (must not be NULL).
+ * @param[in] buffer The buffer to release.
+ *
+ * @note Thread-safe: No (Single Producer Only).
  */
 void perf_zcpool_release(perf_zcpool_t *p, void *buffer);
 
 /**
- * Get the size of buffers in the pool.
+ * @brief Get the size of buffers in the pool.
+ *
+ * @param[in] p The pool (must not be NULL).
+ * @return Size of buffers.
+ *
+ * @note Thread-safe: Yes.
  */
 size_t perf_zcpool_bufsize(const perf_zcpool_t *p);
 
 /**
- * Get the number of free buffers in the pool.
+ * @brief Get the number of free buffers in the pool.
+ *
+ * @param[in] p The pool (must not be NULL).
+ * @return Number of free buffers.
+ *
+ * @note Thread-safe: Yes (Approximate).
  */
 size_t perf_zcpool_freecount(const perf_zcpool_t *p);
 

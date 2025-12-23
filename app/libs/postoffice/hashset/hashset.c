@@ -60,6 +60,7 @@ struct po_hashset {
  * @return Pointer to the created hashset node, or NULL if memory allocation fails.
  *
  * @note The caller is responsible for freeing the memory allocated for the node.
+ * @note Thread-safe: Yes (Pure allocation).
  */
 static hashset_node_t *hashset_node_create(void *key) {
     hashset_node_t *node = malloc(sizeof(hashset_node_t));
@@ -78,6 +79,8 @@ static hashset_node_t *hashset_node_create(void *key) {
  * @param[in] set Pointer to the hash set.
  * @param[in] new_capacity New capacity for the hash set.
  * @return 0 on success, -1 on failure.
+ *
+ * @note Thread-safe: No (Modifies set structure).
  */
 static int hashset_resize(po_hashset_t *set, size_t new_capacity) {
     new_capacity = next_prime(new_capacity);

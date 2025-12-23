@@ -120,14 +120,15 @@ typedef struct {
  *  - Example: short-interval CPU sampling will set `cpu_util_pct` and
  *    `cpu_iowait_pct` to -1.0 if sampling failed, while other fields may still
  *    be populated. If reading `/proc/meminfo` fails the collector will return
- *    -1 and `errno` will be set.
+ *    -1 and `errno` is set.
  *
  * NULL pointer handling:
  *  - `info` must be non-NULL; passing NULL yields -1 and `errno` is set to
  *    `EINVAL`.
  *
- * @param info Output pointer (must be non-NULL).
+ * @param[out] info Output pointer (must be non-NULL).
  * @return 0 on success; -1 on hard failure (errno reflects the cause when set).
+ * @note Thread-safe: Yes (If info is unique per thread).
  */
 int po_sysinfo_collect(po_sysinfo_t *info);
 
@@ -165,6 +166,7 @@ int po_sysinfo_collect(po_sysinfo_t *info);
  *    an error and should not rely on `errno` being set by this call.
  *
  * @return 0 on success, non-zero on failure.
+ * @note Thread-safe: No (Concurrent init races).
  */
 int po_sysinfo_sampler_init(void);
 
@@ -176,6 +178,7 @@ int po_sysinfo_sampler_init(void);
  *    call after the sampler has stopped is a no-op.
  *  - As with init, callers must coordinate start/stop invocations to avoid
  *    races when multiple threads may attempt to start or stop the sampler.
+ * @note Thread-safe: No (Concurrent stop races).
  */
 void po_sysinfo_sampler_stop(void);
 
@@ -208,6 +211,11 @@ void po_sysinfo_sampler_stop(void);
  *  - 0 on success (values copied; copied values may be -1.0 to indicate
  *    "unavailable").
  *  - -1 if the sampler is not running or if a hard error occurs.
+ * 
+ * @param[out] cpu_util_pct Output pointer for CPU utilization (nullable).
+ * @param[out] cpu_iowait_pct Output pointer for I/O wait (nullable).
+ * @return 0 on success, -1 if sampler not running/error.
+ * @note Thread-safe: Yes.
  */
 int po_sysinfo_sampler_get(double *cpu_util_pct, double *cpu_iowait_pct);
 

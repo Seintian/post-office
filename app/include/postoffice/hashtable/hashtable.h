@@ -82,9 +82,10 @@ typedef struct po_hashtable_iter po_hashtable_iter_t;
 
 /**
  * @brief Create a new hash table with default prime capacity (e.g. 17).
- * @param compare Equality predicate (0 => equal).
- * @param hash_func Hash function mapping key -> unsigned long.
+ * @param[in] compare Equality predicate (0 => equal).
+ * @param[in] hash_func Hash function mapping key -> unsigned long.
  * @return New table handle or NULL on allocation failure (errno set).
+ * @note Thread-safe: Yes.
  */
 po_hashtable_t *po_hashtable_create(int (*compare)(const void *, const void *),
                                     unsigned long (*hash_func)(const void *))
@@ -92,11 +93,11 @@ po_hashtable_t *po_hashtable_create(int (*compare)(const void *, const void *),
 
 /**
  * @brief Create a table with explicit base capacity.
- * @param compare Equality predicate.
- * @param hash_func Hash function.
- * @param base_capacity Suggested starting capacity (prime recommended). Implementation may round
- *        to next prime.
+ * @param[in] compare Equality predicate.
+ * @param[in] hash_func Hash function.
+ * @param[in] base_capacity Suggested starting capacity (prime recommended).
  * @return New table or NULL on allocation failure.
+ * @note Thread-safe: Yes.
  */
 po_hashtable_t *po_hashtable_create_sized(int (*compare)(const void *, const void *),
                                           unsigned long (*hash_func)(const void *),
@@ -109,47 +110,68 @@ po_hashtable_t *po_hashtable_create_sized(int (*compare)(const void *, const voi
  * @brief Insert or update (key,value).
  *
  * Triggers resize when post-insert load factor would exceed high watermark.
- * @param table Table handle.
- * @param key Key pointer.
- * @param value Value pointer.
+ *
+ * @param[in] table Table handle.
+ * @param[in] key Key pointer.
+ * @param[in] value Value pointer.
  * @return 1 inserted new pair; 0 updated existing; -1 on allocation / internal error.
+ * @note Thread-safe: No.
  */
 int po_hashtable_put(po_hashtable_t *table, void *key, void *value) __nonnull((1, 2));
 
 /**
  * @brief Lookup value for key.
- * @param table Table handle.
- * @param key Key pointer.
+ * @param[in] table Table handle.
+ * @param[in] key Key pointer.
  * @return Value pointer or NULL if absent.
+ * @note Thread-safe: Yes (Read-only on table).
  */
 void *po_hashtable_get(const po_hashtable_t *table, const void *key) __nonnull((1, 2));
 
 /**
  * @brief Membership test.
+ * @param[in] table Table handle.
+ * @param[in] key Key pointer.
  * @return 1 present; 0 absent.
+ * @note Thread-safe: Yes (Read-only on table).
  */
 int po_hashtable_contains_key(const po_hashtable_t *table, const void *key) __nonnull((1, 2));
 
 /**
  * @brief Remove key (if present); may trigger shrink at low watermark.
+ * @param[in] table Table handle.
+ * @param[in] key Key pointer.
  * @return 1 removed; 0 not found.
+ * @note Thread-safe: No.
  */
 int po_hashtable_remove(po_hashtable_t *table, const void *key) __nonnull((1, 2));
 
-/** @brief Number of stored key-value pairs. */
+/** 
+ * @brief Number of stored key-value pairs. 
+ * @param[in] table Table handle.
+ * @note Thread-safe: Yes (Read-only).
+ */
 size_t po_hashtable_size(const po_hashtable_t *table) __nonnull((1));
 
-/** @brief Current bucket capacity. */
+/** 
+ * @brief Current bucket capacity. 
+ * @param[in] table Table handle.
+ * @note Thread-safe: Yes (Read-only).
+ */
 size_t po_hashtable_capacity(const po_hashtable_t *table) __nonnull((1));
 
 /**
  * @brief Snapshot all keys into a newly allocated array (caller frees array).
  * Array length equals ::po_hashtable_size(); not NULL-terminated.
+ * @param[in] table Table handle.
+ * @note Thread-safe: Yes (Read-only on table).
  */
 void **po_hashtable_keyset(const po_hashtable_t *table) __nonnull((1)) __attribute_malloc__;
 
 /**
  * @brief Destroy table (keys/values not freed) and NULL handle.
+ * @param[in,out] table Address of table pointer.
+ * @note Thread-safe: No (Must be exclusive).
  */
 void po_hashtable_destroy(po_hashtable_t **table) __nonnull((1));
 
@@ -159,42 +181,65 @@ void po_hashtable_destroy(po_hashtable_t **table) __nonnull((1));
  * @brief Allocate an iterator positioned at the first occupied slot.
  *
  * Not safe against concurrent structural modification (put/remove) of @p ht.
+ * @param[in] ht Table handle.
+ * @note Thread-safe: Yes (Read-only on table).
  */
 po_hashtable_iter_t *po_hashtable_iterator(const po_hashtable_t *ht);
 
 /**
  * @brief Advance iterator to next occupied slot.
+ * @param[in] it Iterator.
  * @return true if a new element is available; false if end reached.
+ * @note Thread-safe: No.
  */
 bool po_hashtable_iter_next(po_hashtable_iter_t *it);
 
-/** @brief Current key (undefined if last next() returned false). */
+/** 
+ * @brief Current key (undefined if last next() returned false).
+ * @param[in] it Iterator. 
+ * @note Thread-safe: Yes.
+ */
 void *po_hashtable_iter_key(const po_hashtable_iter_t *it);
 
-/** @brief Current value (undefined if last next() returned false). */
+/** 
+ * @brief Current value (undefined if last next() returned false).
+ * @param[in] it Iterator.
+ * @note Thread-safe: Yes.
+ */
 void *po_hashtable_iter_value(const po_hashtable_iter_t *it);
 
 /**
  * @brief Current load factor (size / capacity).
+ * @param[in] table Table handle.
+ * @note Thread-safe: Yes (Read-only).
  */
 float po_hashtable_load_factor(const po_hashtable_t *table) __nonnull((1));
 
 /**
  * @brief Replace existing key's value without inserting if absent.
+ * @param[in] table Table handle.
+ * @param[in] key Key to look up.
+ * @param[in] new_value Value to set if key exists.
  * @return 1 replaced; 0 key not found.
+ * @note Thread-safe: No.
  */
 int po_hashtable_replace(const po_hashtable_t *table, const void *key, void *new_value)
     __nonnull((1, 2));
 
 /**
  * @brief Remove all key-value pairs (capacity may remain; keys/values untouched).
+ * @param[in] table Table handle.
  * @return 1 cleared; 0 already empty.
+ * @note Thread-safe: No.
  */
 int po_hashtable_clear(po_hashtable_t *table) __nonnull((1));
 
 /**
  * @brief Apply @p func to each (key,value) in unspecified order.
  * Function must not mutate the table structurally (put/remove) or free keys/values.
+ * @param[in] table Table handle.
+ * @param[in] func Callback function.
+ * @note Thread-safe: Yes (Read-only on table, unless func mutates).
  */
 void po_hashtable_map(const po_hashtable_t *table, void (*func)(void *key, void *value))
     __nonnull((1, 2));
@@ -202,24 +247,39 @@ void po_hashtable_map(const po_hashtable_t *table, void (*func)(void *key, void 
 /**
  * @brief Snapshot all values into a newly allocated array (caller frees).
  * Array length equals ::po_hashtable_size(); not NULL-terminated.
+ * @param[in] table Table handle.
+ * @note Thread-safe: Yes (Read-only on table).
  */
 void **po_hashtable_values(const po_hashtable_t *table) __nonnull((1)) __attribute_malloc__;
 
 /**
  * @brief Compare two tables for key set + value equality (by provided value compare).
+ *
+ * Warning: Checks for strict structural equality (buckets/chains). May return false (0)
+ * even if tables contain same elements but with different history.
+ *
+ * @param[in] table1 First table.
+ * @param[in] table2 Second table.
+ * @param[in] compare Value comparator.
  * @return 1 equal; 0 not equal; -1 on internal error.
+ * @note Thread-safe: Yes (Read-only).
  */
 int po_hashtable_equals(const po_hashtable_t *table1, const po_hashtable_t *table2,
                         int (*compare)(const void *, const void *)) __nonnull((1, 2, 3));
 
 /**
  * @brief Shallow copy (keys/values pointer-copied) of @p table.
+ * @param[in] table Source table.
  * @return New table or NULL on failure.
+ * @note Thread-safe: Yes (Read-only).
  */
 po_hashtable_t *po_hashtable_copy(const po_hashtable_t *table) __nonnull((1)) __attribute_malloc__;
 
 /**
  * @brief Merge source into dest (replacing values for existing keys).
+ * @param[in,out] dest Destination table.
+ * @param[in] source Source table.
+ * @note Thread-safe: No (Mutates dest).
  */
 void po_hashtable_merge(po_hashtable_t *dest, const po_hashtable_t *source) __nonnull((1, 2));
 

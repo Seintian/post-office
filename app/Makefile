@@ -338,12 +338,12 @@ simulation: _simulation-only
 # Run the users manager to add `N_NEW_USERS` users (sends SIGUSR1)
 add-users:
 	@echo "> Makefile: Sending add-users signal..."
-	@pkill -USR1 -f "bin/post_office_users_manager" || echo "> Makefile: ERROR: Users Manager not running"
+	@pkill -USR1 -f "$(USERS_MANAGER_EXEC)" || echo "> Makefile: ERROR: Users Manager not running"
 
 # Remove `N_NEW_USERS` users (sends SIGUSR2)
 rem-users:
 	@echo "> Makefile: Sending remove-users signal..."
-	@pkill -USR2 -f "bin/post_office_users_manager" || echo "> Makefile: ERROR: Users Manager not running"
+	@pkill -USR2 -f "$(USERS_MANAGER_EXEC)" || echo "> Makefile: ERROR: Users Manager not running"
 
 # Run the simulation with TIMEOUT configuration
 timeout:
@@ -524,12 +524,12 @@ $(BUILD_DIR)/director/schedule/%.o: $(DIRECTOR_SCHED_DIR)/%.c
 # Rule for ticket_issuer application objects
 $(BUILD_DIR)/ticket_issuer/%.o: $(TICKET_ISSUER_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
 # Rule for users_manager application objects
 $(BUILD_DIR)/users_manager/%.o: $(USERS_MANAGER_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
 # Rule for utils objects
 $(BUILD_DIR)/utils/%.o: $(UTILS_DIR)/%.c

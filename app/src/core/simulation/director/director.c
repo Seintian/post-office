@@ -6,6 +6,7 @@
 #include <postoffice/log/logger.h>
 #include <postoffice/metrics/metrics.h>
 #include <postoffice/net/socket.h>
+#include <postoffice/net/net.h>
 #include <postoffice/perf/perf.h>
 #include <postoffice/random/random.h>
 #include <postoffice/sysinfo/sysinfo.h>
@@ -48,7 +49,14 @@ static const char *g_log_level_str = "INFO"; // Log level string
 // Define a cache line max for logger config
 // #define PO_CACHE_LINE_MAX 64 // Using included definition
 
+/**
+ * @brief Parse command line arguments.
+ * @param[in] argc Argument count.
+ * @param[in] argv Argument vector.
+ */
 static void parse_args(int argc, char **argv) {
+
+
     static struct option long_options[] = {{"headless", no_argument, 0, 'h'},
                                            {"config", required_argument, 0, 'c'},
                                            {"loglevel", required_argument, 0, 'l'},
@@ -91,6 +99,12 @@ static void parse_args(int argc, char **argv) {
     }
 }
 
+/**
+ * @brief Signal handler for graceful shutdown.
+ * @param[in] sig Signal number.
+ * @param[in] info Signal info.
+ * @param[in] context User context.
+ */
 static void handle_signal(int sig, siginfo_t *info, void *context) {
     (void)sig;
     (void)info;
@@ -98,18 +112,32 @@ static void handle_signal(int sig, siginfo_t *info, void *context) {
     g_running = 0;
 }
 
+/**
+ * @brief Thread entry point for the TUI control bridge.
+ * @param[in] _ Unused.
+ * @return NULL.
+ */
 static void *bridge_thread_fn(void *_) {
     (void)_;
     bridge_mainloop_run();
     return NULL;
 }
 
+/**
+ * @brief Add child PID to tracking vector.
+ * @param[in] pid Child process ID.
+ */
 static void track_child(pid_t pid) {
     if (g_child_pids) {
         po_vector_push(g_child_pids, (void *)(intptr_t)pid);
     }
 }
 
+/**
+ * @brief Fork and exec a child process.
+ * @param[in] bin Path to binary.
+ * @param[in] argv Argument vector (NULL terminated).
+ */
 static void spawn_process(const char *bin, char *const argv[]) {
     pid_t p = fork();
     if (p == 0) {
@@ -135,6 +163,10 @@ static void spawn_process(const char *bin, char *const argv[]) {
 static int g_ti_pool_size = 64;   // Default Ticket Issuer pool
 static int g_um_pool_size = 1000; // Default Users Manager pool
 
+/**
+ * @brief Load configuration from file into SHM parameters.
+ * @param[in] config_path Path to INI file.
+ */
 static void load_config_into_shm(const char *config_path) {
     if (!config_path) {
         LOG_WARN("No configuration file provided via arguments. Using defaults.");
@@ -251,9 +283,74 @@ static void load_config_into_shm(const char *config_path) {
 }
 
 // Helper to update SHM time
+/**
+ * @brief Update simulated time in SHM.
+ * @param[in] shm Shared memory pointer.
+ * @param[in] day Current day.
+ * @param[in] hour Current hour.
+ * @param[in] min Current minute.
+ */
 static void update_sim_time(sim_shm_t *shm, int day, int hour, int min) {
     uint64_t new_packed = ((uint64_t)day << 16) | ((uint64_t)hour << 8) | (uint64_t)min;
     atomic_store(&shm->time_control.packed_time, new_packed);
+}
+
+// Synchronization helper
+/**
+ * @brief Synchronize all processes at the start of a new day.
+ * 
+ * Sets a barrier in SHM and waits for all workers to signal readiness.
+ *
+ * @param[in] shm Shared memory pointer.
+ * @param[in] day Day number.
+ */
+static void sync_day_start(sim_shm_t * shm, int day) {
+    if (!g_running)
+        return;
+
+    // Use Mutex for atomicity and condition variable
+    pthread_mutex_lock(&shm->sync.mutex);
+
+    atomic_store(&shm->sync.ready_count, 0);
+    atomic_store(&shm->sync.day_seq, (unsigned int)day);
+    atomic_store(&shm->sync.barrier_active, 1);
+
+    // Wake up sleeping workers so they can join the barrier
+    for (int i = 0; i < SIM_MAX_SERVICE_TYPES; i++) {
+        pthread_mutex_lock(&shm->queues[i].mutex);
+        pthread_cond_broadcast(&shm->queues[i].cond_added);
+        pthread_mutex_unlock(&shm->queues[i].mutex);
+    }
+
+    uint32_t req = atomic_load(&shm->sync.required_count);
+    LOG_INFO("Waiting for day %d synchronization...", day);
+
+    struct timespec ts;
+
+    while (g_running) {
+        uint32_t ready = atomic_load(&shm->sync.ready_count);
+        if (ready >= req)
+            break;
+
+        // Timed wait (e.g., 100ms) to allow checking g_running periodically
+        // or handling async messages in the future
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        ts.tv_nsec += 100000000; // 100ms
+        if (ts.tv_nsec >= 1000000000) {
+            ts.tv_sec += 1;
+            ts.tv_nsec -= 1000000000;
+        }
+
+        pthread_cond_timedwait(&shm->sync.cond_workers_ready, &shm->sync.mutex, &ts);
+    }
+
+    atomic_store(&shm->sync.barrier_active, 0);
+    // Wake up everyone
+    pthread_cond_broadcast(&shm->sync.cond_day_start);
+
+    pthread_mutex_unlock(&shm->sync.mutex);
+
+    LOG_INFO("Day %d synchronized. Starting...", day);
 }
 
 int main(int argc, char **argv) {
@@ -282,28 +379,11 @@ int main(int argc, char **argv) {
         if (sysinfo.somaxconn > 0) {
             system_backlog = sysinfo.somaxconn;
         }
-
-        // Smart default for workers if not set
-        if (g_n_workers == 0) {
-            // Use logical processors, optionally scaled
-            if (sysinfo.logical_processors > 0) {
-                g_n_workers = (uint32_t)sysinfo.logical_processors;
-                // Cap minimal workers to ensure simulation liveness
-                if (g_n_workers < 2)
-                    g_n_workers = 2;
-                LOG_INFO("Auto-detected workers count based on logical CPUs: %u", g_n_workers);
-            }
-        }
+        // Auto-detection of workers moved to after config load
     }
 
     // Start background sampler for runtime adaptation (CPU load)
     po_sysinfo_sampler_init();
-
-    // Fallback if still 0
-    if (g_n_workers == 0) {
-        g_n_workers = DEFAULT_WORKERS;
-        LOG_INFO("Using default workers count: %u", g_n_workers);
-    }
 
     // Initialize PID vector
     g_child_pids = po_vector_create();
@@ -313,7 +393,7 @@ int main(int argc, char **argv) {
     }
 
     // 1. Initialize Metrics Subsystem (which initializes perf internally)
-    if (po_metrics_init() != 0) {
+    if (po_metrics_init(0, 0, 0) != 0) {
         fprintf(stderr, "director: metrics init failed: %s\n", po_strerror(errno));
     }
 
@@ -326,11 +406,13 @@ int main(int argc, char **argv) {
             initial_level = l;
     }
 
-    po_logger_config_t log_cfg = {.level = initial_level,
-                                  .ring_capacity = 4096,
-                                  .consumers = 1,
-                                  .policy = LOGGER_OVERWRITE_OLDEST,
-                                  .cacheline_bytes = (size_t)cacheline_size};
+    po_logger_config_t log_cfg = {
+        .level = initial_level,
+        .ring_capacity = 4096,
+        .consumers = 1,
+        .policy = LOGGER_OVERWRITE_OLDEST,
+        .cacheline_bytes = (size_t)cacheline_size
+    };
     if (po_logger_init(&log_cfg) != 0) {
         fprintf(stderr, "Failed to init logger\n");
         return 1;
@@ -344,6 +426,15 @@ int main(int argc, char **argv) {
         LOG_WARN("Failed to init perf: %s", strerror(errno));
     }
 
+    // Initialize zero-copy pools for protocol messaging
+    if (net_init_zerocopy(64, 64, 4096) != 0) {
+        LOG_FATAL("Failed to initialize zero-copy pools");
+        if (g_child_pids)
+            po_vector_destroy(g_child_pids);
+        po_logger_shutdown();
+        exit(EXIT_FAILURE);
+    }
+
     // Cleanup stale SHM/Semaphores from previous runs if any
     sim_ipc_shm_destroy();
 
@@ -354,6 +445,7 @@ int main(int argc, char **argv) {
         // Cleanup resources
         if (g_child_pids)
             po_vector_destroy(g_child_pids);
+        net_shutdown_zerocopy(); // Added this line
         po_logger_shutdown();
         exit(EXIT_FAILURE);
     }
@@ -374,6 +466,20 @@ int main(int argc, char **argv) {
     // Now load config into parameters
     // Now load config into parameters
     load_config_into_shm(g_config_path);
+
+    // Finalize worker count if still 0
+    if (g_n_workers == 0) {
+        if (sysinfo.logical_processors > 0) {
+            g_n_workers = (uint32_t)sysinfo.logical_processors;
+            if (g_n_workers < 2) g_n_workers = 2;
+            LOG_INFO("Auto-detected workers count based on logical CPUs: %u", g_n_workers);
+        } else {
+            g_n_workers = DEFAULT_WORKERS;
+            LOG_INFO("Using default workers count: %u", g_n_workers);
+        }
+    }
+    // Update SHM
+    g_shm->params.n_workers = g_n_workers;
 
     // 3.1 Initialize Semaphores
     int semid = sim_ipc_sem_create(SIM_MAX_SERVICE_TYPES);
@@ -510,55 +616,7 @@ int main(int argc, char **argv) {
 
     LOG_INFO("Simulation started... (Ctrl+C to stop)");
 
-    // Synchronization helper
-    void sync_day_start(sim_shm_t * shm, int day) {
-        if (!g_running)
-            return;
 
-        // Use Mutex for atomicity and condition variable
-        pthread_mutex_lock(&shm->sync.mutex);
-
-        atomic_store(&shm->sync.ready_count, 0);
-        atomic_store(&shm->sync.day_seq, (unsigned int)day);
-        atomic_store(&shm->sync.barrier_active, 1);
-
-        // Wake up sleeping workers so they can join the barrier
-        for (int i = 0; i < SIM_MAX_SERVICE_TYPES; i++) {
-            pthread_mutex_lock(&shm->queues[i].mutex);
-            pthread_cond_broadcast(&shm->queues[i].cond_added);
-            pthread_mutex_unlock(&shm->queues[i].mutex);
-        }
-
-        uint32_t req = atomic_load(&shm->sync.required_count);
-        LOG_INFO("Waiting for day %d synchronization...", day);
-
-        struct timespec ts;
-
-        while (g_running) {
-            uint32_t ready = atomic_load(&shm->sync.ready_count);
-            if (ready >= req)
-                break;
-
-            // Timed wait (e.g., 100ms) to allow checking g_running periodically
-            // or handling async messages in the future
-            clock_gettime(CLOCK_MONOTONIC, &ts);
-            ts.tv_nsec += 100000000; // 100ms
-            if (ts.tv_nsec >= 1000000000) {
-                ts.tv_sec += 1;
-                ts.tv_nsec -= 1000000000;
-            }
-
-            pthread_cond_timedwait(&shm->sync.cond_workers_ready, &shm->sync.mutex, &ts);
-        }
-
-        atomic_store(&shm->sync.barrier_active, 0);
-        // Wake up everyone
-        pthread_cond_broadcast(&shm->sync.cond_day_start);
-
-        pthread_mutex_unlock(&shm->sync.mutex);
-
-        LOG_INFO("Day %d synchronized. Starting...", day);
-    }
 
     // Sync Day 1
     sync_day_start(g_shm, current_day);
@@ -621,7 +679,7 @@ int main(int argc, char **argv) {
 
             if (total_waiting > g_shm->params.explode_threshold) {
                 LOG_FATAL("EXPLODE: Too many waiting users (%u > %u). Simulation collapsed.",
-                          total_waiting, g_shm->params.explode_threshold);
+                        total_waiting, g_shm->params.explode_threshold);
                 g_running = 0;
                 break;
             }

@@ -32,19 +32,33 @@
 
 // First, let's define the screen structure.
 
+/**
+ * @brief configuration screen context.
+ */
 typedef struct {
-    tui_widget_t* list;
-    tui_widget_t* edit_field;
-    tui_widget_t* status_label;
-    po_config_t* config;
-    char* config_path;
-    char current_section[64];
-    char current_key[64];
+    tui_widget_t* list;          /**< List widget displaying config items */
+    tui_widget_t* edit_field;    /**< Input field for editing values */
+    tui_widget_t* status_label;  /**< Status label for feedback */
+    po_config_t* config;         /**< Handle to the loaded configuration */
+    char* config_path;           /**< Path to the config file */
+    char current_section[64];    /**< Currently selected section name */
+    char current_key[64];        /**< Currently selected key name */
 } config_screen_ctx_t;
 
 static config_screen_ctx_t g_cfg_ctx;
 
 // Callback for iterating config
+/**
+ * @brief Callback for populating the config list.
+ * 
+ * Formats configuration entries as "[Section] Key = Value" or "Key = Value"
+ * and adds them to the list widget.
+ * 
+ * @param section Configuration section (can be empty).
+ * @param key Configuration key.
+ * @param value Configuration value.
+ * @param user_data Pointer to the tui_list_t widget.
+ */
 static void populate_list_cb(const char *section, const char *key, const char *value, void *user_data) {
     tui_list_t *list = (tui_list_t *)user_data;
     char buffer[256];
@@ -56,6 +70,15 @@ static void populate_list_cb(const char *section, const char *key, const char *v
     tui_list_add_item(list, buffer);
 }
 
+/**
+ * @brief Callback for handling list item selection.
+ * 
+ * Parses the selected line to extract section, key, and value, updating the context.
+ * 
+ * @param list The list widget.
+ * @param index The selected index.
+ * @param data User data (unused).
+ */
 static void on_item_selected(tui_list_t* list, int index, void* data) {
     (void)data;
     const char* text = tui_list_get_item(list, index);
@@ -88,6 +111,11 @@ static void on_item_selected(tui_list_t* list, int index, void* data) {
 }
 
 // Reload config from file
+/**
+ * @brief Reloads the configuration from file.
+ * 
+ * Clears the current list and re-populates it by reloading the config file.
+ */
 static void reload_config(void) {
     const char* path = g_simulation_config_path;
     if (!path) return;

@@ -18,6 +18,10 @@
 
 /* --- Private Helpers --- */
 
+/**
+ * @brief Generate IPC key using ftok.
+ * @return Key or -1 on error.
+ */
 static key_t _get_ipc_key(void) {
     // Generate a user-specific lock file path for ftok
     char keypath[512];

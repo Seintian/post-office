@@ -21,6 +21,8 @@
 #include <string.h>
 #include <errno.h>
 
+#include "../../ipc/simulation_protocol.h"
+
 /* Default control socket path. */
 static const char* ctrl_socket_path = "/tmp/post_office_ctrl.sock";
 
@@ -28,35 +30,55 @@ static volatile int g_bridge_running = 0;
 static poller_t *g_poller = NULL;
 
 static void handle_client_fd(int client_fd) {
-    // For now, we still use stdio streams for line parsing simplicity in this bridge.
-    // In a full implementation, we would use the poller for reading too.
-    // But to respect the "detached thread" model or simple inline handling:
-    
-    // Set to blocking for stdio usage (po_socket_accept returns non-blocking)
-    int flags = fcntl(client_fd, F_GETFL, 0);
-    fcntl(client_fd, F_SETFL, flags & ~O_NONBLOCK);
+    // Receive command with protocol header
+    po_header_t hdr;
+    zcp_buffer_t *payload = NULL;
+    int ret = net_recv_message(client_fd, &hdr, &payload);
 
-    FILE* f = fdopen(client_fd, "r+");
-    if (!f) {
+    if (ret != 0 || !payload) {
+        LOG_DEBUG("ctrl-bridge: failed to receive message (ret=%d)", ret);
+        if (payload)
+            net_zcp_release_rx(payload);
         po_socket_close(client_fd);
         return;
     }
 
-    char line[512];
-    while (fgets(line, sizeof(line), f)) {
-        size_t n = strlen(line);
-        if (n && line[n-1] == '\n') line[n-1] = '\0';
+    // Validate message type
+    if (hdr.msg_type != MSG_TYPE_CTRL_CMD) {
+        LOG_ERROR("ctrl-bridge: invalid message type: %u", hdr.msg_type);
+        net_zcp_release_rx(payload);
+        po_socket_close(client_fd);
+        return;
+    }
 
-        LOG_INFO("ctrl-bridge: received command: %s", line);
+    // Process command (payload is the command string)
+    char *cmd = (char *)payload;
+    size_t cmd_len = hdr.payload_len;
+    
+    // Null-terminate for safety (ensure we don't overflow)
+    if (cmd_len > 0 && cmd_len < 512) {
+        char command[512];
+        memcpy(command, cmd, cmd_len);
+        command[cmd_len] = '\0';
+        
+        LOG_INFO("ctrl-bridge: received command: %s", command);
         PO_METRIC_COUNTER_INC("director.bridge.commands");
 
         /* TODO: integrate with Director APIs */
 
-        fprintf(f, "OK\n");
-        fflush(f);
+        // Send response with protocol header
+        const char *response = "OK";
+        ret = net_send_message(client_fd, MSG_TYPE_CTRL_RESP, PO_FLAG_NONE,
+                              (const uint8_t *)response, (uint32_t)strlen(response));
+        if (ret != 0) {
+            LOG_ERROR("ctrl-bridge: failed to send response");
+        }
+    } else {
+        LOG_ERROR("ctrl-bridge: invalid command length: %u", hdr.payload_len);
     }
 
-    fclose(f); // closes client_fd
+    net_zcp_release_rx(payload);
+    po_socket_close(client_fd);
 }
 
 int bridge_mainloop_init(void) {

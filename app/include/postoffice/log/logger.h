@@ -86,8 +86,16 @@ typedef struct po_logger_config {
 /**
  * @brief Initialize the logger with the given configuration.
  *
- * @param cfg Configuration parameters (must not be NULL).
+ * This function initializes the shared logger state, including the ring buffer,
+ * worker threads, and internal structures. It must be called before any other
+ * logger function.
+ *
+ * @param[in] cfg Configuration parameters (must not be NULL). The logger copies
+ *                the necessary values, so the caller retains ownership of the struct.
  * @return 0 on success, -1 on error (errno set).
+ *
+ * @note Thread-safe: No (Must be called from the main thread before spawning others).
+ * @warning Calling this function multiple times without shutdown is undefined behavior.
  */
 int po_logger_init(const po_logger_config_t *cfg) __nonnull((1));
 
@@ -97,14 +105,21 @@ int po_logger_init(const po_logger_config_t *cfg) __nonnull((1));
  * Blocks until all worker threads terminate and any remaining queued messages
  * are flushed to configured sinks. Safe to call once after a successful
  * @ref po_logger_init.
+ *
+ * @note Thread-safe: No (Must be called from the main thread after joining others).
  */
 void po_logger_shutdown(void);
 
 /**
  * @brief Set the runtime logging level.
  *
- * @param level Minimum level to log (messages below this level are dropped).
+ * Messages with a severity lower than the specified level will be dropped
+ * immediately by the producer to minimize overhead.
+ *
+ * @param[in] level Minimum level to log (messages below this level are dropped).
  * @return 0 on success, -1 if the level is invalid.
+ *
+ * @note Thread-safe: Yes (Atomic update).
  */
 int po_logger_set_level(po_log_level_t level);
 
@@ -112,47 +127,72 @@ int po_logger_set_level(po_log_level_t level);
  * @brief Get the current runtime logging level.
  *
  * @return The current logging level.
+ *
+ * @note Thread-safe: Yes (Atomic read).
  */
 po_log_level_t po_logger_get_level(void);
 
 /**
  * @brief Parse log level from string.
- * @param str String representation (TRACE, DEBUG, INFO, WARN, ERROR, FATAL).
- * @return Log level or -1 if invalid.
+ *
+ * Converts a string representation (e.g., "INFO") to the corresponding enum value.
+ * Case-insensitive.
+ *
+ * @param[in] str String representation (TRACE, DEBUG, INFO, WARN, ERROR, FATAL).
+ *                (Nullable: if NULL, returns -1).
+ * @return Log level or -1 if invalid or NULL.
+ *
+ * @note Thread-safe: Yes (Pure function).
  */
 int po_logger_level_from_str(const char *str);
 
 /**
  * @brief Add console output as a log sink.
  *
- * @param use_stderr If true, use stderr; otherwise use stdout.
+ * Configures the logger to write messages to stdout or stderr.
+ *
+ * @param[in] use_stderr If true, use stderr; otherwise use stdout.
  * @return 0 on success, -1 on error.
+ *
+ * @note Thread-safe: No (Ideally call during initialization).
  */
 int po_logger_add_sink_console(bool use_stderr);
 
 /**
  * @brief Add file output as a log sink.
  *
- * @param path Path to the log file.
- * @param append If true, append to the file; otherwise overwrite.
+ * Opens the specified file for writing/appending. The logger takes ownership
+ * of the file handle and closes it on shutdown.
+ *
+ * @param[in] path Path to the log file (must not be NULL).
+ * @param[in] append If true, append to the file; otherwise overwrite.
  * @return 0 on success, -1 on error.
+ *
+ * @note Thread-safe: No (Ideally call during initialization).
  */
 int po_logger_add_sink_file(const char *path, bool append);
 
 /**
  * @brief Add syslog as a log sink.
  *
- * @param ident Identity string for syslog messages.
+ * @param[in] ident Identity string for syslog messages (Nullable).
+ *                  If not NULL, the logger duplicates the string (internal ownership).
  * @return 0 on success, -1 on error.
+ *
+ * @note Thread-safe: No (Ideally call during initialization).
  */
 int po_logger_add_sink_syslog(const char *ident);
 
 /**
  * @brief Add a custom log sink.
  *
- * @param fn Callback function to handle log messages.
- * @param udata User data to pass to the callback.
+ * Registers a callback function to be called for each formatted log message.
+ *
+ * @param[in] fn Callback function to handle log messages (must not be NULL).
+ * @param[in] udata User data to pass to the callback (Ownership passed to callback).
  * @return 0 on success, -1 on error.
+ *
+ * @note Thread-safe: No (Ideally call during initialization).
  */
 int po_logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *udata);
 
@@ -218,12 +258,14 @@ static inline bool logger_would_log(po_log_level_t level) {
  * This is the low-level logging function used by the LOG_* macros.
  * Prefer using the macros instead of calling this directly.
  *
- * @param level Log level.
- * @param file Source file name.
- * @param line Source line number.
- * @param func Function name.
- * @param fmt Format string (printf-style).
- * @param ... Arguments for the format string.
+ * @param[in] level Log level.
+ * @param[in] file Source file name (Usually __FILE__).
+ * @param[in] line Source line number (Usually __LINE__).
+ * @param[in] func Function name (Usually __func__).
+ * @param[in] fmt Format string (printf-style, must not be NULL).
+ * @param[in] ... Arguments for the format string.
+ *
+ * @note Thread-safe: Yes (High-throughput, async, lock-free producer).
  */
 void po_logger_log(po_log_level_t level, const char *file, int line, const char *func,
                    const char *fmt, ...) __attribute__((format(printf, 5, 6)));
@@ -233,12 +275,14 @@ void po_logger_log(po_log_level_t level, const char *file, int line, const char 
  *
  * This is the varargs version of po_logger_log, used by the implementation.
  *
- * @param level Log level.
- * @param file Source file name.
- * @param line Source line number.
- * @param func Function name.
- * @param fmt Format string (printf-style).
- * @param ap Variable argument list.
+ * @param[in] level Log level.
+ * @param[in] file Source file name.
+ * @param[in] line Source line number.
+ * @param[in] func Function name.
+ * @param[in] fmt Format string (printf-style).
+ * @param[in] ap Variable argument list.
+ *
+ * @note Thread-safe: Yes.
  */
 void po_logger_logv(po_log_level_t level, const char *file, int line, const char *func,
                     const char *fmt, va_list ap);

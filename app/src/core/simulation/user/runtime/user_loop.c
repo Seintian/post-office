@@ -18,6 +18,7 @@
 #include <sys/sem.h>
 #include <sys/syscall.h>
 #include <time.h>
+#include <string.h>
 #include <unistd.h>
 #include <utils/errors.h>
 #include <utils/signals.h>
@@ -28,6 +29,12 @@
 
 static volatile sig_atomic_t g_running = 1;
 
+/**
+ * @brief Signal handler for graceful shutdown.
+ * @param[in] sig Signal number.
+ * @param[in] info Signal info.
+ * @param[in] context User context.
+ */
 static void handle_signal(int sig, siginfo_t *info, void *context) {
     (void)sig;
     (void)info;
@@ -35,12 +42,22 @@ static void handle_signal(int sig, siginfo_t *info, void *context) {
     g_running = 0;
 }
 
+/**
+ * @brief Register terminating signal handlers.
+ */
 static void setup_signals(void) {
     if (sigutil_handle_terminating(handle_signal, 0) != 0) {
         fprintf(stderr, "Failed to register signal handlers\n");
     }
 }
 
+/**
+ * @brief Extract sim time from SHM.
+ * @param[in] shm Shared memory pointer.
+ * @param[out] d Day.
+ * @param[out] h Hour.
+ * @param[out] m Minute.
+ */
 static void get_sim_time(sim_shm_t *shm, int *d, int *h, int *m) {
     uint64_t packed = atomic_load(&shm->time_control.packed_time);
     *d = (packed >> 16) & 0xFFFF;
@@ -48,7 +65,11 @@ static void get_sim_time(sim_shm_t *shm, int *d, int *h, int *m) {
     *m = packed & 0xFF;
 }
 
-// Standalone initialization
+/**
+ * @brief Initialize user standalone resources (SHM, Logger).
+ * @param[out] out_shm Pointer to receive SHM address.
+ * @return 0 on success, -1 on failure.
+ */
 int user_standalone_init(sim_shm_t **out_shm) {
     // Collect system information for optimizations
     po_sysinfo_t sysinfo;
@@ -57,7 +78,7 @@ int user_standalone_init(sim_shm_t **out_shm) {
         cacheline_size = (size_t)sysinfo.dcache_lnsize;
     }
 
-    if (po_metrics_init() != 0) {
+    if (po_metrics_init(0, 0, 0) != 0) {
         fprintf(stderr, "user: metrics init failed\n");
     }
 
@@ -69,11 +90,13 @@ int user_standalone_init(sim_shm_t **out_shm) {
             level = l;
     }
 
-    po_logger_config_t log_cfg = {.level = level,
-                                  .ring_capacity = 256,
-                                  .consumers = 1,
-                                  .policy = LOGGER_OVERWRITE_OLDEST,
-                                  .cacheline_bytes = cacheline_size};
+    po_logger_config_t log_cfg = {
+        .level = level,
+        .ring_capacity = 256,
+        .consumers = 1,
+        .policy = LOGGER_OVERWRITE_OLDEST,
+        .cacheline_bytes = cacheline_size
+    };
     if (po_logger_init(&log_cfg) != 0) {
         fprintf(stderr, "user: logger init failed\n");
         return -1;
@@ -86,19 +109,43 @@ int user_standalone_init(sim_shm_t **out_shm) {
     }
     *out_shm = shm;
 
+    // Initialize zero-copy pools for protocol messaging
+    if (net_init_zerocopy(32, 32, 4096) != 0) {
+        fprintf(stderr, "user: Failed to initialize zero-copy pools\n");
+        sim_ipc_shm_detach(shm);
+        po_logger_shutdown();
+        return -1;
+    }
+
     setup_signals();
     po_rand_seed_auto();
 
     return 0;
 }
 
+/**
+ * @brief Cleanup user resources.
+ * @param[in] shm SHM pointer to detach.
+ */
 void user_standalone_cleanup(sim_shm_t *shm) {
+    net_shutdown_zerocopy();
     if (shm) {
         sim_ipc_shm_detach(shm);
     }
     po_logger_shutdown();
 }
 
+/**
+ * @brief Main user lifecycle loop.
+ * 
+ * Requests ticket, enters queue, waits for service completion.
+ *
+ * @param[in] user_id Unique User ID.
+ * @param[in] service_type Service type to request.
+ * @param[in] shm Shared memory pointer.
+ * @param[in] active_flag Optional cancellation flag (for thread pool usage).
+ * @return 0 on success.
+ */
 int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic bool *active_flag) {
     if (!shm) {
         LOG_FATAL("user_run called with NULL shm");
@@ -167,50 +214,53 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
             break;
         }
 
-        // Set Receive Timeout to allow flag checking
+        // Set Receive Timeout to allow time for server thread pool processing
         struct timeval tv;
-        tv.tv_sec = 0;
-        tv.tv_usec = 100000; // 100ms
+        tv.tv_sec = 5; // 5 second timeout (thread pool may have queued tasks)
+        tv.tv_usec = 0;
         setsockopt(sock_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv);
 
-        // Request Ticket
-        msg_ticket_req_t msg_req = {.requester_pid = getpid(),
-                                    .requester_tid = (pid_t)syscall(SYS_gettid),
-                                    .service_type = (service_type_t)service_type};
-        ssize_t sent = po_socket_send(sock_fd, &msg_req, sizeof(msg_req), 0);
-        if (sent != sizeof(msg_req)) {
-            LOG_ERROR("User %d failed to send ticket request (sent=%zd, errno=%d)", user_id, sent,
-                      errno);
+        // Request Ticket with protocol header
+        msg_ticket_req_t msg_req = {
+            .requester_pid = getpid(),
+            .requester_tid = (pid_t)syscall(SYS_gettid),
+            .service_type = (service_type_t)service_type
+        };
+        int ret = net_send_message(sock_fd, MSG_TYPE_TICKET_REQ, PO_FLAG_NONE,
+            (const uint8_t *)&msg_req, (uint32_t)sizeof(msg_req));
+        if (ret != 0) {
+            LOG_ERROR("User %d failed to send ticket request (ret=%d)", user_id, ret);
             po_socket_close(sock_fd);
             break;
         }
 
-        msg_ticket_resp_t resp;
-        ssize_t n = -1;
-        int attempts = 0;
-        while (attempts++ < 100 && g_running) {
-            if (active_flag && !atomic_load(active_flag))
-                break;
-
-            n = po_socket_recv(sock_fd, &resp, sizeof(resp), 0);
-            if (n == sizeof(resp))
-                break;
-            if (n == PO_SOCKET_WOULDBLOCK ||
-                (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
-                // Timeout or non-blocking
-                continue;
-            }
-            break;
-        }
+        // Receive response with protocol header
+        po_header_t hdr;
+        zcp_buffer_t *payload = NULL;
+        ret = net_recv_message(sock_fd, &hdr, &payload);
 
         po_socket_close(sock_fd);
 
-        if (n != sizeof(resp)) {
+        if (ret != 0 || !payload) {
             if (g_running) {
-                LOG_ERROR("User %d failed to receive ticket (n=%zd, errno=%d)", user_id, n, errno);
+                LOG_ERROR("User %d failed to receive ticket (ret=%d)", user_id, ret);
             }
+            if (payload)
+                net_zcp_release_rx(payload);
             break;
         }
+
+        // Validate response
+        if (hdr.msg_type != MSG_TYPE_TICKET_RESP || hdr.payload_len != sizeof(msg_ticket_resp_t)) {
+            LOG_ERROR("User %d received invalid response: type=%u, len=%u", 
+                     user_id, hdr.msg_type, hdr.payload_len);
+            net_zcp_release_rx(payload);
+            break;
+        }
+
+        msg_ticket_resp_t resp;
+        memcpy(&resp, payload, sizeof(resp));
+        net_zcp_release_rx(payload);
 
         get_sim_time(shm, &day, &hour, &min);
 

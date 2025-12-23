@@ -40,7 +40,11 @@ extern char **environ;
 
 static char g_crash_dump_dir[MAX_PATH_LEN] = {0};
 
-/* Async-signal-safe writer to a file descriptor */
+/**
+ * @brief Async-signal-safe writer to a file descriptor.
+ * @param[in] fd File descriptor.
+ * @param[in] format Format string.
+ */
 static void safe_write(int fd, const char* format, ...) {
     char buffer[1024];
     va_list args;
@@ -57,7 +61,11 @@ static void safe_write(int fd, const char* format, ...) {
     }
 }
 
-/* Print detailed signal information */
+/**
+ * @brief Print detailed signal information.
+ * @param[in] fd Output file descriptor.
+ * @param[in] info Signal info structure.
+ */
 static void print_signal_info(int fd, siginfo_t *info) {
     if (!info) return;
 
@@ -127,7 +135,6 @@ static void print_signal_info(int fd, siginfo_t *info) {
     safe_write(fd, "  Fault Address: %p\n\n", info->si_addr);
 }
 
-/* Print process status from /proc/self/status */
 static void print_process_status(int fd) {
     safe_write(fd, "\nProcess Status (/proc/self/status):\n");
     int status_fd = open("/proc/self/status", O_RDONLY);

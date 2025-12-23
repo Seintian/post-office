@@ -4,6 +4,11 @@
 
 #define BETWEEN(x, base, top) ((x) >= (base) && (x) <= (top))
 
+/**
+ * @brief Convert INIH error code to string.
+ * @param[in] err Error code.
+ * @return Static string description.
+ */
 static const char *inih_strerror(int err) {
     switch (err) {
     case INIH_EOK:
@@ -53,6 +58,11 @@ static const char *inih_strerror(int err) {
     }
 }
 
+/**
+ * @brief Convert LMDB error code to string.
+ * @param[in] err Error code.
+ * @return Static string description.
+ */
 static const char *lmdb_strerror(int err) {
     switch (err) {
     case DB_EOK:
@@ -108,6 +118,11 @@ static const char *lmdb_strerror(int err) {
     }
 }
 
+/**
+ * @brief Convert Perf error code to string.
+ * @param[in] err Error code.
+ * @return Static string description.
+ */
 static const char *perf_strerror(int err) {
     switch (err) {
     case PERF_EOK:
@@ -129,6 +144,11 @@ static const char *perf_strerror(int err) {
     }
 }
 
+/**
+ * @brief Convert Net error code to string.
+ * @param[in] err Error code.
+ * @return Static string description.
+ */
 static const char *net_strerror(int err) {
     switch (err) {
     case NET_EOK:
@@ -166,6 +186,11 @@ static const char *net_strerror(int err) {
     }
 }
 
+/**
+ * @brief Convert Zerocopy error code to string.
+ * @param[in] err Error code.
+ * @return Static string description.
+ */
 static const char *zcp_strerror(int err) {
     switch (err) {
     case ZCP_EOK:

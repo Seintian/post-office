@@ -28,6 +28,11 @@
 #define LOADAVG_FILE "/proc/loadavg"
 #define UPTIME_FILE "/proc/uptime"
 
+/**
+ * @brief Reads /proc/cpuinfo and sysconf to populate CPU stats.
+ * @param[out] info Target struct.
+ * @return 0 on success, -1 on failure.
+ */
 static int load_cpuinfo(po_sysinfo_t *info) {
     if (!info) {
         errno = EINVAL;

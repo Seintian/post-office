@@ -114,6 +114,12 @@ bool fs_write_buffer_to_file(const char *path, const void *buffer, size_t size) 
     return wr == size && rc == 0 && ec == 0;
 }
 
+/**
+ * @brief Create a single directory component.
+ * @param[in] path Path to create.
+ * @param[in] mode Permissions.
+ * @return true if created or exists, false on error.
+ */
 static bool mkdir_one(const char *path, mode_t mode) {
     if (mkdir(path, mode) == 0)
         return true;

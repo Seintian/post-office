@@ -4,13 +4,12 @@
 #include <postoffice/tui/tui.h>
 
 /**
-
- * @brief Create the configuration editor screen.
-
+ * @brief Creates the configuration editor screen.
+ * 
+ * Allows viewing and (in the future) editing of loaded configuration values.
+ * 
  * @return A new widget representing the configuration screen.
-
  */
-
 tui_widget_t* screen_config_create(void);
 
 

@@ -23,16 +23,30 @@
 static void on_sidebar_select(tui_list_t* list, int index, void* data);
 
 // Context
+/**
+ * @brief Application context holding references to key UI widgets.
+ */
 typedef struct {
-    tui_widget_t* content_container;
-    tui_widget_t* topbar;
-    tui_list_t* sidebar_list;
-    tui_window_t* main_window; // Wrap root in window concept for dialogs
+    tui_widget_t* content_container; /**< Container for dynamic screen content */
+    tui_widget_t* topbar;            /**< Top status bar widget */
+    tui_list_t* sidebar_list;        /**< Sidebar navigation list */
+    tui_window_t* main_window;       /**< Main window wrapper for dialog management */
 } app_context_t;
 
 static app_context_t g_ctx;
 
 // Global event handler
+/**
+ * @brief Global event handler for application-wide key events.
+ *
+ * Handles:
+ * - ESC: Closes dialogs, clears focus, or shows a "Not Implemented" modal.
+ * - Arrow Keys: Navigates the sidebar (Up/Down) or tab containers (Left/Right).
+ *
+ * @param event The event to handle.
+ * @param user_data User data (unused).
+ * @return true if the event was consumed, false otherwise.
+ */
 static bool on_global_event(const tui_event_t* event, void* user_data) {
     (void)user_data;
     if (event->type == TUI_EVENT_KEY) {
@@ -111,6 +125,15 @@ static bool on_global_event(const tui_event_t* event, void* user_data) {
 }
 
 // Callback for sidebar
+/**
+ * @brief Callback for sidebar item selection.
+ *
+ * Switches the content view based on the selected sidebar item (e.g., "Director", "Ticket Issuer").
+ *
+ * @param list The sidebar list widget.
+ * @param index The index of the selected item.
+ * @param data User data (unused).
+ */
 static void on_sidebar_select(tui_list_t* list, int index, void* data) {
     (void)data;
     if (!g_ctx.content_container) return;

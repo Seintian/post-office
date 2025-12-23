@@ -7,6 +7,12 @@
 
 #include "../ipc/simulation_ipc.h" // For sim_shm_t definition
 
+/**
+ * @brief User process entry point.
+ * @param[in] argc Arg count.
+ * @param[in] argv Arg vector.
+ * @return 0 on success, >0 on failure.
+ */
 int main(int argc, char** argv) {
     int user_id = -1;
     int service_type = -1;

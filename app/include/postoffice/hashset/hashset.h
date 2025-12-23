@@ -64,9 +64,10 @@ typedef struct po_hashset po_hashset_t;
 /**
  * @brief Create a new hash set with default prime capacity.
  *
- * @param compare   Equality predicate (returns 0 for equality).
- * @param hash_func Hash function mapping key -> unsigned long hash.
+ * @param[in] compare   Equality predicate (returns 0 for equality).
+ * @param[in] hash_func Hash function mapping key -> unsigned long hash.
  * @return New set handle or NULL on allocation failure (errno set).
+ * @note Thread-safe: Yes.
  */
 po_hashset_t *po_hashset_create(int (*compare)(const void *, const void *),
                                 unsigned long (*hash_func)(const void *)) __attribute_malloc__
@@ -75,11 +76,11 @@ po_hashset_t *po_hashset_create(int (*compare)(const void *, const void *),
 /**
  * @brief Create a hash set with explicit initial capacity.
  *
- * @param compare          Equality predicate.
- * @param hash_func        Hash function.
- * @param initial_capacity Suggested starting capacity (prime recommended). If not prime the
- *                          implementation may round up to the next prime.
+ * @param[in] compare          Equality predicate.
+ * @param[in] hash_func        Hash function.
+ * @param[in] initial_capacity Suggested starting capacity (prime recommended).
  * @return New set handle or NULL on allocation failure.
+ * @note Thread-safe: Yes.
  */
 po_hashset_t *po_hashset_create_sized(int (*compare)(const void *, const void *),
                                       unsigned long (*hash_func)(const void *),
@@ -93,9 +94,10 @@ po_hashset_t *po_hashset_create_sized(int (*compare)(const void *, const void *)
  * growth threshold. Key pointer is stored verbatim – caller retains allocation
  * responsibility.
  *
- * @param set Set handle.
- * @param key Key pointer.
+ * @param[in] set Set handle.
+ * @param[in] key Key pointer.
  * @return 1 inserted; 0 already existed; -1 on allocation / internal error.
+ * @note Thread-safe: No.
  */
 int po_hashset_add(po_hashset_t *set, void *key) __nonnull((1, 2));
 
@@ -105,31 +107,35 @@ int po_hashset_add(po_hashset_t *set, void *key) __nonnull((1, 2));
  * Uses a tombstone strategy to preserve probe chains. Optional shrink may
  * occur after removal if load factor falls below a lower threshold.
  *
- * @param set Set handle.
- * @param key Key to remove.
+ * @param[in] set Set handle.
+ * @param[in] key Key to remove.
  * @return 1 removed; 0 not found.
+ * @note Thread-safe: No.
  */
 int po_hashset_remove(po_hashset_t *set, const void *key) __nonnull((1, 2));
 
 /**
  * @brief Test membership.
- * @param set Set handle.
- * @param key Key to search for.
+ * @param[in] set Set handle.
+ * @param[in] key Key to search for.
  * @return 1 present; 0 absent.
+ * @note Thread-safe: Yes (Read-only on set).
  */
 int po_hashset_contains(const po_hashset_t *set, const void *key) __nonnull((1, 2));
 
 /**
  * @brief Current number of stored keys.
- * @param set Set handle.
+ * @param[in] set Set handle.
  * @return Count (>=0).
+ * @note Thread-safe: Yes (Read-only).
  */
 size_t po_hashset_size(const po_hashset_t *set) __nonnull((1));
 
 /**
  * @brief Current bucket capacity.
- * @param set Set handle.
+ * @param[in] set Set handle.
  * @return Capacity (number of slots).
+ * @note Thread-safe: Yes (Read-only).
  */
 size_t po_hashset_capacity(const po_hashset_t *set) __nonnull((1));
 
@@ -139,27 +145,31 @@ size_t po_hashset_capacity(const po_hashset_t *set) __nonnull((1));
  * Caller frees the returned array (keys are not copied nor owned by the set).
  * @note The array length equals ::po_hashset_size(); it is NOT NULL-terminated.
  *
- * @param set Set handle.
+ * @param[in] set Set handle.
  * @return Pointer to array or NULL on allocation failure.
+ * @note Thread-safe: Yes (Read-only on set).
  */
 void **po_hashset_keys(const po_hashset_t *set) __attribute_malloc__ __nonnull((1));
 
 /**
  * @brief Remove all keys (capacity unchanged, keys not freed).
- * @param set Set handle.
+ * @param[in] set Set handle.
+ * @note Thread-safe: No.
  */
 void po_hashset_clear(po_hashset_t *set) __nonnull((1));
 
 /**
  * @brief Destroy the set and free internal storage (not keys).
- * @param set Address of set handle; pointer is nulled on return.
+ * @param[in,out] set Address of set handle; pointer is nulled on return.
+ * @note Thread-safe: No (Must be exclusive).
  */
 void po_hashset_destroy(po_hashset_t **set) __nonnull((1));
 
 /**
  * @brief Current load factor (size / capacity).
- * @param set Set handle.
+ * @param[in] set Set handle.
  * @return Load factor as float.
+ * @note Thread-safe: Yes (Read-only).
  */
 float po_hashset_load_factor(const po_hashset_t *set) __nonnull((1));
 

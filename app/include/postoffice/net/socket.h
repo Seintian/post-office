@@ -49,10 +49,11 @@ extern "C" {
  * INADDR_ANY) and binds to the given port. The returned socket is non-blocking
  * and has CLOEXEC set.
  *
- * @param address IP address or hostname to bind (NULL or "" for any).
- * @param port Port string (e.g. "8080").
- * @param backlog Listen backlog.
+ * @param[in] address IP address or hostname to bind (NULL or "" for any).
+ * @param[in] port Port string (e.g. "8080").
+ * @param[in] backlog Listen backlog.
  * @return Listening socket fd on success, -1 on error (errno set).
+ * @note Thread-safe: Yes.
  */
 int po_socket_listen(const char *address, const char *port, int backlog) __nonnull((2));
 
@@ -64,9 +65,10 @@ int po_socket_listen(const char *address, const char *port, int backlog) __nonnu
  * the connect is in progress; callers should monitor the socket for write
  * readiness to detect completion.
  *
- * @param address Remote host (IP or hostname).
- * @param port Remote port string.
+ * @param[in] address Remote host (IP or hostname).
+ * @param[in] port Remote port string.
  * @return Connected socket fd (non-blocking) on success, -1 on immediate error.
+ * @note Thread-safe: Yes.
  */
 int po_socket_connect(const char *address, const char *port) __nonnull((1, 2));
 
@@ -79,11 +81,12 @@ int po_socket_connect(const char *address, const char *port) __nonnull((1, 2));
  * out_addr_buf is non-NULL it will be populated with the textual peer
  * address (IPv4/IPv6). The function handles EINTR and EAGAIN correctly.
  *
- * @param listen_fd Listening socket fd.
- * @param out_addr_buf Buffer for textual peer address or NULL.
- * @param addr_buf_len Length of out_addr_buf if provided.
+ * @param[in] listen_fd Listening socket fd.
+ * @param[out] out_addr_buf Buffer for textual peer address or NULL.
+ * @param[in] addr_buf_len Length of out_addr_buf if provided.
  * @return New client fd on success, -1 on error, -2 if no pending connections
  *         (EAGAIN/EWOULDBLOCK).
+ * @note Thread-safe: Yes (Concurrent accepts on same listen_fd are safe).
  */
 int po_socket_accept(int listen_fd, char *out_addr_buf, size_t addr_buf_len);
 
@@ -93,9 +96,10 @@ int po_socket_accept(int listen_fd, char *out_addr_buf, size_t addr_buf_len);
  * The path will be unlinked before bind where appropriate. Permissions and
  * SELinux labels are the caller's responsibility. The socket is non-blocking.
  *
- * @param path Filesystem path or abstract namespace (if starts with '\0').
- * @param backlog Listen backlog.
+ * @param[in] path Filesystem path or abstract namespace (if starts with '\0').
+ * @param[in] backlog Listen backlog.
  * @return Listening socket fd on success, -1 on error.
+ * @note Thread-safe: Yes.
  */
 int po_socket_listen_unix(const char *path, int backlog) __nonnull((1));
 
@@ -105,8 +109,9 @@ int po_socket_listen_unix(const char *path, int backlog) __nonnull((1));
  * Returns a non-blocking connected socket (or EINPROGRESS semantics for
  * non-blocking connect).
  *
- * @param path Filesystem path or abstract namespace (if starts with '\0').
+ * @param[in] path Filesystem path or abstract namespace (if starts with '\0').
  * @return Non-blocking socket fd on success, -1 on error.
+ * @note Thread-safe: Yes.
  */
 int po_socket_connect_unix(const char *path) __nonnull((1));
 
@@ -115,15 +120,17 @@ int po_socket_connect_unix(const char *path) __nonnull((1));
  *
  * This helper centralizes FD closing semantics used across the net stack.
  *
- * @param fd File descriptor to close.
+ * @param[in] fd File descriptor to close.
+ * @note Thread-safe: Yes (OS handles fd table).
  */
 void po_socket_close(int fd);
 
 /**
  * @brief Set a socket to non-blocking mode.
  *
- * @param fd Socket fd.
+ * @param[in] fd Socket fd.
  * @return 0 on success, -1 on error (errno set).
+ * @note Thread-safe: Yes.
  */
 int po_socket_set_nonblocking(int fd);
 
@@ -134,11 +141,12 @@ int po_socket_set_nonblocking(int fd);
  * for high-performance servers. It does not enable SO_LINGER unless
  * explicitly requested by the caller.
  *
- * @param fd Socket fd.
- * @param enable_nodelay Set TCP_NODELAY if non-zero.
- * @param reuseaddr Set SO_REUSEADDR if non-zero.
- * @param keepalive Set SO_KEEPALIVE if non-zero.
+ * @param[in] fd Socket fd.
+ * @param[in] enable_nodelay Set TCP_NODELAY if non-zero.
+ * @param[in] reuseaddr Set SO_REUSEADDR if non-zero.
+ * @param[in] keepalive Set SO_KEEPALIVE if non-zero.
  * @return 0 on success, -1 on error (errno set).
+ * @note Thread-safe: Yes.
  */
 int po_socket_set_common_options(int fd, int enable_nodelay, int reuseaddr, int keepalive);
 
@@ -152,13 +160,14 @@ int po_socket_set_common_options(int fd, int enable_nodelay, int reuseaddr, int 
  * writes are returned directly (short writes are possible with non-blocking
  * sockets and should be handled by the caller).
  *
- * @param fd   Socket file descriptor.
- * @param buf  Data buffer to write (must not be NULL if len > 0).
- * @param len  Number of bytes to attempt to send.
- * @param flags send(2) flags (e.g. MSG_NOSIGNAL, 0).
+ * @param[in] fd   Socket file descriptor.
+ * @param[in] buf  Data buffer to write (must not be NULL if len > 0).
+ * @param[in] len  Number of bytes to attempt to send.
+ * @param[in] flags send(2) flags (e.g. MSG_NOSIGNAL, 0).
  * @return Number of bytes sent (>0) on success; 0 is never returned; -1 on
  *         hard error (errno set); PO_SOCKET_WOULDBLOCK (-2) if the operation
  *         would block and should be retried later.
+ * @note Thread-safe: Yes (But interleaved bytes possible on shared FD).
  */
 ssize_t po_socket_send(int fd, const void *buf, size_t len, int flags) __nonnull((2));
 
@@ -172,12 +181,13 @@ ssize_t po_socket_send(int fd, const void *buf, size_t len, int flags) __nonnull
  * incrementing a failure counter. Successful positive byte counts increment
  * both a recv counter and byte accumulator metric.
  *
- * @param fd   Socket file descriptor.
- * @param buf  Destination buffer (must not be NULL if len > 0).
- * @param len  Maximum number of bytes to read.
- * @param flags recv(2) flags.
+ * @param[in] fd   Socket file descriptor.
+ * @param[out] buf  Destination buffer (must not be NULL if len > 0).
+ * @param[in] len  Maximum number of bytes to read.
+ * @param[in] flags recv(2) flags.
  * @return >0 number of bytes read, 0 on EOF, -1 on hard error (errno set),
  *         PO_SOCKET_WOULDBLOCK (-2) if the operation would block.
+ * @note Thread-safe: Yes.
  */
 ssize_t po_socket_recv(int fd, void *buf, size_t len, int flags) __nonnull((2));
 

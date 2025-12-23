@@ -33,6 +33,7 @@ extern "C" {
  *
  * @param[in] path The path to check.
  * @return `true` if a file or directory exists at the path, `false` otherwise.
+ * @note Thread-safe: Yes.
  */
 bool fs_exists(const char *path);
 
@@ -75,6 +76,7 @@ bool fs_is_socket(const char *path);
  * @return A pointer to the allocated buffer on success, or `NULL` on failure
  * (e.g., file not found, cannot read, out of memory). If `NULL` is
  * returned, `out_size` is set to 0.
+ * @note Thread-safe: Yes.
  */
 char *fs_read_file_to_buffer(const char *path, size_t *out_size);
 
@@ -88,6 +90,7 @@ char *fs_read_file_to_buffer(const char *path, size_t *out_size);
  * @param[in] buffer A pointer to the data to write.
  * @param[in] size The number of bytes to write from the buffer.
  * @return `true` on success, `false` on failure. `errno` is set accordingly.
+ * @note Thread-safe: Yes (atomic on file system level depends on OS/Filesystem).
  */
 bool fs_write_buffer_to_file(const char *path, const void *buffer, size_t size);
 
@@ -100,6 +103,7 @@ bool fs_write_buffer_to_file(const char *path, const void *buffer, size_t size);
  * @param[in] mode The file mode (permissions) for the new directory, e.g., `0755`.
  * @return `true` on success or if the directory already exists. `false` on
  * any other error.
+ * @note Thread-safe: Yes.
  */
 bool fs_create_directory_recursive(const char *path, mode_t mode);
 

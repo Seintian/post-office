@@ -4,7 +4,7 @@
 tui_widget_t* log_tail_view_create(int height) {
     tui_rect_t bounds = {0};
     tui_list_t* list = tui_list_create(bounds);
-    
+
     // Config layout
     list->base.layout_params.fill_x = true;
     if (height > 0) {

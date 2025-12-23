@@ -88,6 +88,7 @@ struct po_hashtable_iter {
  * @return Pointer to the created hashtable node, or NULL if memory allocation fails.
  *
  * @note The caller is responsible for freeing the memory allocated for the node.
+ * @note Thread-safe: Yes (Pure allocation).
  */
 static hashtable_node_t *hashtable_node_create(void *key, void *value) {
     hashtable_node_t *node = malloc(sizeof(hashtable_node_t));
@@ -107,6 +108,8 @@ static hashtable_node_t *hashtable_node_create(void *key, void *value) {
  * @param[in] table Pointer to the hashtable.
  * @param[in] new_capacity The new capacity to resize to.
  * @return -1 on failure, 0 on success
+ *
+ * @note Thread-safe: No (Modifies table structure).
  */
 static int po_hashtable_resize(po_hashtable_t *table, size_t new_capacity) {
     new_capacity = next_prime(new_capacity);

@@ -31,12 +31,11 @@
 #define NUM_TERMINATING_SIGNALS (sizeof(TERMINATING_SIGNALS) / sizeof((TERMINATING_SIGNALS)[0]))
 
 /**
- * @brief Set the signals to sigset object
- *
- * @param[in] signals array of `num_signals` signals
- * @param[in] num_signals number of signals in the array
- * @param[out] sigset pointer to the sigset object to modify
- * @return 0 on success, -1 on error
+ * @brief Helper to populate a sigset from an array.
+ * @param[in] signals Array of signal numbers.
+ * @param[in] num_signals Count of signals.
+ * @param[out] sigset Target sigset.
+ * @return 0 on success, -1 on error.
  */
 static int set_signals_to_sigset(const int* signals, size_t num_signals, sigset_t* sigset) {
     if (sigemptyset(sigset) == -1) {

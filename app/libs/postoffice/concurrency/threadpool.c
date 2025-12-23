@@ -17,12 +17,18 @@ struct threadpool_s {
     tp_task_t *queue_head;
     tp_task_t *queue_tail;
     size_t num_threads;
+    size_t threads_started;
     size_t queue_size;
     size_t queue_count;
     bool shutdown;
     bool graceful;
 };
 
+/**
+ * @brief Worker thread entry point.
+ * @param[in] arg Threadpool instance pointer.
+ * @return NULL.
+ */
 static void* tp_worker(void *arg) {
     threadpool_t *pool = (threadpool_t*)arg;
 
@@ -63,16 +69,16 @@ threadpool_t* tp_create(size_t num_threads, size_t queue_size) {
     if (num_threads == 0) return NULL;
 
     threadpool_t *pool = (threadpool_t*)calloc(1, sizeof(threadpool_t));
-    if (!pool) return NULL;
-
-    pool->num_threads = num_threads;
-    pool->queue_size = queue_size > 0 ? queue_size : 65536;
-    
-    if (pthread_mutex_init(&pool->lock, NULL) != 0 ||
-        pthread_cond_init(&pool->notify, NULL) != 0) {
+    int mutex_ok = (pthread_mutex_init(&pool->lock, NULL) == 0);
+    if (!mutex_ok || pthread_cond_init(&pool->notify, NULL) != 0) {
+        if (mutex_ok) {
+            pthread_mutex_destroy(&pool->lock);
+        }
         free(pool);
         return NULL;
     }
+    pool->num_threads = num_threads;
+    pool->queue_size = queue_size;
 
     pool->threads = (pthread_t*)calloc(num_threads, sizeof(pthread_t));
     if (!pool->threads) {
@@ -87,6 +93,7 @@ threadpool_t* tp_create(size_t num_threads, size_t queue_size) {
             tp_destroy(pool, 0);
             return NULL;
         }
+        pool->threads_started++;
     }
 
     return pool;
@@ -101,9 +108,11 @@ int tp_submit(threadpool_t *pool, tp_task_func_t func, void *arg) {
         pthread_mutex_unlock(&pool->lock);
         return -1;
     }
-    
-    // Optional: Fixed queue size limit check could go here if queue_size is strict
-    // For now we just use it as a hint or rely on memory
+
+    if (pool->queue_count >= pool->queue_size) {
+        pthread_mutex_unlock(&pool->lock);
+        return -1;
+    }
 
     tp_task_t *task = (tp_task_t*)malloc(sizeof(tp_task_t));
     if (!task) {
@@ -137,10 +146,8 @@ void tp_destroy(threadpool_t *pool, bool graceful) {
     pthread_cond_broadcast(&pool->notify);
     pthread_mutex_unlock(&pool->lock);
 
-    for (size_t i = 0; i < pool->num_threads; i++) {
-        if (pool->threads[i]) {
-            pthread_join(pool->threads[i], NULL);
-        }
+    for (size_t i = 0; i < pool->threads_started; i++) {
+        pthread_join(pool->threads[i], NULL);
     }
 
     // Cleanup remaining tasks

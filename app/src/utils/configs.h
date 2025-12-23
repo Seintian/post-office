@@ -36,6 +36,7 @@ typedef struct po_config po_config_t;
  * @param filename Path to the INI file.
  * @param cfg_out  Out-parameter receiving the allocated config handle.
  * @return 0 on success; non-zero error code from @ref errors.h on failure.
+ * @note Thread-safe: Yes (independent instances).
  */
 int po_config_load(const char *filename, po_config_t **cfg_out) __nonnull((1, 2));
 
@@ -47,6 +48,7 @@ int po_config_load(const char *filename, po_config_t **cfg_out) __nonnull((1, 2)
  * @param filename Path to the INI file.
  * @param cfg_out  Out-parameter receiving the allocated config handle.
  * @return 0 on success; non-zero error code on failure.
+ * @note Thread-safe: Yes.
  */
 int po_config_load_strict(const char *filename, po_config_t **cfg_out) __nonnull((1, 2));
 
@@ -66,6 +68,7 @@ void po_config_free(po_config_t **cfg) __nonnull((1));
  * @param section   Section name.
  * @param key       Key name.
  * @param out_value Receives pointer to the string value (valid until @ref po_config_free).
+ * @note Thread-safe: Yes (read-only).
  */
 int po_config_get_str(const po_config_t *cfg, const char *section, const char *key,
                       const char **out_value) __nonnull((1, 3, 4));
@@ -107,6 +110,7 @@ int po_config_get_bool(const po_config_t *cfg, const char *section, const char *
  * @param key       Key name.
  * @param value     Value to set.
  * @return 0 on success; non-zero on allocation failure or other error.
+ * @note Thread-safe: No (modifies internal state). External synchronization required.
  */
 int po_config_set_str(po_config_t *cfg, const char *section, const char *key, const char *value)
     __nonnull((1, 3, 4));

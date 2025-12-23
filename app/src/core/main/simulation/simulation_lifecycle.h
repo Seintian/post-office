@@ -10,27 +10,32 @@
 extern const char* g_simulation_config_path;
 
 /**
- * Initialize the simulation lifecycle subsystem.
- * @param config_path Path to the configuration file.
+ * @brief Initialize the simulation lifecycle subsystem.
+ * @param[in] config_path Path to the configuration file (optional, may be NULL).
+ * @note Thread-safe: No (called from main).
  */
 void simulation_init(const char* config_path);
 
 /**
- * Start the simulation processes (Director, etc.).
+ * @brief Start the simulation processes (Director, etc.).
  * Does not block.
- * @param tui_mode If true, suppress stdout of child processes.
- * @param loglevel Log level to pass to the Director.
+ * @param[in] tui_mode If true, suppress stdout of child processes.
+ * @param[in] loglevel Log level to pass to the Director.
+ * @note Thread-safe: No.
  */
 void simulation_start(bool tui_mode, int loglevel);
 
 /**
- * Stop the simulation processes.
+ * @brief Stop the simulation processes.
+ * Uses SIGTERM and waits for Director to exit.
+ * @note Thread-safe: No.
  */
 void simulation_stop(void);
 
 /**
- * Run the simulation in headless mode (blocks until signal).
+ * @brief Run the simulation in headless mode (blocks until signal).
  * Handles signal trapping and cleanup.
+ * @note Thread-safe: No.
  */
 void simulation_run_headless(void);
 

@@ -85,12 +85,27 @@ typedef struct {
 // Hash Table Helpers
 // -----------------------------------------------------------------------------
 
-// String comparison for hash table
+/**
+ * @brief Compare two strings for hash table.
+ *
+ * @param[in] a First string (void pointer).
+ * @param[in] b Second string (void pointer).
+ * @return 0 if equal, non-zero otherwise.
+ *
+ * @note Thread-safe: Yes (Pure function).
+ */
 static int str_compare(const void *a, const void *b) {
     return strcmp((const char *)a, (const char *)b);
 }
 
-// DJB2 hash function for strings
+/**
+ * @brief DJB2 hash function for strings.
+ *
+ * @param[in] key String key (void pointer).
+ * @return Hash value.
+ *
+ * @note Thread-safe: Yes (Pure function).
+ */
 static unsigned long str_hash(const void *key) {
     const char *str = (const char *)key;
     unsigned long hash = 5381;
@@ -133,6 +148,16 @@ static struct {
 // Internal Helpers
 // -----------------------------------------------------------------------------
 
+/**
+ * @brief Find existing counter index or allocate new one.
+ *
+ * Checks thread-local cache first, then global hash table.
+ *
+ * @param[in] name Counter name.
+ * @return Index >= 0 on success, -1 on failure.
+ *
+ * @note Thread-safe: Yes (Uses RW lock and Mutex).
+ */
 static int find_or_alloc_counter(const char *name) {
     if (!ctx.shm || !ctx.counter_map) return -1;
 
@@ -194,6 +219,14 @@ static int find_or_alloc_counter(const char *name) {
     return (int)count;
 }
 
+/**
+ * @brief Find existing timer index or allocate new one.
+ *
+ * @param[in] name Timer name.
+ * @return Index >= 0 on success, -1 on failure.
+ *
+ * @note Thread-safe: Yes (Uses RW lock and Mutex).
+ */
 static int find_or_alloc_timer(const char *name) {
     if (!ctx.shm || !ctx.timer_map) return -1;
 
@@ -250,6 +283,14 @@ static int find_or_alloc_timer(const char *name) {
     return (int)count;
 }
 
+/**
+ * @brief Get global histogram index by name.
+ *
+ * @param[in] name Histogram name.
+ * @return Index >= 0 on success, -1 on failure.
+ *
+ * @note Thread-safe: Yes (Read lock).
+ */
 static int get_histogram_index(const char *name) {
     if (!ctx.shm || !ctx.histogram_map) return -1;
 
@@ -623,22 +664,40 @@ int po_perf_flush(void) {
 // -----------------------------------------------------------------------------
 
 // Helper to compare counters for qsort
+/**
+ * @brief Comparator for counters (by name).
+ */
 static int compare_shm_counters(const void *a, const void *b) {
     const shm_counter_t *ca = a;
     const shm_counter_t *cb = b;
     return strcmp(ca->name, cb->name);
 }
+
+/**
+ * @brief Comparator for timers (by name).
+ */
 static int compare_shm_timers(const void *a, const void *b) {
     const shm_timer_t *ta = a;
     const shm_timer_t *tb = b;
     return strcmp(ta->name, tb->name);
 }
+
+/**
+ * @brief Comparator for histograms (by name).
+ */
 static int compare_shm_histograms(const void *a, const void *b) {
     const shm_histogram_t *ha = a;
     const shm_histogram_t *hb = b;
     return strcmp(ha->name, hb->name);
 }
 
+/**
+ * @brief Print helper that outputs to FILE* or logs to LOG_INFO.
+ *
+ * @param[in] out Output stream (can be NULL).
+ * @param[in] fmt Format string.
+ * @param[in] ... Arguments.
+ */
 static void print_line(FILE *out, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
@@ -663,18 +722,17 @@ int po_perf_report(FILE *out) {
     size_t nc = atomic_load(&ctx.shm->num_counters);
     if (nc > 0) {
         print_line(out, "-- Counters --");
-        void *ptr = NULL;
-        if (posix_memalign(&ptr, PO_CACHE_LINE_MAX, (nc * sizeof(shm_counter_t) + PO_CACHE_LINE_MAX - 1) & ~(size_t)(PO_CACHE_LINE_MAX - 1)) != 0) ptr = NULL;
-        shm_counter_t *local_c = ptr;
-        if (local_c) { // Check if allocation was successful
+        shm_counter_t *local_c = malloc(nc * sizeof(shm_counter_t));
+        if (!local_c) {
+            print_line(out, "-- Counters -- (allocation failed)");
+        } else {
             memcpy(local_c, ctx.shm->counters, nc * sizeof(shm_counter_t));
+            qsort(local_c, nc, sizeof(shm_counter_t), compare_shm_counters);
+            for (size_t i = 0; i < nc; i++) {
+                print_line(out, "%s: %lu", local_c[i].name, (unsigned long)atomic_load(&local_c[i].value));
+            }
+            free(local_c);
         }
-        qsort(local_c, nc, sizeof(shm_counter_t), compare_shm_counters);
-        
-        for (size_t i = 0; i < nc; i++) {
-             print_line(out, "%s: %lu", local_c[i].name, (unsigned long)atomic_load(&local_c[i].value));
-        }
-        free(local_c);
     } else {
         print_line(out, "-- Counters -- (none)");
     }
@@ -682,14 +740,21 @@ int po_perf_report(FILE *out) {
     size_t nt = atomic_load(&ctx.shm->num_timers);
     if (nt > 0) {
         print_line(out, "-- Timers --");
-        void *ptr = NULL; if (posix_memalign(&ptr, 128, (nt * sizeof(shm_timer_t) + 127) & ~(size_t)127) != 0) ptr = NULL; shm_timer_t *local_t = ptr;
-        memcpy(local_t, ctx.shm->timers, nt * sizeof(shm_timer_t));
-        qsort(local_t, nt, sizeof(shm_timer_t), compare_shm_timers);
-
-        for (size_t i = 0; i < nt; i++) {
-             print_line(out, "%s: %lu ns", local_t[i].name, (unsigned long)atomic_load(&local_t[i].total_ns));
+        // Use aligned_alloc for 128-byte aligned shm_timer_t structures
+        size_t timer_size = nt * sizeof(shm_timer_t);
+        // Round up to multiple of alignment
+        size_t aligned_size = (timer_size + 127) & ~(size_t)127;
+        shm_timer_t *local_t = (shm_timer_t *)aligned_alloc(128, aligned_size);
+        if (!local_t) {
+            print_line(out, "-- Timers -- (allocation failed)");
+        } else {
+            memcpy(local_t, ctx.shm->timers, nt * sizeof(shm_timer_t));
+            qsort(local_t, nt, sizeof(shm_timer_t), compare_shm_timers);
+            for (size_t i = 0; i < nt; i++) {
+                print_line(out, "%s: %lu ns", local_t[i].name, (unsigned long)atomic_load(&local_t[i].total_ns));
+            }
+            free(local_t);
         }
-        free(local_t);
     } else {
         print_line(out, "-- Timers -- (none)");
     }
@@ -698,17 +763,20 @@ int po_perf_report(FILE *out) {
     if (nh > 0) {
         print_line(out, "-- Histograms --");
         shm_histogram_t *local_h = malloc(nh * sizeof(shm_histogram_t));
-        memcpy(local_h, ctx.shm->histograms, nh * sizeof(shm_histogram_t));
-        qsort(local_h, nh, sizeof(shm_histogram_t), compare_shm_histograms);
-
-        for (size_t i = 0; i < nh; i++) {
-            print_line(out, "%s:", local_h[i].name);
-            for (size_t b = 0; b < local_h[i].nbins; b++) {
-                print_line(out, "  <= %lu: %lu", (unsigned long)local_h[i].bins[b], 
-                           (unsigned long)atomic_load(&local_h[i].counts[b]));
+        if (!local_h) {
+            print_line(out, "-- Histograms -- (allocation failed)");
+        } else {
+            memcpy(local_h, ctx.shm->histograms, nh * sizeof(shm_histogram_t));
+            qsort(local_h, nh, sizeof(shm_histogram_t), compare_shm_histograms);
+            for (size_t i = 0; i < nh; i++) {
+                print_line(out, "%s:", local_h[i].name);
+                for (size_t b = 0; b < local_h[i].nbins; b++) {
+                    print_line(out, "  <= %lu: %lu", (unsigned long)local_h[i].bins[b],
+                               (unsigned long)atomic_load(&local_h[i].counts[b]));
+                }
             }
+            free(local_h);
         }
-        free(local_h);
     } else {
         print_line(out, "-- Histograms -- (none)");
     }

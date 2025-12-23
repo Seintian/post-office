@@ -32,23 +32,25 @@ extern "C" {
 #endif
 
 /**
- * @brief checks if a number is prime
+ * @brief Checks if a number is prime.
  *
  * Checks if a number is prime.
  *
  * @param[in] n The number to check
  * @return `true` if the number is prime, `false` otherwise
+ * @note Thread-safe: Yes.
  */
 bool is_prime(size_t n);
 
 /**
- * @brief gets the next prime number after a given number
+ * @brief Gets the next prime number after a given number.
  *
  * Gets the next prime number after a given number,
  * regardless of whether the number is prime.
  *
  * @param[in] n The number to start from
  * @return the next prime number after n
+ * @note Thread-safe: Yes.
  */
 size_t next_prime(size_t n);
 
