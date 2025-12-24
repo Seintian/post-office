@@ -9,6 +9,8 @@
 #include "net/framing.h"
 #include "net/protocol.h"
 #include "perf/zerocopy.h"
+#include "log/logger.h"
+#include "backtrace/backtrace.h"
 
 // Simple process-wide TX/RX zero-copy pools for high throughput paths.
 // Tunables can be exposed later; defaults chosen for general workloads.
@@ -28,10 +30,18 @@ static atomic_uint g_rx_users = 0;
 static atomic_bool g_tx_shutting = false;
 static atomic_bool g_rx_shutting = false;
 
+static int g_zcpool_refcount = 0;
+
 int net_init_zerocopy(size_t tx_buffers, size_t rx_buffers, size_t buf_size) {
     /* Protect init/shutdown races with a mutex. Simple and sufficient for
      * pool lifecycle operations which are infrequent compared to acquire/release. */
     pthread_mutex_lock(&g_zcpool_create_lock);
+
+    if (g_zcpool_refcount > 0) {
+        g_zcpool_refcount++;
+        pthread_mutex_unlock(&g_zcpool_create_lock);
+        return 0;
+    }
 
     if (!g_tx_pool) {
         g_tx_pool = perf_zcpool_create(tx_buffers, buf_size, PERF_ZCPOOL_METRICS);
@@ -56,8 +66,16 @@ int net_init_zerocopy(size_t tx_buffers, size_t rx_buffers, size_t buf_size) {
 
         PO_METRIC_COUNTER_INC("net.zcpool.rx.create");
         PO_METRIC_COUNTER_ADD("net.zcpool.rx.buffers", rx_buffers);
+
+        size_t initial_free = perf_zcpool_freecount(g_rx_pool);
+        if (initial_free != rx_buffers) {
+            LOG_ERROR("net_init: RX pool created but has %zu free buffers (expected %zu)!", initial_free, rx_buffers);
+        } else {
+            LOG_INFO("net_init: RX pool created successfully with %zu buffers.", initial_free);
+        }
     }
 
+    g_zcpool_refcount++;
     pthread_mutex_unlock(&g_zcpool_create_lock);
 
     return 0;
@@ -67,6 +85,14 @@ void net_shutdown_zerocopy(void) {
     /* Prevent new acquisitions, wait for active users to drain, then
      * safely destroy the pools. */
     pthread_mutex_lock(&g_zcpool_create_lock);
+
+    if (g_zcpool_refcount > 0) {
+        g_zcpool_refcount--;
+        if (g_zcpool_refcount > 0) {
+            pthread_mutex_unlock(&g_zcpool_create_lock);
+            return;
+        }
+    }
 
     atomic_store(&g_tx_shutting, true);
     atomic_store(&g_rx_shutting, true);
@@ -251,6 +277,35 @@ int net_recv_message_zcp(int fd, po_header_t *header_out, void **payload_out,
 
     net_zcp_release_rx(buf);
     PO_METRIC_COUNTER_INC("net.recv.zcp.fail");
+
+    return rc;
+}
+
+int net_recv_message_blocking(int fd, po_header_t *header_out, zcp_buffer_t **payload_out) {
+    void *buf = net_zcp_acquire_rx();
+    if (!buf) {
+        size_t free_cnt = perf_zcpool_freecount(g_rx_pool);
+        PO_METRIC_COUNTER_INC("net.recv_blk.acquire.fail");
+        LOG_ERROR("net_recv_blk: acquire failed. free=%zu", free_cnt);
+        errno = ENOMEM;
+        return -1;
+    }
+
+    uint32_t buf_cap = (uint32_t)perf_zcpool_bufsize(g_rx_pool);
+    uint32_t payload_len = 0;
+
+    // Call the blocking framing variant
+    int rc = framing_read_msg_blocking(fd, header_out, buf, buf_cap, &payload_len);
+    if (rc == 0) {
+        PO_METRIC_COUNTER_INC("net.recv_blk");
+        PO_METRIC_COUNTER_ADD("net.recv_blk.bytes", header_out->payload_len);
+        *payload_out = (zcp_buffer_t *)buf;
+        return 0;
+    }
+
+    net_zcp_release_rx(buf);
+    if (rc != -2)
+        PO_METRIC_COUNTER_INC("net.recv_blk.fail");
 
     return rc;
 }

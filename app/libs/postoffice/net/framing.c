@@ -3,8 +3,6 @@
  * @brief Length-prefixed framing implementation with zero-copy support.
  */
 
-
-
 #include "net/framing.h"
 
 #include <errno.h>
@@ -327,5 +325,71 @@ int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
 
     PO_METRIC_COUNTER_INC("framing.read_into.msg");
     PO_METRIC_COUNTER_ADD("framing.read_into.msg.bytes", payload_len);
+    return 0;
+}
+
+int framing_read_msg_blocking(int fd, po_header_t *header_out, void *payload_buf,
+                              uint32_t payload_buf_size, uint32_t *payload_len_out) {
+    // 1. Read length prefix (blocking)
+    uint32_t len_be_actual = 0;
+    int rc = read_full(fd, &len_be_actual, sizeof(len_be_actual));
+    if (rc != 0) {
+        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_blk.len.fail");
+        return rc;
+    }
+    uint32_t total = ntohl(len_be_actual);
+
+    // 2. Validate total length (min header)
+    if (total < sizeof(po_header_t)) {
+        errno = EPROTO;
+        return -1;
+    }
+
+    // 3. Read Header (blocking)
+    po_header_t net_hdr;
+    rc = read_full(fd, &net_hdr, sizeof(net_hdr));
+    if (rc != 0) {
+        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_blk.hdr.fail");
+        return rc;
+    }
+
+    *header_out = net_hdr;
+    protocol_header_to_host(header_out);
+    if (header_out->version != PROTOCOL_VERSION) {
+        errno = EPROTONOSUPPORT;
+        return -1;
+    }
+
+    // 4. Validate Payload Length
+    uint32_t payload_len = total - (uint32_t)sizeof(po_header_t);
+    if (payload_len > framing_get_max_payload()) {
+        PO_METRIC_COUNTER_INC("framing.read_blk.size.invalid");
+        errno = EMSGSIZE;
+        return -1;
+    }
+
+    if (payload_len == 0) {
+        if (payload_len_out) *payload_len_out = 0;
+        PO_METRIC_COUNTER_INC("framing.read_blk.msg");
+        return 0;
+    }
+
+    if (!payload_buf || payload_buf_size < payload_len) {
+        PO_METRIC_COUNTER_INC("framing.read_blk.buf.overflow");
+        errno = EMSGSIZE;
+        return -1;
+    }
+
+    // 5. Read Payload (blocking)
+    rc = read_full(fd, payload_buf, payload_len);
+    if (rc != 0) {
+        if (rc == -1) PO_METRIC_COUNTER_INC("framing.read_blk.payload.fail");
+        return rc;
+    }
+
+    if (payload_len_out) *payload_len_out = payload_len;
+
+    PO_METRIC_COUNTER_INC("framing.read_blk.msg");
+    PO_METRIC_COUNTER_ADD("framing.read_blk.msg.bytes", payload_len);
     return 0;
 }

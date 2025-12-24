@@ -178,6 +178,18 @@ int net_recv_message_zcp(int fd, po_header_t *header_out, void **payload_out,
  */
 int net_recv_message(int fd, po_header_t *header_out, zcp_buffer_t **payload_out) __nonnull((2, 3));
 
+/**
+ * @brief Receive the next protocol message from a blocking socket.
+ *
+ * Use this for simple blocking clients not using an event loop.
+ *
+ * @param[in] fd The blocking socket file descriptor.
+ * @param[out] header_out Pointer to po_header_t.
+ * @param[out] payload_out Pointer to zcp_buffer_t*.
+ * @return 0 on success, <0 on failure.
+ */
+int net_recv_message_blocking(int fd, po_header_t *header_out, zcp_buffer_t **payload_out) __nonnull((2, 3));
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

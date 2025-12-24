@@ -3,6 +3,8 @@
 #include <getopt.h>
 #include <postoffice/concurrency/threadpool.h>
 #include <postoffice/log/logger.h>
+#include <postoffice/metrics/metrics.h>
+#include <postoffice/net/net.h>
 #include <postoffice/perf/cache.h>
 #include <postoffice/perf/perf.h>
 #include <postoffice/random/random.h>
@@ -63,11 +65,8 @@ static void log_router(const char *line, void *udata) {
                 fflush(g_log_mgr); // Optional: flush for immediate visibility
             }
         } else {
-            if (g_log_users) {
+                if (g_log_users) {
                 fputs(line, g_log_users);
-                // g_log_users might be high volume, maybe rely on stdio buffering or explicit flush?
-                // For now, let's flush to be safe/correct
-                // fflush(g_log_users); 
             }
         }
     }
@@ -170,7 +169,18 @@ static void user_task_wrapper(void *arg) {
     user_task_arg_t *args = (user_task_arg_t *)arg;
     int slot = args->slot_idx;
 
+    // Initialize networking for this thread (refcounted)
+    if (net_init_zerocopy(32, 32, 4096) != 0) {
+        LOG_ERROR("Failed to initialize zerocopy for user task %d", args->id);
+        atomic_store(&g_users[slot].active, false);
+        atomic_fetch_sub(&g_active_count, 1);
+        free(args);
+        return;
+    }
+
     user_run(args->id, args->service_type, g_shm, &g_users[slot].should_run);
+
+    net_shutdown_zerocopy();
 
     // Cleanup
     atomic_store(&g_users[slot].active, false);
@@ -178,8 +188,6 @@ static void user_task_wrapper(void *arg) {
 
     int day, hour, min;
     get_sim_time(g_shm, &day, &hour, &min);
-    // LOG_DEBUG("[Day %d %02d:%02d] User task %d (slot %d) finished", day, hour, min, args->id,
-    // slot); // Too noisy?
 
     free(args);
 }
@@ -250,8 +258,6 @@ static void remove_user(void) {
     for (int i = 999; i >= 0; i--) {
         if (atomic_load(&g_users[i].active) && atomic_load(&g_users[i].should_run)) {
             atomic_store(&g_users[i].should_run, false);
-            // Decrease count logically here? No, let wrapper do it.
-            // But we can verify later.
             LOG_INFO("Signaled user slot %d to stop", i);
             return;
         }
@@ -337,7 +343,6 @@ static void sync_check_day(void) {
 int main(int argc, char **argv) {
     parse_args(argc, argv);
 
-    // ... (logger) ...
     // 1. Init Logger
     int level = LOG_INFO;
     char *env = getenv("PO_LOG_LEVEL");
@@ -356,6 +361,11 @@ int main(int argc, char **argv) {
     };
     if (po_logger_init(&log_cfg) != 0)
         return 1;
+
+    // Initialize Metrics (for zcpool/net counters)
+    if (po_metrics_init(0, 0, 0) != 0) {
+        LOG_WARN("Failed to initialize metrics");
+    }
 
     // 2. Open Log Files manually
     g_log_mgr = fopen("logs/users_manager.log", "w");
@@ -384,11 +394,20 @@ int main(int argc, char **argv) {
     setup_signals();
     po_rand_seed_auto();
 
+    // Initialize network pools in main thread to ensure stability
+    if (net_init_zerocopy(32, 32, 4096) != 0) {
+        LOG_FATAL("Failed to initialize zero-copy pools");
+        sim_ipc_shm_detach(g_shm);
+        po_logger_shutdown();
+        return 1;
+    }
+
     // Initialize Thread Pool
     // Size = 1000 to allow all potential users to run concurrently
     g_pool = tp_create(g_pool_size, 2000);
     if (!g_pool) {
         LOG_FATAL("Failed to create thread pool");
+        net_shutdown_zerocopy();
         sim_ipc_shm_detach(g_shm);
         po_logger_shutdown();
         return 1;
@@ -457,6 +476,7 @@ int main(int argc, char **argv) {
 
     tp_destroy(g_pool, true);
 
+    net_shutdown_zerocopy(); // Cleanup network pools
     sim_ipc_shm_detach(g_shm);
     po_logger_shutdown();
     if (g_log_mgr) fclose(g_log_mgr);

@@ -29,10 +29,6 @@ static key_t _get_ipc_key(void) {
 
     if (user_home) {
         snprintf(keypath, sizeof(keypath), "%s/.postoffice/ipc.key", user_home);
-        // Ensure dir exists (best effort without system())
-        // Assuming director created ~/.postoffice, but we can try mkdir just in case
-        // or just rely on fallback if open fails?
-        // Let's assume directory likely exists or fallback to /tmp
     } else {
         snprintf(keypath, sizeof(keypath), "/tmp/postoffice_%d_ipc.key", getuid());
     }

@@ -196,13 +196,14 @@ int main(int argc, char **argv) {
         }
     }
 
-    // ... (logger init) ...
     // 1. Initialize Logger
-    po_logger_config_t log_cfg = {.level = log_level,
-                                  .ring_capacity = 1024,
-                                  .consumers = 1,
-                                  .policy = LOGGER_OVERWRITE_OLDEST,
-                                  .cacheline_bytes = PO_CACHE_LINE_MAX};
+    po_logger_config_t log_cfg = {
+        .level = log_level,
+        .ring_capacity = 4096,
+        .consumers = 1,
+        .policy = LOGGER_OVERWRITE_OLDEST,
+        .cacheline_bytes = PO_CACHE_LINE_MAX
+    };
     if (po_logger_init(&log_cfg) != 0) {
         return 1;
     }

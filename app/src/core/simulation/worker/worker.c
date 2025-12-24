@@ -1,9 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "runtime/worker_loop.h"
-// Actually we need the constant. It's usually in simulation_protocol or ipc.
-// Let's assume SIM_MAX_SERVICE_TYPES is available via headers or defined.
-// worker_loop.h doesn't expose it. It's in ipc/simulation_protocol.h
 #include "../ipc/simulation_protocol.h"
 
 #include <stdio.h>

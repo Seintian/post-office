@@ -204,7 +204,7 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
         if (sock_fd < 0 && g_running) {
             get_sim_time(shm, &day, &hour, &min);
             LOG_ERROR("[Day %d %02d:%02d] User process failed to connect to socket %s", day, hour,
-                      min, sock_path);
+                        min, sock_path);
             break;
         }
 
@@ -214,10 +214,18 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
             break;
         }
 
+        // Set to Blocking Mode for valid net_recv_message_blocking usage
+        if (po_socket_set_blocking(sock_fd) != 0) {
+            LOG_ERROR("User %d failed to set socket to blocking mode: %s", user_id, strerror(errno));
+            po_socket_close(sock_fd);
+            break;
+        }
+
         // Set Receive Timeout to allow time for server thread pool processing
+        // Reduced to 500ms to allow faster responsiveness to shutdown signals
         struct timeval tv;
-        tv.tv_sec = 5; // 5 second timeout (thread pool may have queued tasks)
-        tv.tv_usec = 0;
+        tv.tv_sec = 0; 
+        tv.tv_usec = 500000;
         setsockopt(sock_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv);
 
         // Request Ticket with protocol header
@@ -237,13 +245,14 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
         // Receive response with protocol header
         po_header_t hdr;
         zcp_buffer_t *payload = NULL;
-        ret = net_recv_message(sock_fd, &hdr, &payload);
+        ret = net_recv_message_blocking(sock_fd, &hdr, &payload);
 
         po_socket_close(sock_fd);
 
         if (ret != 0 || !payload) {
             if (g_running) {
-                LOG_ERROR("User %d failed to receive ticket (ret=%d)", user_id, ret);
+                LOG_ERROR("User %d failed to receive ticket (ret=%d, errno=%d: %s)", 
+                        user_id, ret, errno, strerror(errno));
             }
             if (payload)
                 net_zcp_release_rx(payload);
@@ -253,7 +262,7 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
         // Validate response
         if (hdr.msg_type != MSG_TYPE_TICKET_RESP || hdr.payload_len != sizeof(msg_ticket_resp_t)) {
             LOG_ERROR("User %d received invalid response: type=%u, len=%u", 
-                     user_id, hdr.msg_type, hdr.payload_len);
+                    user_id, hdr.msg_type, hdr.payload_len);
             net_zcp_release_rx(payload);
             break;
         }
@@ -268,7 +277,7 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
         // Users should not enter queue if office is closed
         if (hour < 8 || hour >= 17) {
             LOG_DEBUG("[Day %d %02d:%02d] User %d found office closed. Waiting for opening...", day,
-                      hour, min, user_id);
+                    hour, min, user_id);
 
             // Calculate minutes to wait until 08:00
             int current_total_mins = hour * 60 + min;
@@ -287,19 +296,19 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
                 // Wait loop synchronized with Director's tick
                 int target_day = day;
                 if (hour >= 17) target_day++; 
-                
+
                 pthread_mutex_lock(&shm->time_control.mutex);
                 while (g_running) {
                     if (active_flag && !atomic_load(active_flag))
                         break;
-                        
+
                     get_sim_time(shm, &day, &hour, &min);
                     // Check if we reached 08:00 of the next/target day
                     // Simpler check: Just wait until office is open (8 <= hour < 17)
                     if (hour >= 8 && hour < 17) {
                         break;
                     }
-                    
+
                     struct timespec ts;
                     clock_gettime(CLOCK_MONOTONIC, &ts);
                     ts.tv_sec += 1;
@@ -313,13 +322,13 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
         }
 
         LOG_DEBUG("[Day %d %02d:%02d] User %d (PID %d) got ticket %u for service %d (Req %d/%d)",
-                  day, hour, min, user_id, getpid(), resp.ticket_number, resp.assigned_service,
-                  req + 1, n_requests);
+                    day, hour, min, user_id, getpid(), resp.ticket_number, resp.assigned_service,
+                    req + 1, n_requests);
 
         // Enter Queue
         // Use Mutex/Cond instead of Semaphores
         queue_status_t *q = &shm->queues[service_type];
-        
+
         atomic_fetch_add(&q->waiting_count, 1);
 
         // Push Ticket to Shared Queue
@@ -337,12 +346,12 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
         LOG_TRACE("User %d signaling cond_added for service %d", user_id, service_type);
         pthread_cond_signal(&q->cond_added);
         pthread_mutex_unlock(&q->mutex);
-        
+
         LOG_DEBUG("User %d entered queue for service %d", user_id, service_type);
 
         // Wait for Service
         bool served = false;
-        
+
         pthread_mutex_lock(&q->mutex);
         while (g_running && !served) {
             if (active_flag && !atomic_load(active_flag))
@@ -356,7 +365,7 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
                 if (current_t == resp.ticket_number) {
                     get_sim_time(shm, &day, &hour, &min);
                     LOG_DEBUG("[Day %d %02d:%02d] User %d being served by Worker %d", day, hour,
-                              min, user_id, i);
+                            min, user_id, i);
                     served = true;
                     break;
                 }
@@ -396,7 +405,7 @@ int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic boo
                 if (!still_serving) {
                     get_sim_time(shm, &day, &hour, &min);
                     LOG_DEBUG("[Day %d %02d:%02d] User %d service completed", day, hour, min,
-                              user_id);
+                            user_id);
                     break;
                 }
                 // Wait for completion signal

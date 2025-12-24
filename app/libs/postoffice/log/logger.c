@@ -502,7 +502,7 @@ int po_logger_init(const po_logger_config_t *cfg) {
         return -1;
     }
 
-    for (size_t i = 0; i < g_pool_n; i++)
+    for (size_t i = 0; i < g_pool_n - 1; i++)
         perf_ringbuf_enqueue(g_free, &g_pool[i]);
 
     g_workers = calloc(g_nworkers, sizeof(*g_workers));

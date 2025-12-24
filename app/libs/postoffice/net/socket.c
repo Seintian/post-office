@@ -58,6 +58,25 @@ int po_socket_set_nonblocking(int fd) {
     return set_cloexec_nonblock(fd);
 }
 
+int po_socket_set_blocking(int fd) {
+    if (fd < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+#ifdef O_NONBLOCK
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0)
+        return -1;
+
+    // Clear O_NONBLOCK
+    if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) < 0)
+        return -1;
+#endif
+
+    return 0;
+}
+
 int po_socket_set_common_options(int fd, int enable_nodelay, int reuseaddr, int keepalive) {
     if (fd < 0) {
         errno = EINVAL;

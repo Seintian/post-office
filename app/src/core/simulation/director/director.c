@@ -439,13 +439,14 @@ int main(int argc, char **argv) {
     sim_ipc_shm_destroy();
 
     // Initialize Simulation IPC (Shared Memory)
+    if (g_n_workers == 0) g_n_workers = 10; // Default
     g_shm = sim_ipc_shm_create(g_n_workers);
     if (!g_shm) {
         LOG_FATAL("Failed to create shared memory: %s", strerror(errno));
         // Cleanup resources
         if (g_child_pids)
             po_vector_destroy(g_child_pids);
-        net_shutdown_zerocopy(); // Added this line
+        net_shutdown_zerocopy();
         po_logger_shutdown();
         exit(EXIT_FAILURE);
     }
@@ -604,8 +605,6 @@ int main(int argc, char **argv) {
     // LOG_INFO("Director started (PID: %d), Sim Time: Day %d %02d:%02d", getpid(), day, hour, min);
 
     // 7. Main Loop (Manage Time)
-    // We need 1 thread/process updating time?
-    // Director IS the timekeeper.
 
     // Set active
     atomic_store(&g_shm->time_control.sim_active, true);
@@ -720,6 +719,8 @@ int main(int argc, char **argv) {
     }
 
     po_vector_destroy(g_child_pids);
+    
+    net_shutdown_zerocopy();
 
     if (g_shm) {
         sim_ipc_shm_detach(g_shm);

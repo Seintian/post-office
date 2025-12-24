@@ -135,6 +135,14 @@ void po_socket_close(int fd);
 int po_socket_set_nonblocking(int fd);
 
 /**
+ * @brief Sets a file descriptor to blocking mode (clears O_NONBLOCK).
+ *
+ * @param[in] fd File descriptor.
+ * @return 0 on success, -1 on error.
+ */
+int po_socket_set_blocking(int fd);
+
+/**
  * @brief Set common socket options (TCP_NODELAY, REUSEADDR, KEEPALIVE).
  *
  * This helper is a convenience wrapper that sets several recommended options

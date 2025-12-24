@@ -12,12 +12,16 @@
 #include "utils/errors.h"
 #include "metrics/metrics.h"
 
+// Include pthread
+#include <pthread.h>
+
 struct perf_zcpool {
     void *base; // start of mapped region
     size_t buf_size;
     size_t buf_count;
     po_perf_ringbuf_t *freeq; // ring buffer of free pointers
     perf_zcpool_flags_t flags;
+    pthread_mutex_t lock;
 };
 
 size_t perf_zcpool_bufsize(const perf_zcpool_t *pool) {
@@ -61,25 +65,47 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size, perf_zcpool
     // AND even then, the pool call usually implies the ring call.
     // However, if we enable both, we get double metrics for enqueue/dequeue vs acquire/release.
     // Let's NOT enable metrics on the internal ringbuf to keep it cleaner.
-    p->freeq = perf_ringbuf_create(buf_count, PERF_RINGBUF_NOFLAGS);
+    // Use buf_count + 1 to ensure we can hold all buf_count items (ringbuf full is N-1)
+    p->freeq = perf_ringbuf_create(buf_count * 2, PERF_RINGBUF_NOFLAGS);
     if (!p->freeq) {
         munmap(base, aligned);
         free(p);
         return NULL;
     }
 
+    // Initialize mutex
+    if (pthread_mutex_init(&p->lock, NULL) != 0) {
+        perf_ringbuf_destroy(&p->freeq);
+        munmap(base, aligned);
+        free(p);
+        return NULL;
+    }
+
     // Populate free list with each buffer pointer
+    int enqueue_fails = 0;
     for (size_t i = 0; i < buf_count; i++) {
         void *ptr = (char *)base + i * buf_size;
-        perf_ringbuf_enqueue(p->freeq, ptr);
+        if (perf_ringbuf_enqueue(p->freeq, ptr) != 0) {
+            enqueue_fails++;
+        }
+    }
+    
+    if (enqueue_fails > 0 || perf_ringbuf_count(p->freeq) != buf_count) {
+        // Use standard stderr, hoping it's captured or visible
+        fprintf(stderr, "zcpool_create: enqueued %zu/%zu buffers. Fails: %d\n", 
+                perf_ringbuf_count(p->freeq), buf_count, enqueue_fails);
+    } else {
+        // Log success too for now
+        fprintf(stderr, "zcpool_create: successfully created pool with %zu buffers\n", buf_count);
     }
 
     if (flags & PERF_ZCPOOL_METRICS) {
         PO_METRIC_COUNTER_CREATE("zcpool.create");
-        PO_METRIC_COUNTER_INC("zcpool.create");
+        PO_METRIC_COUNTER_CREATE("zcpool.destroy");
         PO_METRIC_COUNTER_CREATE("zcpool.acquire");
         PO_METRIC_COUNTER_CREATE("zcpool.release");
         PO_METRIC_COUNTER_CREATE("zcpool.exhausted");
+        PO_METRIC_COUNTER_INC("zcpool.create");
     }
 
     return p;
@@ -93,6 +119,8 @@ void perf_zcpool_destroy(perf_zcpool_t **p) {
 
     if (pool->flags & PERF_ZCPOOL_METRICS)
         PO_METRIC_COUNTER_INC("zcpool.destroy");
+
+    pthread_mutex_destroy(&pool->lock);
 
     // free ring and unmap region
     if (pool->freeq)
@@ -115,13 +143,16 @@ void *perf_zcpool_acquire(perf_zcpool_t *p) {
         return NULL;
     }
 
+    pthread_mutex_lock(&p->lock);
     void *buf = NULL;
     if (perf_ringbuf_dequeue(p->freeq, &buf) < 0) {
+        pthread_mutex_unlock(&p->lock);
         if (p->flags & PERF_ZCPOOL_METRICS)
             PO_METRIC_COUNTER_INC("zcpool.exhausted");
-        errno = EAGAIN;  // Use standard EAGAIN instead of ZCP_EAGAIN
+        errno = EAGAIN;
         return NULL;
     }
+    pthread_mutex_unlock(&p->lock);
 
     if (p->flags & PERF_ZCPOOL_METRICS)
         PO_METRIC_COUNTER_INC("zcpool.acquire");
@@ -142,15 +173,16 @@ void perf_zcpool_release(perf_zcpool_t *p, void *buffer) {
     if (ptr < start || ptr >= end || ((ptr - start) % p->buf_size) != 0)
         return;
 
-    // Optionally check buffer in range [base, base+count*size)
+    pthread_mutex_lock(&p->lock);
     perf_ringbuf_enqueue(p->freeq, buffer);
+    pthread_mutex_unlock(&p->lock);
 
     if (p->flags & PERF_ZCPOOL_METRICS)
         PO_METRIC_COUNTER_INC("zcpool.release");
 }
 
 size_t perf_zcpool_freecount(const perf_zcpool_t *p) {
-    if (!p->freeq) {
+    if (!p || !p->freeq) {
         errno = EINVAL;
         return 0;
     }

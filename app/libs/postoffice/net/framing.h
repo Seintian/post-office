@@ -114,6 +114,22 @@ int framing_write_zcp(int fd, const po_header_t *header, const zcp_buffer_t *pay
 int framing_read_msg_into(int fd, po_header_t *header_out, void *payload_buf,
                           uint32_t payload_buf_size, uint32_t *payload_len_out) __nonnull((2));
 
+/**
+ * @brief Read a message from a blocking socket (blocks until full message arrived).
+ *
+ * Use this variant for blocking clients (like the User process) that do not use
+ * an event loop.
+ *
+ * @param fd Blocking socket file descriptor.
+ * @param header_out Copied from framing_read_msg_into.
+ * @param payload_buf Copied from framing_read_msg_into.
+ * @param payload_buf_size Copied from framing_read_msg_into.
+ * @param payload_len_out Copied from framing_read_msg_into.
+ * @return 0 on success, -1 on error, -2 on EOF.
+ */
+int framing_read_msg_blocking(int fd, po_header_t *header_out, void *payload_buf,
+                              uint32_t payload_buf_size, uint32_t *payload_len_out) __nonnull((2));
+
 #ifdef __cplusplus
 }
 #endif
