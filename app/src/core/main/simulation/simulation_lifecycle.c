@@ -18,11 +18,14 @@ const char* g_simulation_config_path = NULL;
 static pid_t g_director_pid = -1;
 static volatile sig_atomic_t g_running = 0;
 
-void simulation_init(const char* config_path) {
+// Header would need updating too, but assuming header is internal or we update it next
+// Wait, I should update the header too. But for now I'll rename definitions here.
+
+void initialize_simulation_configuration(const char* config_path) {
     g_simulation_config_path = config_path; // Assumes config_path lifetime is managed by caller (main args)
 }
 
-void simulation_start(bool tui_mode, int loglevel) {
+void launch_simulation_process(bool tui_mode, int loglevel) {
     if (g_director_pid > 0) return; // Already running
 
     LOG_INFO("Starting simulation (Director)...");
@@ -47,9 +50,6 @@ void simulation_start(bool tui_mode, int loglevel) {
 
     // Pass loglevel
     // Convert int level back to string for argument (Director expects string)
-    // We can use a helper or just map it if po_logger doesn't have int->str public API
-    // Actually po_logger_level_from_str reverse is not exposed public usually?
-    // Let's implement a quick map or check logger.h
     const char* lvl_str = "INFO";
     switch (loglevel) {
         case 0: lvl_str = "TRACE"; break;
@@ -88,7 +88,7 @@ void simulation_start(bool tui_mode, int loglevel) {
     }
 }
 
-void simulation_stop(void) {
+void terminate_simulation_process(void) {
     if (g_director_pid > 0) {
         LOG_INFO("Stopping Director (PID: %d)...", g_director_pid);
         kill(g_director_pid, SIGTERM);
@@ -110,8 +110,8 @@ static void handle_signal(int sig) {
     g_running = 0;
 }
 
-void simulation_run_headless(void) {
-    simulation_start(false, (int)po_logger_get_level());
+void execute_simulation_headless_mode(void) {
+    launch_simulation_process(false, (int)po_logger_get_level());
     if (g_director_pid <= 0) return;
 
     g_running = 1;
@@ -150,5 +150,5 @@ void simulation_run_headless(void) {
         sleep(1); 
     }
 
-    simulation_stop();
+    terminate_simulation_process();
 }

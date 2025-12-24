@@ -1,8 +1,17 @@
+/**
+ * @file worker.c
+ * @brief Worker Process Entry Point.
+ * 
+ * This program acts as a launcher for worker threads. It parses configuration
+ * and spawns the required number of worker threads to service user requests.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include "runtime/worker_loop.h"
 #include "../ipc/simulation_protocol.h"
 
+#include <postoffice/log/logger.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,33 +19,25 @@
 #include <getopt.h>
 
 typedef struct {
-    int id;
+    int worker_id;
     int service_type;
-} worker_thread_arg_t;
+    sim_shm_t *shm;
+} worker_thread_context_t;
 
 /**
- * @brief Thread entry point for worker logic.
- * @param[in] arg Pointer to worker_thread_arg_t (takes ownership).
- * @return NULL.
+ * @brief Thread entry point for an individual worker.
  */
-static void* worker_thread_entry(void* arg) {
-    worker_thread_arg_t* args = (worker_thread_arg_t*)arg;
-    worker_run(args->id, args->service_type);
-    free(args);
+static void* execute_worker_thread(void* arg) {
+    worker_thread_context_t* ctx = (worker_thread_context_t*)arg;
+    run_worker_service_loop(ctx->worker_id, ctx->service_type, ctx->shm);
+    free(ctx);
     return NULL;
 }
 
 /**
- * @brief Worker process entry point.
- * @param[in] argc Arg count.
- * @param[in] argv Arg vector.
- * @return 0 on success, >0 on failure.
+ * @brief Parses command line arguments for the worker process.
  */
-int main(int argc, char** argv) {
-    int worker_id = -1;
-    int service_type = -1;
-    int n_workers = 0;
-
+static void parse_cli_args(int argc, char** argv, int* worker_id, int* service_type, int* n_workers) {
     int opt;
     while ((opt = getopt(argc, argv, "l:i:s:w:")) != -1) {
         char *endptr;
@@ -47,58 +48,74 @@ int main(int argc, char** argv) {
                 break;
             case 'i': 
                 val = strtol(optarg, &endptr, 10);
-                if (*endptr == '\0' && val >= 0) worker_id = (int)val;
+                if (*endptr == '\0' && val >= 0) *worker_id = (int)val;
                 break;
             case 's': 
                 val = strtol(optarg, &endptr, 10);
-                if (*endptr == '\0' && val >= 0) service_type = (int)val;
+                if (*endptr == '\0' && val >= 0) *service_type = (int)val;
                 break;
             case 'w':
                 val = strtol(optarg, &endptr, 10);
-                if (*endptr == '\0' && val > 0) n_workers = (int)val;
+                if (*endptr == '\0' && val > 0) *n_workers = (int)val;
                 break;
             default: break;
         }
     }
+}
 
-    // Initialize Global Resources (Shared Memory, Semaphores, Logger)
-    if (worker_global_init() != 0) {
-        fprintf(stderr, "Failed to initialize worker globals\n");
+int main(int argc, char** argv) {
+    int worker_id = -1;
+    int service_type = -1;
+    int n_workers = 0;
+
+    parse_cli_args(argc, argv, &worker_id, &service_type, &n_workers);
+
+    // 1. Initialize Runtime Environment
+    sim_shm_t *shm = initialize_worker_runtime();
+    if (!shm) {
+        LOG_ERROR("Failed to initialize worker runtime environment");
         return 1;
     }
 
+    // 2. Spawn Workers
     if (n_workers > 0) {
-        // Multi-threaded mode
+        // Multi-threaded Mode
         pthread_t* threads = malloc(sizeof(pthread_t) * (size_t)n_workers);
-        if (!threads) return 1;
+        if (!threads) {
+            LOG_ERROR("Failed to allocate thread handles");
+            teardown_worker_runtime(shm);
+            return 1;
+        }
 
-        printf("Spawning %d worker threads...\n", n_workers); // stdout for supervisor info
+        LOG_INFO("Launching %d worker threads...", n_workers);
 
         for (int i = 0; i < n_workers; i++) {
-            worker_thread_arg_t* arg = malloc(sizeof(worker_thread_arg_t));
-            arg->id = i;
-            arg->service_type = i % SIM_MAX_SERVICE_TYPES; // Round robin assignment
+            worker_thread_context_t* ctx = malloc(sizeof(worker_thread_context_t));
+            ctx->worker_id = i;
+            ctx->service_type = i % SIM_MAX_SERVICE_TYPES; // Round-robin assignment
+            ctx->shm = shm;
             
-            if (pthread_create(&threads[i], NULL, worker_thread_entry, arg) != 0) {
-                perror("pthread_create");
+            if (pthread_create(&threads[i], NULL, execute_worker_thread, ctx) != 0) {
+                LOG_ERROR("pthread_create failed for worker %d", i);
             }
         }
 
-        // Wait for all
+        // Wait for completion
         for (int i = 0; i < n_workers; i++) {
             pthread_join(threads[i], NULL);
         }
         free(threads);
 
     } else if (worker_id != -1 && service_type != -1) {
-        // Single mode (legacy compatibility)
-        worker_run(worker_id, service_type);
+        // Single-process Mode (Legacy/Debug)
+        run_worker_service_loop(worker_id, service_type, shm);
     } else {
-        fprintf(stderr, "Usage: %s -w <n_workers> OR -i <id> -s <type>\n", argv[0]);
-        worker_global_cleanup();
+        LOG_ERROR("Usage: %s -w <n_workers> OR -i <id> -s <type>", argv[0]);
+        teardown_worker_runtime(shm);
         return 1;
     }
 
-    worker_global_cleanup();
+    // 3. Cleanup
+    teardown_worker_runtime(shm);
     return 0;
 }

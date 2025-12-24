@@ -722,7 +722,10 @@ int po_perf_report(FILE *out) {
     size_t nc = atomic_load(&ctx.shm->num_counters);
     if (nc > 0) {
         print_line(out, "-- Counters --");
-        shm_counter_t *local_c = malloc(nc * sizeof(shm_counter_t));
+        // Use aligned_alloc for aligned shm_counter_t structures
+        size_t counter_size = nc * sizeof(shm_counter_t);
+        size_t aligned_size = (counter_size + 127) & ~(size_t)127;
+        shm_counter_t *local_c = (shm_counter_t *)aligned_alloc(128, aligned_size);
         if (!local_c) {
             print_line(out, "-- Counters -- (allocation failed)");
         } else {
@@ -762,7 +765,9 @@ int po_perf_report(FILE *out) {
     size_t nh = atomic_load(&ctx.shm->num_histograms);
     if (nh > 0) {
         print_line(out, "-- Histograms --");
-        shm_histogram_t *local_h = malloc(nh * sizeof(shm_histogram_t));
+        size_t hist_size = nh * sizeof(shm_histogram_t);
+        size_t aligned_size = (hist_size + 127) & ~(size_t)127;
+        shm_histogram_t *local_h = (shm_histogram_t *)aligned_alloc(128, aligned_size);
         if (!local_h) {
             print_line(out, "-- Histograms -- (allocation failed)");
         } else {

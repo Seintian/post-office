@@ -56,9 +56,11 @@ typedef enum po_logger_overflow_policy {
 } po_logger_overflow_policy_t;
 
 /** Sink types that can be configured */
-#define LOGGER_SINK_CONSOLE (1u << 0) /**< Log to console (stderr by default) */
+#define LOGGER_SINK_CONSOLE (1u << 0) /**< Log to console (deprecated alias for STDERR) */
 #define LOGGER_SINK_FILE (1u << 1)    /**< Log to file */
 #define LOGGER_SINK_SYSLOG (1u << 2)  /**< Log to syslog */
+#define LOGGER_SINK_STDOUT (1u << 3)  /**< Log to stdout */
+#define LOGGER_SINK_STDERR (1u << 4)  /**< Log to stderr */
 
 /** Compile-time default level (can be overridden with -DLOGGER_COMPILE_LEVEL=N) */
 #ifndef LOGGER_COMPILE_LEVEL
@@ -173,6 +175,19 @@ int po_logger_add_sink_console(bool use_stderr);
 int po_logger_add_sink_file(const char *path, bool append);
 
 /**
+ * @brief Add file output as a categorized log sink.
+ * 
+ * Similar to po_logger_add_sink_file but only records messages matching the category mask.
+ * 
+ * @param[in] path Path to the log file.
+ * @param[in] append If true, append to the file.
+ * @param[in] category_mask Bitmask of categories to accept (e.g., (1u << category)).
+ *                          If 0, accepts ALL categories (behaves like po_logger_add_sink_file).
+ * @return 0 on success, -1 on error.
+ */
+int po_logger_add_sink_file_categorized(const char *path, bool append, uint32_t category_mask);
+
+/**
  * @brief Add syslog as a log sink.
  *
  * @param[in] ident Identity string for syslog messages (Nullable).
@@ -195,6 +210,15 @@ int po_logger_add_sink_syslog(const char *ident);
  * @note Thread-safe: No (Ideally call during initialization).
  */
 int po_logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *udata);
+
+/**
+ * @brief Set the log category for the current thread.
+ * 
+ * All subsequent log messages from this thread will be tagged with this category.
+ * 
+ * @param[in] category Category ID (0-31 recommended for mask support).
+ */
+void po_logger_set_thread_category(uint32_t category);
 
 // Fast-path check to determine if a message at the given level would be logged.
 static inline bool logger_would_log(po_log_level_t level) {

@@ -14,7 +14,7 @@ extern const char* g_simulation_config_path;
  * @param[in] config_path Path to the configuration file (optional, may be NULL).
  * @note Thread-safe: No (called from main).
  */
-void simulation_init(const char* config_path);
+void initialize_simulation_configuration(const char* config_path);
 
 /**
  * @brief Start the simulation processes (Director, etc.).
@@ -23,20 +23,20 @@ void simulation_init(const char* config_path);
  * @param[in] loglevel Log level to pass to the Director.
  * @note Thread-safe: No.
  */
-void simulation_start(bool tui_mode, int loglevel);
+void launch_simulation_process(bool tui_mode, int loglevel);
 
 /**
  * @brief Stop the simulation processes.
  * Uses SIGTERM and waits for Director to exit.
  * @note Thread-safe: No.
  */
-void simulation_stop(void);
+void terminate_simulation_process(void);
 
 /**
  * @brief Run the simulation in headless mode (blocks until signal).
  * Handles signal trapping and cleanup.
  * @note Thread-safe: No.
  */
-void simulation_run_headless(void);
+void execute_simulation_headless_mode(void);
 
 #endif // SIMULATION_LIFECYCLE_H

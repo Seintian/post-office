@@ -47,6 +47,7 @@ typedef struct log_record {
     struct timespec ts; // high-res timestamp
     uint64_t tid;       // thread id
     uint8_t level;      // logger_level_t
+    uint32_t category;  // thread category
     char file[64];      // truncated
     char func[32];      // truncated
     int line;
@@ -59,6 +60,12 @@ typedef struct custom_sink {
     struct custom_sink *next;
 } custom_sink_t;
 
+typedef struct file_sink {
+    FILE *fp;
+    uint32_t mask;
+    struct file_sink *next;
+} file_sink_t;
+
 // Ring and worker state
 static po_perf_ringbuf_t *g_ring = NULL;    // queue of ready records
 static po_perf_ringbuf_t *g_free = NULL;    // freelist of available records
@@ -67,9 +74,9 @@ static pthread_t *g_workers = NULL;
 static unsigned g_nworkers = 0;
 static po_logger_overflow_policy_t g_policy = LOGGER_OVERWRITE_OLDEST;
 static unsigned int g_sinks_mask = 0u;
-static FILE *g_fp = NULL; // file sink
-static bool g_console_stderr = true;
+static file_sink_t *g_file_sinks = NULL;
 static _Atomic int g_running = 0;
+static __thread uint32_t _po_logger_thread_category = 0;
 static _Atomic unsigned long g_dropped_new = 0;
 static _Atomic unsigned long g_overwritten_old = 0;
 static _Atomic unsigned long g_processed = 0;
@@ -340,13 +347,20 @@ static void write_record(const log_record_t *r) {
     char line[MAX_RECORD_SIZE];
     record_format_line(r, line, sizeof(line));
 
-    if (g_sinks_mask & LOGGER_SINK_CONSOLE) {
-        FILE *out = g_console_stderr ? stderr : stdout;
-        fputs(line, out);
+    if (g_sinks_mask & (LOGGER_SINK_CONSOLE | LOGGER_SINK_STDERR)) {
+        ssize_t res = write(STDERR_FILENO, line, strlen(line));
+        (void)res;
+    }
+    if (g_sinks_mask & LOGGER_SINK_STDOUT) {
+        ssize_t res = write(STDOUT_FILENO, line, strlen(line));
+        (void)res;
     }
 
-    if ((g_sinks_mask & LOGGER_SINK_FILE) && g_fp)
-        fputs(line, g_fp);
+    for (file_sink_t *fs = g_file_sinks; fs; fs = fs->next) {
+        if (fs->mask == 0 || (fs->mask & (1u << r->category))) {
+            fputs(line, fs->fp);
+        }
+    }
 
     if ((g_sinks_mask & LOGGER_SINK_SYSLOG) && g_syslog_open)
         syslog(
@@ -410,9 +424,10 @@ static void *worker_main(void *arg) {
             recycle_record(r);
         }
 
-        // Batch processed, flush file sink if active
-        if ((g_sinks_mask & LOGGER_SINK_FILE) && g_fp)
-            fflush(g_fp);
+        // Batch processed, flush file sinks if active
+        for (file_sink_t *fs = g_file_sinks; fs; fs = fs->next) {
+            fflush(fs->fp);
+        }
     }
 
     // Drain all remaining records from the ringbuf directly.
@@ -433,8 +448,9 @@ static void *worker_main(void *arg) {
     }
 
     // Final flush
-    if ((g_sinks_mask & LOGGER_SINK_FILE) && g_fp)
-        fflush(g_fp);
+    for (file_sink_t *fs = g_file_sinks; fs; fs = fs->next) {
+        fflush(fs->fp);
+    }
 
     free(batch);
     return NULL;
@@ -455,10 +471,14 @@ int po_logger_init(const po_logger_config_t *cfg) {
     g_nworkers = cfg->consumers ? cfg->consumers : 1;
 
     g_sinks_mask = 0u; // reset sinks and counters
-    if (g_fp)
-        fclose(g_fp);
-
-    g_fp = NULL;
+    file_sink_t *fs = g_file_sinks;
+    while (fs) {
+        file_sink_t *next = fs->next;
+        if (fs->fp) fclose(fs->fp);
+        free(fs);
+        fs = next;
+    }
+    g_file_sinks = NULL;
     atomic_store_explicit(&g_dropped_new, 0ul, memory_order_relaxed);
     atomic_store_explicit(&g_overwritten_old, 0ul, memory_order_relaxed);
 
@@ -557,10 +577,16 @@ void po_logger_shutdown(void) {
     g_pool = NULL;
     g_pool_n = 0;
 
-    if (g_fp) {
-        fflush(g_fp);
-        fclose(g_fp);
-        g_fp = NULL;
+    if (g_file_sinks) {
+        file_sink_t *fsur = g_file_sinks;
+        while (fsur) {
+            file_sink_t *next = fsur->next;
+            fflush(fsur->fp);
+            fclose(fsur->fp);
+            free(fsur);
+            fsur = next;
+        }
+        g_file_sinks = NULL;
     }
     if (g_syslog_open) {
         closelog();
@@ -596,12 +622,19 @@ po_log_level_t po_logger_get_level(void) {
 }
 
 int po_logger_add_sink_console(bool use_stderr) {
-    g_sinks_mask |= LOGGER_SINK_CONSOLE;
-    g_console_stderr = use_stderr;
+    if (use_stderr) {
+        g_sinks_mask |= LOGGER_SINK_STDERR;
+    } else {
+        g_sinks_mask |= LOGGER_SINK_STDOUT;
+    }
     return 0;
 }
 
 int po_logger_add_sink_file(const char *path, bool append) {
+    return po_logger_add_sink_file_categorized(path, append, 0u);
+}
+
+int po_logger_add_sink_file_categorized(const char *path, bool append, uint32_t category_mask) {
     // Attempt to create parent directories
     char *dir = strdup(path);
     if (dir) {
@@ -619,7 +652,16 @@ int po_logger_add_sink_file(const char *path, bool append) {
     if (!fp)
         return -1;
 
-    g_fp = fp;
+    file_sink_t *sink = malloc(sizeof(file_sink_t));
+    if (!sink) {
+        fclose(fp);
+        return -1;
+    }
+    sink->fp = fp;
+    sink->mask = category_mask;
+    sink->next = g_file_sinks;
+    g_file_sinks = sink;
+
     g_sinks_mask |= LOGGER_SINK_FILE;
     return 0;
 }
@@ -652,6 +694,10 @@ int po_logger_add_sink_custom(void (*fn)(const char *line, void *udata), void *u
     c->next = g_custom_sinks;
     g_custom_sinks = c;
     return 0;
+}
+
+void po_logger_set_thread_category(uint32_t category) {
+    _po_logger_thread_category = category;
 }
 
 /**
@@ -722,6 +768,7 @@ static inline void fill_overflow_notice(log_record_t *rec, unsigned long dropped
     clock_gettime(CLOCK_REALTIME, &rec->ts);
     rec->tid = get_tid();
     rec->level = (uint8_t)LOG_ERROR;
+    rec->category = 0;
     rec->line = 0;
     rec->file[0] = '\0';
     strncpy(rec->func, "logger", sizeof(rec->func) - 1);
@@ -735,6 +782,38 @@ static inline void fill_overflow_notice(log_record_t *rec, unsigned long dropped
 
 void po_logger_logv(po_log_level_t level, const char *file, int line, const char *func,
                     const char *fmt, va_list ap) {
+    // 1. FATAL Handling (Synchronous Crash Path)
+    if (level == LOG_FATAL) {
+        log_record_t r;
+        clock_gettime(CLOCK_REALTIME, &r.ts);
+        r.tid = get_tid();
+        r.level = (uint8_t)level;
+        r.category = _po_logger_thread_category;
+        r.line = line;
+        
+        // Populate file/func
+        if (file) {
+            size_t n = strnlen(file, sizeof(r.file) - 1);
+            memcpy(r.file, file + (n >= sizeof(r.file) ? n - (sizeof(r.file) - 1) : 0),
+                   n >= sizeof(r.file) ? sizeof(r.file) - 1 : n);
+            r.file[sizeof(r.file) - 1] = '\0';
+        } else r.file[0] = '\0';
+
+        if (func) {
+            strncpy(r.func, func, sizeof(r.func) - 1);
+            r.func[sizeof(r.func) - 1] = '\0';
+        } else r.func[0] = '\0';
+
+        // Format message
+        vsnprintf(r.msg, sizeof(r.msg), fmt, ap);
+
+        // Synchronous write to ensure valid output before crash
+        write_record(&r);
+
+        // Bye
+        abort();
+    }
+
     if (!g_ring)
         return; // not initialized yet
 
@@ -762,6 +841,7 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
     clock_gettime(CLOCK_REALTIME, &r->ts);
     r->tid = get_tid();
     r->level = (uint8_t)level;
+    r->category = _po_logger_thread_category;
     r->line = line;
 
     if (file) {

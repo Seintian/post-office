@@ -6,22 +6,27 @@
 #include "../../ipc/simulation_protocol.h"
 
 /**
- * Initialize standalone user process resources (logger, metrics, shm).
+ * @brief Initialize standalone user process runtime (logger, metrics, shm).
+ * @param[out] out_shm Double pointer to receive the attached Shared Memory address.
+ * @return 0 on success, non-zero on failure.
  */
-int user_standalone_init(sim_shm_t **out_shm);
+int initialize_user_runtime(sim_shm_t **out_shm);
 
 /**
- * Cleanup standalone user process resources.
+ * @brief Teardown user process runtime.
+ * @param[in] shm Pointer to shared memory to detach.
  */
-void user_standalone_cleanup(sim_shm_t *shm);
+void teardown_user_runtime(sim_shm_t *shm);
 
 /**
- * Run the user loop.
- * @param user_id Unique ID for this user.
- * @param service_type Service type the user needs.
- * @param shm Pointer to attached shared memory.
- * @param active_flag Optional flag to monitor for cancellation.
+ * @brief Executes the simulation loop for a single user agent.
+ * 
+ * @param user_id The unique ID of the user.
+ * @param service_type The service this user is seeking.
+ * @param shm Pointer to shared memory.
+ * @param should_continue_flag Optional atomic flag to control loop execution from external threads.
+ * @return 0 on success, non-zero on termination/error.
  */
-int user_run(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic bool *active_flag);
+int run_user_simulation_loop(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic bool *should_continue_flag);
 
 #endif

@@ -11,8 +11,8 @@ TEST_SETUP(ZEROCOPY) {
     // create a pool of 4 buffers, each 1024 bytes
     pool = perf_zcpool_create(4, 1024, PERF_ZCPOOL_NOFLAGS);
     TEST_ASSERT_NOT_NULL(pool);
-    // ring of 4 can only hold 3 entries → freecount == 3
-    TEST_ASSERT_EQUAL_UINT(3, perf_zcpool_freecount(pool));
+    // Pool of 4 now holds 4 entries (full capacity)
+    TEST_ASSERT_EQUAL_UINT(4, perf_zcpool_freecount(pool));
 }
 
 TEST_TEAR_DOWN(ZEROCOPY) {
@@ -35,12 +35,12 @@ TEST(ZEROCOPY, INVALID_CREATE) {
 
 TEST(ZEROCOPY, ACQUIRE_RELEASE_BASIC) {
     void *bufs[4];
-    // Only 3 buffers can actually be acquired
-    for (int i = 0; i < 3; i++) {
+    // All 4 buffers can actually be acquired
+    for (int i = 0; i < 4; i++) {
         bufs[i] = perf_zcpool_acquire(pool);
         TEST_ASSERT_NOT_NULL(bufs[i]);
-        // after i+1 acquisitions, freecount == 3 - (i+1)
-        TEST_ASSERT_EQUAL_UINT(3 - (i + 1), perf_zcpool_freecount(pool));
+        // after i+1 acquisitions, freecount == 4 - (i+1)
+        TEST_ASSERT_EQUAL_UINT(4 - (i + 1), perf_zcpool_freecount(pool));
         memset(bufs[i], i, 1024);
     }
 
@@ -58,6 +58,9 @@ TEST(ZEROCOPY, ACQUIRE_RELEASE_BASIC) {
 
     perf_zcpool_release(pool, bufs[1]);
     TEST_ASSERT_EQUAL_UINT(3, perf_zcpool_freecount(pool));
+
+    perf_zcpool_release(pool, bufs[3]);
+    TEST_ASSERT_EQUAL_UINT(4, perf_zcpool_freecount(pool));
 }
 
 TEST(ZEROCOPY, BUFFER_DISTINCTNESS) {
@@ -80,8 +83,8 @@ TEST(ZEROCOPY, RELEASE_INVALID) {
     // releasing NULL or foreign ptr should not crash
     int x;
     perf_zcpool_release(pool, &x);
-    // freecount remains at 3
-    TEST_ASSERT_EQUAL_UINT(3, perf_zcpool_freecount(pool));
+    // freecount remains at 4
+    TEST_ASSERT_EQUAL_UINT(4, perf_zcpool_freecount(pool));
 }
 
 TEST_GROUP_RUNNER(ZEROCOPY) {

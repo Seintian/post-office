@@ -58,7 +58,7 @@ static key_t _get_ipc_key(void) {
 /* --- Public API --- */
 
 sim_shm_t *sim_ipc_shm_create(size_t n_workers) {
-    LOG_INFO("sim_ipc_shm_create() - Creating SHM: %s with %zu workers", SIM_SHM_NAME, n_workers);
+    LOG_INFO("sim_ipc_shm_create() [PID %d] - Creating SHM: %s with %zu workers", getpid(), SIM_SHM_NAME, n_workers);
 
     const int max_retries = 3;
     int retry_count = 0;

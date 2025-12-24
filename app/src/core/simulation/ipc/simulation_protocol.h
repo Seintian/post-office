@@ -69,6 +69,7 @@ _Static_assert(sizeof(worker_status_t) % PO_CACHE_LINE_MAX == 0, "worker_status_
 typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) queue_status_s {
     atomic_uint waiting_count; // Users currently in queue
     atomic_uint total_served;  // Cumulative users served
+    atomic_uint last_finished_ticket; // Most recently completed ticket
 
     // Synchronization for this queue
     pthread_mutex_t mutex;

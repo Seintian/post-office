@@ -11,6 +11,7 @@
 #include "perf/ringbuf.h"
 #include "utils/errors.h"
 #include "metrics/metrics.h"
+#include <postoffice/log/logger.h>
 
 // Include pthread
 #include <pthread.h>
@@ -91,12 +92,10 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size, perf_zcpool
     }
     
     if (enqueue_fails > 0 || perf_ringbuf_count(p->freeq) != buf_count) {
-        // Use standard stderr, hoping it's captured or visible
-        fprintf(stderr, "zcpool_create: enqueued %zu/%zu buffers. Fails: %d\n", 
-                perf_ringbuf_count(p->freeq), buf_count, enqueue_fails);
+        LOG_ERROR("zcpool_create: enqueued %zu/%zu buffers. Fails: %d", 
+            perf_ringbuf_count(p->freeq), buf_count, enqueue_fails);
     } else {
-        // Log success too for now
-        fprintf(stderr, "zcpool_create: successfully created pool with %zu buffers\n", buf_count);
+        LOG_DEBUG("zcpool_create: successfully created pool with %zu buffers", buf_count);
     }
 
     if (flags & PERF_ZCPOOL_METRICS) {

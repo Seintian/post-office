@@ -175,7 +175,7 @@ static unsigned long str_hash(const void *p) {
 
 TEST(APP, METRICS_AND_PUBLIC_APIS_SMOKE) {
     // Metrics require perf already initialized by group setup.
-    TEST_ASSERT_EQUAL_INT(0, po_metrics_init());
+    TEST_ASSERT_EQUAL_INT(0, po_metrics_init(0, 0, 0));
     // Create & use several metric types via macros.
     PO_METRIC_COUNTER_INC("app.test.counter");
     PO_METRIC_COUNTER_ADD("app.test.counter.bytes", 128);

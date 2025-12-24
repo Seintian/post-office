@@ -34,7 +34,7 @@ TEST_SETUP(METRIC_CACHING) {
     
     // Initialize with sufficient capacity
     TEST_ASSERT_EQUAL_INT(0, po_perf_init(128, 32, 16));
-    TEST_ASSERT_EQUAL_INT(0, po_metrics_init());
+    TEST_ASSERT_EQUAL_INT(0, po_metrics_init(0, 0, 0));
     
     atomic_store(&g_expected_total, 0);
 }
