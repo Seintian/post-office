@@ -22,6 +22,7 @@ typedef struct {
     int worker_id;
     int service_type;
     sim_shm_t *shm;
+    worker_sync_t *sync_ctx;
 } worker_thread_context_t;
 
 /**
@@ -29,7 +30,7 @@ typedef struct {
  */
 static void* execute_worker_thread(void* arg) {
     worker_thread_context_t* ctx = (worker_thread_context_t*)arg;
-    run_worker_service_loop(ctx->worker_id, ctx->service_type, ctx->shm);
+    run_worker_service_loop(ctx->worker_id, ctx->service_type, ctx->shm, ctx->sync_ctx);
     free(ctx);
     return NULL;
 }
@@ -87,6 +88,12 @@ int main(int argc, char** argv) {
             return 1;
         }
 
+        // Initialize Synchronization Context
+        worker_sync_t sync_ctx;
+        pthread_barrier_init(&sync_ctx.barrier, NULL, (unsigned)n_workers);
+        sync_ctx.current_day = 0;
+        sync_ctx.shutdown_signal = 0;
+
         LOG_INFO("Launching %d worker threads...", n_workers);
 
         for (int i = 0; i < n_workers; i++) {
@@ -94,7 +101,8 @@ int main(int argc, char** argv) {
             ctx->worker_id = i;
             ctx->service_type = i % SIM_MAX_SERVICE_TYPES; // Round-robin assignment
             ctx->shm = shm;
-            
+            ctx->sync_ctx = &sync_ctx; // Pass reference
+
             if (pthread_create(&threads[i], NULL, execute_worker_thread, ctx) != 0) {
                 LOG_ERROR("pthread_create failed for worker %d", i);
             }
@@ -105,10 +113,18 @@ int main(int argc, char** argv) {
             pthread_join(threads[i], NULL);
         }
         free(threads);
+        pthread_barrier_destroy(&sync_ctx.barrier);
 
     } else if (worker_id != -1 && service_type != -1) {
         // Single-process Mode (Legacy/Debug)
-        run_worker_service_loop(worker_id, service_type, shm);
+        // Create dummy sync context for single-process fallback
+        worker_sync_t sync_ctx;
+        pthread_barrier_init(&sync_ctx.barrier, NULL, 1); 
+        sync_ctx.current_day = 0;
+        sync_ctx.shutdown_signal = 0;
+
+        run_worker_service_loop(worker_id, service_type, shm, &sync_ctx);
+        pthread_barrier_destroy(&sync_ctx.barrier);
     } else {
         LOG_ERROR("Usage: %s -w <n_workers> OR -i <id> -s <type>", argv[0]);
         teardown_worker_runtime(shm);

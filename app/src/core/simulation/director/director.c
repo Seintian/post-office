@@ -57,19 +57,17 @@ int main(int argc, char *argv[]) {
     }
 
     // 5. Signals
-    struct sigaction sa;
-    sa.sa_sigaction = handle_signal;
-    sa.sa_flags = SA_SIGINFO;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGTERM, &sa, NULL);
-    sigaction(SIGINT, &sa, NULL);
+    if (sigutil_setup(handle_signal, SIGUTIL_HANDLE_TERMINATING_ONLY, 0) != 0) {
+        LOG_FATAL("Failed to setup signals");
+        return 1;
+    }
 
     // 6. Launch
     initialize_process_orchestrator();
     spawn_simulation_subsystems(&cfg);
 
     // 7. Clock Loop
-    execute_simulation_clock_loop(shm, &g_running);
+    execute_simulation_clock_loop(shm, &g_running, cfg.initial_users);
 
     // 8. Shutdown
     LOG_INFO("Director shutting down...");

@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
         .consumers = 1
     }) != 0) return 1;
     po_logger_add_sink_file("logs/ticket_issuer.log", false);
-    po_logger_add_sink_console(false);
+    // po_logger_add_sink_console(false);
 
     sim_shm_t *shm = sim_ipc_shm_attach();
     if (!shm) return 1;
@@ -113,11 +113,11 @@ int main(int argc, char *argv[]) {
         // Accept connections during simulation time (non-blocking poll)
         int n = poller_wait(poller, ev, 32, 100);
         poll_count++;
-        
+
         if (poll_count <= 100 || poll_count % 100 == 0) {
-            LOG_DEBUG("Ticket Issuer: Poll #%d returned %d events", poll_count, n);
+            LOG_TRACE("Ticket Issuer: Poll #%d returned %d events", poll_count, n);
         }
-        
+
         if (n < 0 && errno != EINTR) break;
 
         for (int i=0; i<n; i++) {

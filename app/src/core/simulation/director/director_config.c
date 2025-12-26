@@ -135,9 +135,10 @@ void apply_configuration_to_shared_memory(director_config_t *cfg, sim_shm_t *shm
     // Write worker count (already resolved)
     shm->params.n_workers = cfg->worker_count;
     
-    // Barrier synchronization: Workers (threads) + Users Manager + Ticket Issuer
-    atomic_store(&shm->sync.required_count, cfg->worker_count + 2);
+    // Barrier synchronization: 1 Worker Process + Users Manager + Ticket Issuer
+    // We treat the Worker Process as a single participant representing all threads.
+    atomic_store(&shm->sync.required_count, 1 + 2);
 
     LOG_INFO("Config Applied to SHM: Workers=%u, (Sync Req=%u), Duration=%u days", 
-        cfg->worker_count, cfg->worker_count + 2, shm->params.sim_duration_days);
+        cfg->worker_count, 3, shm->params.sim_duration_days);
 }

@@ -11,6 +11,7 @@
 #include <spawn.h>
 #include <string.h>
 #include <postoffice/log/logger.h>
+#include <utils/signals.h>
 
 extern char **environ;
 
@@ -105,8 +106,8 @@ void terminate_simulation_process(void) {
  * @brief Signal handler for headless mode.
  * @param[in] sig Signal number.
  */
-static void handle_signal(int sig) {
-    (void)sig;
+static void handle_signal(int sig, siginfo_t* info, void* ctx) {
+    (void)sig; (void)info; (void)ctx;
     g_running = 0;
 }
 
@@ -116,14 +117,11 @@ void execute_simulation_headless_mode(void) {
 
     g_running = 1;
 
-    struct sigaction sa;
-    sa.sa_handler = handle_signal;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-
-    // Trap SIGINT and SIGTERM to clean up child process
-    sigaction(SIGINT, &sa, NULL);
-    sigaction(SIGTERM, &sa, NULL);
+    if (sigutil_setup(handle_signal, SIGUTIL_HANDLE_TERMINATING_ONLY, 0) != 0) {
+        LOG_ERROR("Failed to setup signals for headless mode");
+        terminate_simulation_process();
+        return;
+    }
 
     LOG_INFO("Running in headless mode. Press Ctrl+C to stop.");
 

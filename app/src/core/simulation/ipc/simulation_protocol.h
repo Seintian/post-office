@@ -95,7 +95,7 @@ typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) global_stats_s {
     atomic_uint total_tickets_issued;
     atomic_uint total_services_completed;
     atomic_uint total_users_spawned;
-    // Add more granular stats here
+    atomic_uint connected_users; // Users currently attached to SHM
 } global_stats_t;
 _Static_assert(sizeof(global_stats_t) % PO_CACHE_LINE_MAX == 0, "global_stats_t size mismatch");
 
@@ -124,7 +124,7 @@ typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) sim_time_s {
     atomic_uint_least64_t packed_time;
     atomic_int elapsed_nanos; // Accumulator for minute steps
     atomic_bool sim_active;   // Global run flag
-    
+
     // Time Synchronization
     pthread_mutex_t mutex;
     pthread_cond_t cond_tick;

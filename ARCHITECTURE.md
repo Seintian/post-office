@@ -47,28 +47,56 @@ Shutdown guarantees: best-effort flush of logstore & metrics; late user/worker e
 
 ---
 
-## 3. Subsystem Map
+## 3. Component Layering (Rings)
+
+The codebase is organized into strict abstraction layers ("rings") to manage dependencies and stability:
+
+### Ring 0: Foundations (Stable/No-Deps)
+*Dependencies: None*
+- **Vector**: Dynamic arrays.
+- **Prime**: Math helpers.
+- **Random**: Thread-safe PRNG.
+- **Thirdparty**: Vendored libs (`inih`, `libfort`, `lmdb`, `log_c`, `unity`).
+
+### Ring 1: Core Utilities
+*Dependencies: Ring 0*
+- **Hashtable/Hashset**: Generic containers.
+- **Sysinfo**: System capability probes.
+- **Concurrency**: Atomics and threading primitives.
+
+### Ring 2: Instrumentation
+*Dependencies: Ring 0-1*
+- **Metrics**: High-level instrumentation facade.
+- **Log**: Structured logging system.
+- **Perf Core**: Basic performance types.
+
+### Ring 3: Storage & Resilience
+*Dependencies: Ring 0-2*
+- **Storage**: Append-only logs + LMDB indexing.
+- **Backtrace**: Crash handling and stack unwinding.
+- **Perf Zerocopy**: Memory management for high-perf I/O.
+
+### Ring 4: Application Logic
+*Dependencies: Ring 0-3*
+- **Net**: Networking stack (sockets, polling, framing).
+- **TUI**: Text User Interface components.
+
+---
+
+## 4. Subsystem Map
 
 ```text
-+------------------+        +--------------------+        +-----------------+
-|  Processes       |        |  Subsystems        |        | External Inputs |
-| (multi-proc)     |        | (libs/postoffice)  |        | / System State  |
-+------------------+        +--------------------+        +-----------------+
-| director         |<-----> | net (socket,       | <----> | OS: sockets,    |
-| workers (N)      |        |       poller,      |        | epoll, filesys, |
-| users (M)        |        |       framing)     |        | procfs, sysfs   |
-| users_manager    |        | storage (logstore, |        | LMDB env files  |
-| ticket_issuer    |        |          db_lmdb,  |        |                 |
-| dashboard/main   |        |          index)    |        |                 |
-+------------------+        | perf (ringbuf,     |        +-----------------+
-                            |       batcher)     |
-                            | metrics (facade)   |
-                            | sysinfo            |
-                            | log (logger)       |
-                            | utils (argv,       |
-                            |        configs,    |
-                            |        random...)  |
-                            +--------------------+
++------------------+        +-------------------------+        +-----------------+
+|  Processes       |        |  Rings (libs/postoffice)|        | External Inputs |
+| (multi-proc)     |        |                         |        | / System State  |
++------------------+        +-------------------------+        +-----------------+
+| director         |<-----> | Ring 4: Net, TUI        | <----> | OS: sockets,    |
+| workers (N)      |        | Ring 3: Storage, Crash  |        | epoll, filesys  |
+| users (M)        |        | Ring 2: Metrics, Log    |        |                 |
+| users_manager    |        | Ring 1: Core Utils      |        | LMDB env files  |
+| ticket_issuer    |        | Ring 0: Foundations     |        |                 |
+| dashboard/main   |        +-------------------------+        +-----------------+
++------------------+
 ```
 
 ---

@@ -22,9 +22,23 @@ void worker_job_simulate(int worker_id, int service_type, uint32_t ticket, sim_s
     unsigned int duration_ms = (unsigned int)po_rand_range_i64(100, 500); 
 
     // We should ideally sleep in simulation time, but for real-time factor scaling:
-    // If tick is 2.5ms, then 100ms is 40 ticks.
-    // Let's usleep for now to simulate CPU work.
-    usleep(duration_ms * 1000);
+    if (shm->params.tick_nanos > 0) {
+        // Sleep in 10ms chunks to allow interruption
+        unsigned int slept_ms = 0;
+        while (slept_ms < duration_ms) {
+            usleep(10000);
+            slept_ms += 10;
+            
+            // Periodically check if office closed
+            if (slept_ms % 50 == 0) {
+                sim_client_read_time(shm, &d, &h, &m);
+                if (h >= 17) {
+                    LOG_WARN("Worker %d interrupted by Office Close (Serving Ticket #%u)", worker_id, ticket);
+                    break;
+                }
+            }
+        }
+    }
 
     // LOG_DEBUG("Worker %d performing service (%u ms)", worker_id, duration_ms);
 

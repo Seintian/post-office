@@ -60,13 +60,17 @@ int initialize_user_runtime(sim_shm_t **out_shm) {
     }
 
     sim_client_setup_signals(on_sig);
+    atomic_fetch_add(&((*out_shm)->stats.connected_users), 1);
     po_rand_seed_auto();
     return 0;
 }
 
 void teardown_user_runtime(sim_shm_t *shm) {
+    if (shm) {
+        atomic_fetch_sub(&shm->stats.connected_users, 1);
+        sim_ipc_shm_detach(shm);
+    }
     net_shutdown_zerocopy();
-    if (shm) sim_ipc_shm_detach(shm);
     po_logger_shutdown();
 }
 
@@ -100,7 +104,7 @@ static bool obtain_ticket(sim_shm_t *shm, int service_type,
 
     if (ret != 0 || !p || h.msg_type != MSG_TYPE_TICKET_RESP) {
         if (p) net_zcp_release_rx(p);
-        LOG_WARN("User failed to receive valid Ticket Response (ret=%d, type=%d)", ret, h.msg_type);
+        LOG_WARN("User failed to receive valid Ticket Response (ret=%d, type=0x%02X)", ret, h.msg_type);
         return false;
     }
 
@@ -119,7 +123,7 @@ static void wait_for_office(int user_id, sim_shm_t *shm, volatile _Atomic bool *
     while (should_continue && atomic_load(should_continue) && !g_proc_shutdown) {
         sim_client_read_time(shm, &d, &h, &m);
         if (h >= 8 && h < 17) break;
-        
+
         if (h != last_logged_hour) {
             LOG_DEBUG("User %d Waiting for Office (Time: %02d:%02d)", user_id, h, m);
             last_logged_hour = h;
@@ -129,7 +133,7 @@ static void wait_for_office(int user_id, sim_shm_t *shm, volatile _Atomic bool *
         clock_gettime(CLOCK_MONOTONIC, &ts);
         ts.tv_nsec += 100000000; 
         if (ts.tv_nsec >= 1000000000) { ts.tv_sec++; ts.tv_nsec -= 1000000000; }
-        
+
         pthread_cond_timedwait(&shm->time_control.cond_tick, &shm->time_control.mutex, &ts);
     }
     pthread_mutex_unlock(&shm->time_control.mutex);
@@ -167,11 +171,19 @@ static bool wait_service(int user_id, uint32_t ticket, int service, sim_shm_t *s
             break;
         }
 
+        // Check for Office Closing (Kickout)
+        sim_client_read_time(shm, &d, &h, &m);
+        if (h >= 17) {
+            LOG_WARN("[Day %d %02d:%02d] User %d Kicked out (Office Closed).", d, h, m, user_id);
+            done = false; 
+            break; 
+        }
+
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
         ts.tv_nsec += 100000000; 
         if (ts.tv_nsec >= 1000000000) { ts.tv_sec++; ts.tv_nsec -= 1000000000; }
-        
+
         pthread_cond_timedwait(&q->cond_served, &q->mutex, &ts);
     }
     pthread_mutex_unlock(&q->mutex);
@@ -190,7 +202,7 @@ int run_user_simulation_loop(int user_id, int service_type, sim_shm_t *shm, vola
 
     for (int i=0; i<count; i++) {
         LOG_DEBUG("User %d starting request iteration %d", user_id, i);
-        
+
         if (should_continue_flag && !atomic_load(should_continue_flag)) {
             LOG_INFO("User %d exiting: should_continue_flag is FALSE", user_id);
             break;
@@ -200,28 +212,39 @@ int run_user_simulation_loop(int user_id, int service_type, sim_shm_t *shm, vola
             break;
         }
 
-        if (i > 0) usleep(200000); 
+        if (i > 0 && shm->params.tick_nanos > 0) usleep(200000); 
 
+        // 1. Wait for Office Hours (08:00 - 17:00)
+        // If closed, this blocks until 08:00 the next day.
+        wait_for_office(user_id, shm, should_continue_flag);
+        
+        int hr,mn;
+         sim_client_read_time(shm, &d, &hr, &mn);
+        LOG_INFO("User %d Entering Office (Hour: %d)", user_id, hr);
+
+        // 2. Obtain Ticket
         uint32_t t = 0;
         LOG_DEBUG("User %d attempting to obtain ticket", user_id);
+
+        // NOTE: obtain_ticket could fail if we are disconnected or issuer is busy
+        // Also if we are at 16:59, we might get a ticket and then get kicked out.
         if (!obtain_ticket(shm, service_type, should_continue_flag, &t)) {
-            LOG_WARN("User %d failed to obtain ticket, retrying after sleep", user_id);
-            usleep(100000); // 100ms throttle
+            LOG_WARN("User %d failed to obtain ticket, retrying/skipping", user_id);
+            usleep(100000); 
             continue;
         }
 
         LOG_INFO("User %d obtained ticket #%u (Service Type: %d)", user_id, t, service_type);
-        
-        wait_for_office(user_id, shm, should_continue_flag);
-        LOG_INFO("User %d Entering Office (Hour: %d)", user_id, (int)((atomic_load(&shm->time_control.packed_time) >> 8) & 0xFF));
-        
+
+        // 3. Join Queue
         join_queue(user_id, service_type, t, shm);
         LOG_DEBUG("User %d Joined Queue %d [Ticket #%u]", user_id, service_type, t);
-        
+
+        // 4. Wait Service
         if (wait_service(user_id, t, service_type, shm, should_continue_flag)) {
-             LOG_INFO("User %d Service Complete [Ticket #%u]", user_id, t);
+            LOG_INFO("User %d Service Complete [Ticket #%u]", user_id, t);
         } else {
-             LOG_ERROR("User %d Service Interrupted/Failed [Ticket #%u]", user_id, t);
+            LOG_ERROR("User %d Service Interrupted/Failed [Ticket #%u]", user_id, t);
         }
     }
     LOG_INFO("User %d simulation loop complete", user_id);

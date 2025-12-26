@@ -8,7 +8,7 @@
 #include "spawn/users_spawn.h"
 #include "ipc/sim_client.h"
 #include "ipc/simulation_ipc.h"
-#include "utils/configs.h"
+#include "utils/signals.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,8 +68,8 @@ int main(int argc, char *argv[]) {
         .consumers = 1
     });
     po_logger_add_sink_file_categorized("logs/users_manager.log", false, 1u << 0);
-    po_logger_add_sink_file_categorized("logs/user.log", false, 1u << 1);
-    po_logger_add_sink_console(false);
+    po_logger_add_sink_file_categorized("logs/users.log", false, 1u << 1);
+    // po_logger_add_sink_console(false);
     po_logger_set_thread_category(0); // Manager category
 
     // 3. SHM
@@ -80,13 +80,11 @@ int main(int argc, char *argv[]) {
     sim_client_setup_signals(on_signal);
 
     // Custom signals for scaling
-    struct sigaction sa;
-    sa.sa_flags = SA_SIGINFO;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_sigaction = on_scale_up;
-    sigaction(SIGUSR1, &sa, NULL);
-    sa.sa_sigaction = on_scale_down;
-    sigaction(SIGUSR2, &sa, NULL);
+    if (sigutil_handle(SIGUSR1, on_scale_up, 0) != 0 || 
+        sigutil_handle(SIGUSR2, on_scale_down, 0) != 0) {
+        LOG_FATAL("Failed to setup custom signals");
+        return 1;
+    }
 
     users_spawn_init((size_t)pool_size);
 
@@ -99,6 +97,16 @@ int main(int argc, char *argv[]) {
 
     int last_day = 0;
 
+    // Pre-spawn initial users to avoid deadlock with Director (which waits for users before starting clock)
+    if (g_target_population > 0) {
+        LOG_INFO("Pre-Spawning initial %d users...", g_target_population);
+        for (int k = 0; k < g_target_population; k++) {
+            if (users_spawn_new(shm) != 0) {
+                LOG_WARN("Failed to spawn initial user %d/%d", k + 1, g_target_population);
+            }
+        }
+    }
+
     while (!g_shutdown_requested) {
         // Wait for Day Start
         sim_client_wait_barrier(shm, &last_day, &g_shutdown_requested);
@@ -109,19 +117,19 @@ int main(int argc, char *argv[]) {
         if (current_pop < g_target_population) {
             int needed = g_target_population - current_pop;
             if (needed > batch) needed = batch; // ramp up slowly
-            
+
             LOG_INFO("Population Control: Spawning %d users (Current: %d, Target: %d)", needed, current_pop, g_target_population);
-            
+
             for (int k=0; k<needed; k++) {
                 if (users_spawn_new(shm) != 0) {
-                   LOG_WARN("Failed to spawn user %d/%d in batch", k+1, needed);
+                    LOG_WARN("Failed to spawn user %d/%d in batch", k+1, needed);
                 }
             }
         } else if (current_pop > g_target_population) {
             int remove = current_pop - g_target_population;
-            
+
             LOG_INFO("Population Control: Reducing %d users (Current: %d, Target: %d)", remove, current_pop, g_target_population);
-            
+
             for (int k=0; k<remove; k++) {
                 users_spawn_stop_random();
             }

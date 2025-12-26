@@ -22,6 +22,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <string.h>
+#include <utils/signals.h>
 
 // Internal state
 static struct {
@@ -55,8 +56,8 @@ static struct {
 } g_global_handler = { NULL, NULL };
 
 // Signal handler for resize
-static void handle_winch(int sig) {
-    (void)sig;
+static void handle_winch(int sig, siginfo_t* info, void* context) {
+    (void)sig; (void)info; (void)context;
     endwin();
     refresh();
     
@@ -101,10 +102,10 @@ bool tui_init(void) {
     printf("%s\n", TUI_ANSI_MOUSE_TRACKING_ENABLE); // Enable mouse movement reporting
 
     // Signal handlers
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = handle_winch;
-    sigaction(SIGWINCH, &sa, NULL);
+    if (sigutil_handle(SIGWINCH, handle_winch, 0) != 0) {
+        endwin();
+        return false;
+    }
 
     // Initialize perf resources with metrics enabled
     g_tui.event_q = perf_ringbuf_create(256, PERF_RINGBUF_METRICS);

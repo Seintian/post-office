@@ -24,7 +24,7 @@ void synchronize_simulation_barrier(sim_shm_t *shm, int day, volatile sig_atomic
     }
 
     uint32_t req = atomic_load(&shm->sync.required_count);
-    LOG_INFO("Synchronizing Day %d (Waiting for %u processes)...", day, req);
+    LOG_DEBUG("Synchronizing Day %d (Waiting for %u participants)...", day, req);
 
     struct timespec ts;
     while (*running_flag) {
@@ -41,10 +41,21 @@ void synchronize_simulation_barrier(sim_shm_t *shm, int day, volatile sig_atomic
     pthread_cond_broadcast(&shm->sync.cond_day_start);
     pthread_mutex_unlock(&shm->sync.mutex);
 
-    LOG_INFO("Day %d Synchronized.", day);
+    LOG_DEBUG("Day %d Synchronized.", day);
 }
 
-void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *running_flag) {
+void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *running_flag, int expected_users) {
+    if (expected_users > 0) {
+        LOG_INFO("Waiting for %d users to connect...", expected_users);
+        while (*running_flag) {
+            unsigned int current = atomic_load(&shm->stats.connected_users);
+            if (current >= (unsigned int)expected_users) break;
+            usleep(10000); // 10ms poll
+        }
+        LOG_INFO("All expected users connected (%u/%d). Starting.", 
+        atomic_load(&shm->stats.connected_users), expected_users);
+    }
+
     int day = 1;
     int hour = 0; 
     int minute = 0;
@@ -61,13 +72,33 @@ void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *runnin
         atomic_store(&shm->time_control.packed_time, packed);
         pthread_cond_broadcast(&shm->time_control.cond_tick);
         pthread_mutex_unlock(&shm->time_control.mutex);
-        
+
         LOG_TRACE("Tick: Day %d %02d:%02d", day, hour, minute);
 
         // Wait
         uint64_t sleep = shm->params.tick_nanos / 1000;
-        if (sleep < 1000) sleep=1000;
-        usleep((useconds_t)sleep);
+        if (sleep > 0) usleep((useconds_t)sleep);
+
+        // Check for Opening Time (08:00)
+        if (hour == 8 && minute == 0) {
+            LOG_INFO("Office Opening (08:00)");
+        }
+
+        // Check for Closing Time (17:00)
+        if (hour == 17 && minute == 0) {
+            LOG_INFO("Office Closing (17:00) - Interrupting all active work/queues.");
+            for (int i=0; i<SIM_MAX_SERVICE_TYPES; i++) {
+                // Determine how many waiting
+                unsigned int waiting = atomic_load(&shm->queues[i].waiting_count);
+                if (waiting > 0) {
+                    LOG_DEBUG("Flushing Queue %d (%u users waiting)", i, waiting);
+                    // Wake all users waiting on cond_served -> they will check time >= 17 and leave
+                    pthread_mutex_lock(&shm->queues[i].mutex);
+                    pthread_cond_broadcast(&shm->queues[i].cond_served);
+                    pthread_mutex_unlock(&shm->queues[i].mutex);
+                }
+            }
+        }
 
         // Advance
         minute++;

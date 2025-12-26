@@ -22,8 +22,17 @@ void teardown_worker_runtime(sim_shm_t *shm);
  * @param worker_id The unique identifier for this worker instance (0 to N-1).
  * @param service_type The type of service this worker provides.
  * @param shm Pointer to shm.
+ * @param sync_barrier Pointer to a pthread barrier for synchronization.
  * @return EXIT_SUCCESS or EXIT_FAILURE.
  */
-int run_worker_service_loop(int worker_id, int service_type, sim_shm_t *shm);
+#include <pthread.h>
+
+typedef struct {
+    pthread_barrier_t barrier;
+    volatile int current_day;
+    volatile int shutdown_signal;
+} worker_sync_t;
+
+int run_worker_service_loop(int worker_id, int service_type, sim_shm_t *shm, worker_sync_t *sync_ctx);
 
 #endif

@@ -792,13 +792,15 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
         r.level = (uint8_t)level;
         r.category = _po_logger_thread_category;
         r.line = line;
-        
+
         // Populate file/func
         if (file) {
-            size_t n = strnlen(file, sizeof(r.file) - 1);
-            memcpy(r.file, file + (n >= sizeof(r.file) ? n - (sizeof(r.file) - 1) : 0),
-                   n >= sizeof(r.file) ? sizeof(r.file) - 1 : n);
-            r.file[sizeof(r.file) - 1] = '\0';
+            size_t len = strlen(file);
+            size_t cap = sizeof(r.file);
+            size_t n = (len >= cap) ? (cap - 1) : len;
+            const char *src = (len >= cap) ? (file + len - n) : file;
+            memcpy(r.file, src, n);
+            r.file[n] = '\0';
         } else r.file[0] = '\0';
 
         if (func) {
@@ -847,13 +849,12 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
     r->line = line;
 
     if (file) {
-        size_t n = strnlen(file, sizeof(r->file) - 1);
-        memcpy(
-            r->file,
-            file + (n >= sizeof(r->file) ? n - (sizeof(r->file) - 1) : 0),
-            n >= sizeof(r->file) ? sizeof(r->file) - 1 : n
-        );
-        r->file[sizeof(r->file) - 1] = '\0';
+        size_t len = strlen(file);
+        size_t cap = sizeof(r->file);
+        size_t n = (len >= cap) ? (cap - 1) : len;
+        const char *src = (len >= cap) ? (file + len - n) : file;
+        memcpy(r->file, src, n);
+        r->file[n] = '\0';
     } else
         r->file[0] = '\0';
 

@@ -39,9 +39,13 @@ static void execute_user_simulation(void *arg) {
     // Categorize this thread's logs
     po_logger_set_thread_category(1); // User category
 
+    atomic_fetch_add(&ctx->shm->stats.connected_users, 1);
+
     // Run simulation loop using the shared SHM mapping from the manager
     run_user_simulation_loop(ctx->user_id, ctx->service_type, ctx->shm, 
         &g_user_slots[slot_idx].should_continue_running);
+    
+    atomic_fetch_sub(&ctx->shm->stats.connected_users, 1);
 
     atomic_store(&g_user_slots[slot_idx].is_occupied, false);
     atomic_fetch_sub(&g_current_population_count, 1);

@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 #include <signal.h>
 #include <pthread.h>
+#include <stdbool.h>
 
 #include <postoffice/log/logger.h>
 #include <postoffice/net/socket.h>
@@ -73,54 +74,59 @@ void sim_client_read_time(sim_shm_t *shm, int *day, int *hour, int *minute) {
     *minute = packed & 0xFF;
 }
 
-void sim_client_wait_barrier(sim_shm_t *shm, int *last_synced_day, volatile sig_atomic_t *g_running) {
-    if (!shm || !g_running) return;
+void sim_client_wait_barrier(sim_shm_t *shm, int *last_synced_day, volatile sig_atomic_t *g_shutdown_flag) {
+    if (!shm || !g_shutdown_flag) return;
 
-    while (!*g_running && atomic_load(&shm->sync.barrier_active)) {
+    while (!*g_shutdown_flag) {
         unsigned int barrier_day = atomic_load(&shm->sync.day_seq);
+
+        // Check if we need to sync for a new day
         if ((int)barrier_day > *last_synced_day) {
-            // Signal readiness
-            atomic_fetch_add(&shm->sync.ready_count, 1);
-            *last_synced_day = (int)barrier_day;
-
-            // Notify Director we are ready
-            pthread_mutex_lock(&shm->sync.mutex);
-            pthread_cond_signal(&shm->sync.cond_workers_ready);
-
-            // Wait for release
-            struct timespec ts;
-            while (!*g_running && atomic_load(&shm->sync.barrier_active) &&
-                atomic_load(&shm->sync.day_seq) == barrier_day) {
-
-                clock_gettime(CLOCK_MONOTONIC, &ts);
-                ts.tv_sec += 1; 
-                pthread_cond_timedwait(&shm->sync.cond_day_start, &shm->sync.mutex, &ts);
+            int retries = 0;
+            while (!*g_shutdown_flag && !atomic_load(&shm->sync.barrier_active)) {
+                usleep(1000); // 1ms wait
+                if (++retries > 5000) { // 5s timeout safety
+                    LOG_WARN("Waiting for barrier activation for Day %u...", barrier_day);
+                    retries = 0;
+                }
             }
-            pthread_mutex_unlock(&shm->sync.mutex);
-            break; // Finished this barrier
-        } else {
-            // Barrier active but we already joined or it's old day
+            if (*g_shutdown_flag) return;
+
+            // Join the Barrier
             pthread_mutex_lock(&shm->sync.mutex);
-            if (!*g_running && atomic_load(&shm->sync.barrier_active)) {
+
+            // Verify active again under lock (though it's atomic)
+            if (atomic_load(&shm->sync.barrier_active)) {
+                atomic_fetch_add(&shm->sync.ready_count, 1);
+                pthread_cond_signal(&shm->sync.cond_workers_ready);
+
+                // Update local state
+                *last_synced_day = (int)barrier_day;
+
+                // Wait for Release
                 struct timespec ts;
-                clock_gettime(CLOCK_MONOTONIC, &ts);
-                ts.tv_nsec += 50000000; // 50ms
-                if(ts.tv_nsec >= 1000000000) { ts.tv_sec++; ts.tv_nsec -= 1000000000; }
-                pthread_cond_timedwait(&shm->sync.cond_day_start, &shm->sync.mutex, &ts);
+                while (!*g_shutdown_flag && atomic_load(&shm->sync.barrier_active)) {
+                    clock_gettime(CLOCK_MONOTONIC, &ts);
+                    ts.tv_sec += 1; 
+                    pthread_cond_timedwait(&shm->sync.cond_day_start, &shm->sync.mutex, &ts);
+                }
             }
             pthread_mutex_unlock(&shm->sync.mutex);
-            if (!atomic_load(&shm->sync.barrier_active)) break; 
+            return; // Synced!
         }
+
+        // No new day yet, or barrier not relevant.
+        // Wait a bit to avoid busy spin.
+        // We can wait on condition variables if we expect a wake-up.
+        usleep(5000); // 5ms poll
     }
 }
 
 // --- Signals ---
 
 void sim_client_setup_signals(void (*handler)(int, siginfo_t*, void*)) {
-    struct sigaction sa;
-    sa.sa_sigaction = handler;
-    sa.sa_flags = SA_SIGINFO;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGTERM, &sa, NULL);
-    sigaction(SIGINT, &sa, NULL);
+    if (sigutil_setup(handler, SIGUTIL_HANDLE_TERMINATING_ONLY, 0) != 0) {
+        LOG_FATAL("Failed to setup signals");
+        exit(1);
+    }
 }

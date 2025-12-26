@@ -86,14 +86,14 @@ void app_log_system_info(bool is_tui) {
     (void)is_tui;
     po_sysinfo_t sysinfo;
     if (po_sysinfo_collect(&sysinfo) == 0) {
-        LOG_INFO("=== System Information ===");
-        LOG_INFO("Logical Processors: %ld", sysinfo.logical_processors);
-        LOG_INFO("Total RAM: %.2f GB", (double)sysinfo.total_ram / (1024.0 * 1024.0 * 1024.0));
-        LOG_INFO("Hostname: %s", sysinfo.hostname);
-        LOG_INFO("CPU Model: %s", sysinfo.cpu_brand);
-        LOG_INFO("Page Size: %ld bytes", sysinfo.page_size);
-        LOG_INFO("Max Open Files: %lu", sysinfo.max_open_files);
-        LOG_INFO("=========================");
+        LOG_DEBUG("=== System Information ===");
+        LOG_DEBUG("Logical Processors: %ld", sysinfo.logical_processors);
+        LOG_DEBUG("Total RAM: %.2f GB", (double)sysinfo.total_ram / (1024.0 * 1024.0 * 1024.0));
+        LOG_DEBUG("Hostname: %s", sysinfo.hostname);
+        LOG_DEBUG("CPU Model: %s", sysinfo.cpu_brand);
+        LOG_DEBUG("Page Size: %ld bytes", sysinfo.page_size);
+        LOG_DEBUG("Max Open Files: %lu", sysinfo.max_open_files);
+        LOG_DEBUG("=========================");
     }
 }
 

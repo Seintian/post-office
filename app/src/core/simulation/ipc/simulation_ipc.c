@@ -58,7 +58,7 @@ static key_t _get_ipc_key(void) {
 /* --- Public API --- */
 
 sim_shm_t *sim_ipc_shm_create(size_t n_workers) {
-    LOG_INFO("sim_ipc_shm_create() [PID %d] - Creating SHM: %s with %zu workers", getpid(), SIM_SHM_NAME, n_workers);
+    LOG_DEBUG("sim_ipc_shm_create() [PID %d] - Creating SHM: %s with %zu workers", getpid(), SIM_SHM_NAME, n_workers);
 
     const int max_retries = 3;
     int retry_count = 0;
@@ -149,7 +149,7 @@ sim_shm_t *sim_ipc_shm_create(size_t n_workers) {
         pthread_condattr_destroy(&cattr);
 
         close(shm_fd);
-        LOG_INFO("sim_ipc_shm_create() - SHM Created at %p (size: %zu)", ptr, total_size);
+        LOG_DEBUG("sim_ipc_shm_create() - SHM Created at %p (size: %zu)", ptr, total_size);
         return shm;
     }
 
@@ -158,7 +158,7 @@ sim_shm_t *sim_ipc_shm_create(size_t n_workers) {
 }
 
 sim_shm_t *sim_ipc_shm_attach(void) {
-    LOG_INFO("sim_ipc_shm_attach() - Attaching to SHM: %s", SIM_SHM_NAME);
+    LOG_DEBUG("sim_ipc_shm_attach() - Attaching to SHM: %s", SIM_SHM_NAME);
 
     int shm_fd = shm_open(SIM_SHM_NAME, O_RDWR, 0666);
     if (shm_fd == -1) {
@@ -198,7 +198,7 @@ sim_shm_t *sim_ipc_shm_attach(void) {
                  total_size, expected, shm->params.n_workers);
     }
 
-    LOG_INFO("sim_ipc_shm_attach() - Attached at %p (n_workers=%u)", ptr, shm->params.n_workers);
+    LOG_DEBUG("sim_ipc_shm_attach() - Attached at %p (n_workers=%u)", ptr, shm->params.n_workers);
     return shm;
 }
 

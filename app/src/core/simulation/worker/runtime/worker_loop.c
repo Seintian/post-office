@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdatomic.h>
 #include <pthread.h>
+#include <sched.h>
 
 static volatile sig_atomic_t g_shutdown = 0;
 static void on_sig(int s, siginfo_t* i, void* c) { (void)s; (void)i; (void)c; g_shutdown = 1; }
@@ -38,17 +39,13 @@ sim_shm_t* initialize_worker_runtime(void) {
         .ring_capacity = 256, .consumers=1, .cacheline_bytes=cache
     });
     po_logger_add_sink_file("logs/workers.log", true);
-    po_logger_add_sink_console(true);
+    // po_logger_add_sink_console(false);
 
     sim_shm_t *shm = sim_ipc_shm_attach();
     if (!shm) {
         LOG_FATAL("Worker failed to attach to Shared Memory! Cannot continue.");
         return NULL; // Should not reach here due to abort
     }
-
-    // Net init needed? Worker logic doesn't use sockets, only SHM.
-    // Unless we use net utils for something else.
-    // Safe to skip net_init if we don't communicate via sockets.
 
     sim_client_setup_signals(on_sig);
     po_rand_seed_auto();
@@ -76,6 +73,15 @@ static uint32_t retrieve_next_ticket(int service, sim_shm_t *shm) {
         unsigned int tail = atomic_load(&q->tail);
 
         if (head != tail) {
+            // Check hours first
+            int d,h,m;
+            sim_client_read_time(shm, &d, &h, &m);
+            if (h >= 17) {
+                // Office closed, do not pick up new tickets.
+                pthread_mutex_unlock(&q->mutex);
+                return 0;
+            }
+
             // Something in queue
             unsigned int idx = head % 128;
             uint32_t ticket = atomic_load(&q->tickets[idx]);
@@ -104,13 +110,37 @@ static uint32_t retrieve_next_ticket(int service, sim_shm_t *shm) {
     return 0;
 }
 
-int run_worker_service_loop(int worker_id, int service_type, sim_shm_t *shm) {
-    if(!shm) return 1;
+int run_worker_service_loop(int worker_id, int service_type, sim_shm_t *shm, worker_sync_t *sync_ctx) {
+    if(!shm || !sync_ctx) return 1;
 
     int last_day = 0;
     int d, h, m;
     while (!g_shutdown) {
-        sim_client_wait_barrier(shm, &last_day, &g_shutdown);
+        // 1. Enter Process-Local Barrier
+        int rc = pthread_barrier_wait(&sync_ctx->barrier);
+
+        // 2. Serial thread performs Global Sync
+        if (rc == PTHREAD_BARRIER_SERIAL_THREAD) {
+            int day_out = last_day;
+            volatile int shut_out = g_shutdown;
+            // Wait for Global Barrier (Process Count 1)
+            sim_client_wait_barrier(shm, &day_out, &shut_out);
+
+            // Update Shared Context
+            sync_ctx->current_day = day_out;
+            sync_ctx->shutdown_signal = shut_out;
+        }
+
+        // 3. Wait for Serial thread to finish Global Sync
+        pthread_barrier_wait(&sync_ctx->barrier);
+
+        // 4. Update local state from Shared Context
+        last_day = sync_ctx->current_day;
+        if (sync_ctx->shutdown_signal) {
+            g_shutdown = 1;
+        }
+
+        if (g_shutdown) break;
 
         sim_client_read_time(shm, &d, &h, &m);
         LOG_INFO("[Day %d %02d:%02d] Worker %d Online (Type: %d)", d, h, m, worker_id, service_type);
@@ -123,13 +153,15 @@ int run_worker_service_loop(int worker_id, int service_type, sim_shm_t *shm) {
             } else {
                 if(atomic_load(&shm->sync.barrier_active)) break;
                 // No tickets and no barrier - yield 
-                usleep(10000); 
+                if (shm->params.tick_nanos > 0) usleep(10000);
+                else sched_yield(); 
             }
         }
-        
+
         LOG_INFO("Worker %d Day Ended (Reason: %s)", worker_id, atomic_load(&shm->sync.barrier_active) ? "Barrier" : "Shutdown");
         // Yield to prevent spastic logging if Director cycles fast
-        usleep(10000); 
+        if (shm->params.tick_nanos > 0) usleep(10000);
+        else sched_yield(); 
     }
     return 0;
 }

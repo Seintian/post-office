@@ -687,14 +687,8 @@ void backtrace_init(const char* crash_dump_dir) {
         , SIGSYS
 #endif
     };
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_sigaction = crash_handler;
-    sa.sa_flags = (int)(SA_SIGINFO | SA_RESETHAND); /* Reset to default if it happens again (loop prevention) */
-    sigemptyset(&sa.sa_mask);
-
     for (size_t i = 0; i < sizeof(signals)/sizeof(signals[0]); ++i) {
-        if (sigaction(signals[i], &sa, NULL) == -1) {
+        if (sigutil_handle(signals[i], crash_handler, (int)SA_RESETHAND) == -1) {
             /* Ignore error in init */
         }
     }
