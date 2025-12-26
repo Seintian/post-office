@@ -9,11 +9,13 @@
 #include <sys/cdefs.h>
 
 #include "log/logger.h"
+#include "perf/cache.h"
 
 #include <errno.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdatomic.h>
+#include <stdalign.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,10 +79,10 @@ static unsigned int g_sinks_mask = 0u;
 static file_sink_t *g_file_sinks = NULL;
 static _Atomic int g_running = 0;
 static __thread uint32_t _po_logger_thread_category = 0;
-static _Atomic unsigned long g_dropped_new = 0;
-static _Atomic unsigned long g_overwritten_old = 0;
-static _Atomic unsigned long g_processed = 0;
-static _Atomic unsigned long g_batches = 0;
+static alignas(PO_CACHE_LINE_MAX) _Atomic unsigned long g_dropped_new = 0;
+static alignas(PO_CACHE_LINE_MAX) _Atomic unsigned long g_overwritten_old = 0;
+static alignas(PO_CACHE_LINE_MAX) _Atomic unsigned long g_processed = 0;
+static alignas(PO_CACHE_LINE_MAX) _Atomic unsigned long g_batches = 0;
 static _Atomic unsigned long g_max_batch = 0; // high water mark
 static int g_syslog_open = 0;
 static char *g_syslog_ident = NULL;
@@ -178,7 +180,7 @@ static __thread char t_cache_ts[32]; // "YYYY-MM-DD HH:MM:SS"
  *
  * @note Thread-safe: Yes (Local buffer).
  */
-static char *fast_utoa10(uint64_t v, char *p) {
+static inline char *fast_utoa10(uint64_t v, char *p) {
     if (v == 0) {
         *p++ = '0';
         return p;
@@ -207,7 +209,7 @@ static char *fast_utoa10(uint64_t v, char *p) {
  *
  * @note Thread-safe: Yes.
  */
-static char *fast_pad6(long v, char *p) {
+static inline char *fast_pad6(long v, char *p) {
     // Optimized for width=6 (microseconds)
     // v must be < 1000000
     if (v < 0) v = 0;

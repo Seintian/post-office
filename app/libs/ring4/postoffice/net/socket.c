@@ -336,7 +336,7 @@ void po_socket_close(int fd) {
 }
 
 /* Metrics recorded unconditionally as requested */
-ssize_t po_socket_send(int fd, const void *buf, size_t len, int flags) {
+ssize_t po_socket_send(int fd, const void *restrict buf, size_t len, int flags) {
     ssize_t n = send(fd, buf, len, flags);
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK)
@@ -351,7 +351,7 @@ ssize_t po_socket_send(int fd, const void *buf, size_t len, int flags) {
     return n;
 }
 
-ssize_t po_socket_recv(int fd, void *buf, size_t len, int flags) {
+ssize_t po_socket_recv(int fd, void *restrict buf, size_t len, int flags) {
     ssize_t n = recv(fd, buf, len, flags);
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK)

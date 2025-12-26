@@ -34,7 +34,7 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size, perf_zcpool
  *
  * @note Thread-safe: No (Must be exclusive).
  */
-void perf_zcpool_destroy(perf_zcpool_t **p);
+void perf_zcpool_destroy(perf_zcpool_t **restrict p);
 
 /**
  * @brief Acquire a buffer from the pool.
@@ -44,7 +44,7 @@ void perf_zcpool_destroy(perf_zcpool_t **p);
  *
  * @note Thread-safe: No (Single Consumer Only).
  */
-void *perf_zcpool_acquire(perf_zcpool_t *p);
+void *perf_zcpool_acquire(perf_zcpool_t *restrict p);
 
 /**
  * @brief Release a buffer back to the pool.
@@ -54,7 +54,7 @@ void *perf_zcpool_acquire(perf_zcpool_t *p);
  *
  * @note Thread-safe: No (Single Producer Only).
  */
-void perf_zcpool_release(perf_zcpool_t *p, void *buffer);
+void perf_zcpool_release(perf_zcpool_t *restrict p, void *restrict buffer);
 
 /**
  * @brief Get the size of buffers in the pool.
@@ -64,7 +64,7 @@ void perf_zcpool_release(perf_zcpool_t *p, void *buffer);
  *
  * @note Thread-safe: Yes.
  */
-size_t perf_zcpool_bufsize(const perf_zcpool_t *p);
+size_t perf_zcpool_bufsize(const perf_zcpool_t *restrict p);
 
 /**
  * @brief Get the number of free buffers in the pool.
@@ -74,7 +74,7 @@ size_t perf_zcpool_bufsize(const perf_zcpool_t *p);
  *
  * @note Thread-safe: Yes (Approximate).
  */
-size_t perf_zcpool_freecount(const perf_zcpool_t *p);
+size_t perf_zcpool_freecount(const perf_zcpool_t *restrict p);
 
 #ifdef __cplusplus
 }

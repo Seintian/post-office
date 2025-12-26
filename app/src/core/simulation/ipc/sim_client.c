@@ -35,8 +35,8 @@ int sim_client_connect_issuer(volatile _Atomic bool *should_continue, sim_shm_t 
     LOG_DEBUG("Attempting to connect to Ticket Issuer socket: %s", sock_path); // Keep DEBUG or TRACE
 
     int socket_fd = -1;
-    // Retry for ~2 seconds (100 * 20ms)
-    for (int i = 0; i < 100; i++) {
+    // Retry for ~10 seconds (500 * 20ms) to accommodate slow starts (e.g. ASan)
+    for (int i = 0; i < 500; i++) {
         if (should_continue && !atomic_load(should_continue)) break;
 
         socket_fd = po_socket_connect_unix(sock_path);

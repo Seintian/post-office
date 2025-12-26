@@ -78,7 +78,7 @@ po_vector_t *po_vector_create_sized(size_t initial_capacity) __attribute_malloc_
  * @param[in] vec Vector to destroy. Does nothing if NULL.
  * @note Thread-safe: No (Must be exclusive).
  */
-void po_vector_destroy(po_vector_t *vec);
+void po_vector_destroy(po_vector_t *restrict vec);
 
 // Basic operations
 
@@ -89,7 +89,7 @@ void po_vector_destroy(po_vector_t *vec);
  * @return 0 on success, -1 on allocation failure.
  * @note Thread-safe: No.
  */
-int po_vector_push(po_vector_t *vec, void *element) __nonnull((1));
+int po_vector_push(po_vector_t *restrict vec, void *element) __nonnull((1));
 
 /**
  * @brief Remove and return the last element in the vector.
@@ -97,7 +97,7 @@ int po_vector_push(po_vector_t *vec, void *element) __nonnull((1));
  * @return The removed element, or NULL if vector is empty.
  * @note Thread-safe: No.
  */
-void *po_vector_pop(po_vector_t *vec) __nonnull((1));
+void *po_vector_pop(po_vector_t *restrict vec) __nonnull((1));
 
 /**
  * @brief Get the element at the specified index.
@@ -106,7 +106,7 @@ void *po_vector_pop(po_vector_t *vec) __nonnull((1));
  * @return Element at index, or NULL if out of bounds.
  * @note Thread-safe: Yes (Read-only on vec).
  */
-void *po_vector_at(const po_vector_t *vec, size_t index) __nonnull((1));
+void *po_vector_at(const po_vector_t *restrict vec, size_t index) __nonnull((1));
 
 /**
  * @brief Insert an element at the specified position.
@@ -116,7 +116,7 @@ void *po_vector_at(const po_vector_t *vec, size_t index) __nonnull((1));
  * @return 0 on success, -1 on allocation failure or invalid index.
  * @note Thread-safe: No.
  */
-int po_vector_insert(po_vector_t *vec, size_t index, void *element) __nonnull((1));
+int po_vector_insert(po_vector_t *restrict vec, size_t index, void *element) __nonnull((1));
 
 /**
  * @brief Remove the element at the specified position.
@@ -125,7 +125,7 @@ int po_vector_insert(po_vector_t *vec, size_t index, void *element) __nonnull((1
  * @return The removed element, or NULL if index is invalid.
  * @note Thread-safe: No.
  */
-void *po_vector_remove(po_vector_t *vec, size_t index) __nonnull((1));
+void *po_vector_remove(po_vector_t *restrict vec, size_t index) __nonnull((1));
 
 // Information
 

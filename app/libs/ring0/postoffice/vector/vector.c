@@ -79,7 +79,7 @@ po_vector_t *po_vector_create_sized(size_t initial_capacity) {
     return vec;
 }
 
-void po_vector_destroy(po_vector_t *vec) {
+void po_vector_destroy(po_vector_t *restrict vec) {
     if (!vec)
         return;
 
@@ -87,7 +87,7 @@ void po_vector_destroy(po_vector_t *vec) {
     free(vec);
 }
 
-int po_vector_push(po_vector_t *vec, void *element) {
+int po_vector_push(po_vector_t *restrict vec, void *element) {
     if (vec->size >= vec->capacity) {
         int ensure_result = vector_ensure_capacity(vec, vec->capacity + 1);
         if (ensure_result < 0)
@@ -98,7 +98,7 @@ int po_vector_push(po_vector_t *vec, void *element) {
     return 0;
 }
 
-void *po_vector_pop(po_vector_t *vec) {
+void *po_vector_pop(po_vector_t *restrict vec) {
     if (vec->size == 0) {
         errno = EINVAL;
         return NULL;
@@ -107,7 +107,7 @@ void *po_vector_pop(po_vector_t *vec) {
     return vec->data[--vec->size];
 }
 
-void *po_vector_at(const po_vector_t *vec, size_t index) {
+void *po_vector_at(const po_vector_t *restrict vec, size_t index) {
     if (index >= vec->size) {
         errno = EINVAL;
         return NULL;
@@ -116,7 +116,7 @@ void *po_vector_at(const po_vector_t *vec, size_t index) {
     return vec->data[index];
 }
 
-int po_vector_insert(po_vector_t *vec, size_t index, void *element) {
+int po_vector_insert(po_vector_t *restrict vec, size_t index, void *element) {
     if (index > vec->size) {
         errno = EINVAL;
         return -1;
@@ -138,7 +138,7 @@ int po_vector_insert(po_vector_t *vec, size_t index, void *element) {
     return 0;
 }
 
-void *po_vector_remove(po_vector_t *vec, size_t index) {
+void *po_vector_remove(po_vector_t *restrict vec, size_t index) {
     if (index >= vec->size) {
         errno = EINVAL;
         return NULL;

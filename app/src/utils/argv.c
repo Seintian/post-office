@@ -5,12 +5,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <postoffice/log/logger.h>
 
 void po_args_init(po_args_t *args) {
     args->help = false;
     args->version = false;
     args->config_file = NULL;
-    args->loglevel = 0;
+    args->loglevel = LOG_INFO;
     args->syslog = false;
     args->syslog_ident = NULL;
     args->tui_demo = false;

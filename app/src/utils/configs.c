@@ -195,7 +195,8 @@ static int _po_config_load(const char *filename, po_config_t **cfg_out, bool str
     po_perf_timer_stop("config.load_time_us");
 
     if (ret != 0) {
-        *cfg_out = ctx;
+        po_config_free(&ctx);
+        *cfg_out = NULL;
         return -1;
     }
 

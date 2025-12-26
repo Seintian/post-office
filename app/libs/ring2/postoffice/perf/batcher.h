@@ -86,7 +86,7 @@ po_perf_batcher_t *perf_batcher_create(po_perf_ringbuf_t *rb, size_t batch_size)
  * passed at creation time is intentionally left untouched so the caller may
  * inspect / drain / reuse it if necessary.
  */
-void perf_batcher_destroy(po_perf_batcher_t **b) __nonnull((1));
+void perf_batcher_destroy(po_perf_batcher_t **restrict b) __nonnull((1));
 
 /**
  * @brief Enqueue one item and signal the consumer.
@@ -101,7 +101,7 @@ void perf_batcher_destroy(po_perf_batcher_t **b) __nonnull((1));
  * @return 0 on success; -1 on error with @c errno = EAGAIN (full), EINVAL
  *         (invalid batcher state), or EIO (eventfd signaling failure).
  */
-int perf_batcher_enqueue(po_perf_batcher_t *b, void *item) __nonnull((1, 2));
+int perf_batcher_enqueue(po_perf_batcher_t *restrict b, void *restrict item) __nonnull((1, 2));
 
 /**
  * @brief Attempt a single scatter/gather write of queued frames to @p fd.
@@ -141,7 +141,7 @@ int perf_batcher_flush(po_perf_batcher_t *b, int fd) __nonnull((1));
  * @return Number of items dequeued (>=1) or -1 on error (errno set: EBADF if
  *         destroyed concurrently, EINTR if interrupted, EINVAL invalid state).
  */
-ssize_t perf_batcher_next(po_perf_batcher_t *b, void **out) __nonnull((1, 2));
+ssize_t perf_batcher_next(po_perf_batcher_t *restrict b, void **restrict out) __nonnull((1, 2));
 
 /**
  * @brief Fast non-blocking emptiness test (advisory only under concurrency).

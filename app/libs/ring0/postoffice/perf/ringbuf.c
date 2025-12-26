@@ -1,4 +1,5 @@
 #include "perf/ringbuf.h"
+#include "perf/cache.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -11,6 +12,9 @@
 
 #include "metrics/metrics.h"
 
+#define likely(x)       __builtin_expect(!!(x), 1)
+#define unlikely(x)     __builtin_expect(!!(x), 0)
+
 /*
     MPMC Sequenced Ring Buffer (based on Dmitry Vyukov's algorithm)
     Each slot has a sequence number to synchronize producers and consumers.
@@ -22,8 +26,8 @@ typedef struct {
 } slot_t;
 
 struct perf_ringbuf {
-    alignas(64) atomic_size_t head; // read index
-    alignas(64) atomic_size_t tail; // write index
+    alignas(PO_CACHE_LINE_MAX) atomic_size_t head; // read index
+    alignas(PO_CACHE_LINE_MAX) atomic_size_t tail; // write index
     size_t cap;                     // must be power‐of‐two
     size_t mask;                    // cap - 1
     slot_t *slots;                  // array[cap]
@@ -40,14 +44,16 @@ void perf_ringbuf_set_cacheline(size_t cacheline_bytes) {
 }
 
 po_perf_ringbuf_t *perf_ringbuf_create(size_t capacity, perf_ringbuf_flags_t flags) {
-    if (capacity == 0 || (capacity & (capacity - 1)) != 0) {
+    if (unlikely(capacity == 0 || (capacity & (capacity - 1)) != 0)) {
         errno = EINVAL;
         return NULL;
     }
 
-    po_perf_ringbuf_t *rb = calloc(1, sizeof(*rb));
-    if (!rb)
+    po_perf_ringbuf_t *rb = NULL;
+    if (posix_memalign((void**)&rb, PO_CACHE_LINE_MAX, sizeof(*rb)) != 0) {
         return NULL;
+    }
+    memset(rb, 0, sizeof(*rb));
 
     rb->cap = capacity;
     rb->mask = capacity - 1;
@@ -76,7 +82,7 @@ po_perf_ringbuf_t *perf_ringbuf_create(size_t capacity, perf_ringbuf_flags_t fla
     return rb;
 }
 
-void perf_ringbuf_destroy(po_perf_ringbuf_t **prb) {
+void perf_ringbuf_destroy(po_perf_ringbuf_t **restrict prb) {
     if (!*prb || !prb)
         return;
 
@@ -90,7 +96,7 @@ void perf_ringbuf_destroy(po_perf_ringbuf_t **prb) {
     *prb = NULL;
 }
 
-int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item) {
+int perf_ringbuf_enqueue(po_perf_ringbuf_t *restrict rb, void *restrict item) {
     slot_t *slot;
     size_t tail = atomic_load_explicit(&rb->tail, memory_order_relaxed);
     
@@ -99,12 +105,14 @@ int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item) {
         size_t seq = atomic_load_explicit(&slot->seq, memory_order_acquire);
         intptr_t diff = (intptr_t)seq - (intptr_t)tail;
 
-        if (diff == 0) {
-            if (atomic_compare_exchange_weak_explicit(&rb->tail, &tail, tail + 1,
-                                                     memory_order_relaxed, memory_order_relaxed)) {
+        if (likely(diff == 0)) {
+            if (likely(atomic_compare_exchange_weak_explicit(
+                &rb->tail, &tail, tail + 1,
+                memory_order_relaxed, memory_order_relaxed
+            ))) {
                 break;
             }
-        } else if (diff < 0) {
+        } else if (unlikely(diff < 0)) {
             if (rb->flags & PERF_RINGBUF_METRICS)
                 PO_METRIC_COUNTER_INC("ringbuf.full");
             errno = EAGAIN;
@@ -123,7 +131,7 @@ int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item) {
     return 0;
 }
 
-int perf_ringbuf_dequeue(po_perf_ringbuf_t *rb, void **out) {
+int perf_ringbuf_dequeue(po_perf_ringbuf_t *restrict rb, void **restrict out) {
     slot_t *slot;
     size_t head = atomic_load_explicit(&rb->head, memory_order_relaxed);
 
@@ -132,12 +140,14 @@ int perf_ringbuf_dequeue(po_perf_ringbuf_t *rb, void **out) {
         size_t seq = atomic_load_explicit(&slot->seq, memory_order_acquire);
         intptr_t diff = (intptr_t)seq - (intptr_t)(head + 1);
 
-        if (diff == 0) {
-            if (atomic_compare_exchange_weak_explicit(&rb->head, &head, head + 1,
-                                                     memory_order_relaxed, memory_order_relaxed)) {
+        if (likely(diff == 0)) {
+            if (likely(atomic_compare_exchange_weak_explicit(
+                &rb->head, &head, head + 1,
+                memory_order_relaxed, memory_order_relaxed
+            ))) {
                 break;
             }
-        } else if (diff < 0) {
+        } else if (unlikely(diff < 0)) {
             return -1; // Empty
         } else {
             head = atomic_load_explicit(&rb->head, memory_order_relaxed);
@@ -153,17 +163,17 @@ int perf_ringbuf_dequeue(po_perf_ringbuf_t *rb, void **out) {
     return 0;
 }
 
-size_t perf_ringbuf_count(const po_perf_ringbuf_t *rb) {
+size_t perf_ringbuf_count(const po_perf_ringbuf_t *restrict rb) {
     size_t h = atomic_load_explicit(&rb->head, memory_order_relaxed);
     size_t t = atomic_load_explicit(&rb->tail, memory_order_relaxed);
     return (t > h) ? (t - h) : 0;
 }
 
-int perf_ringbuf_peek(const po_perf_ringbuf_t *rb, void **out) {
+int perf_ringbuf_peek(const po_perf_ringbuf_t *restrict rb, void **restrict out) {
     size_t head = atomic_load_explicit(&rb->head, memory_order_relaxed);
     slot_t *slot = &rb->slots[head & rb->mask];
     size_t seq = atomic_load_explicit(&slot->seq, memory_order_acquire);
-    
+
     if ((intptr_t)seq - (intptr_t)(head + 1) == 0) {
         if (out) *out = slot->item;
         return 0;
@@ -171,7 +181,7 @@ int perf_ringbuf_peek(const po_perf_ringbuf_t *rb, void **out) {
     return -1;
 }
 
-int perf_ringbuf_peek_at(const po_perf_ringbuf_t *rb, size_t idx, void **out) {
+int perf_ringbuf_peek_at(const po_perf_ringbuf_t *restrict rb, size_t idx, void **restrict out) {
     size_t head = atomic_load_explicit(&rb->head, memory_order_relaxed);
     size_t target = head + idx;
     slot_t *slot = &rb->slots[target & rb->mask];
@@ -184,7 +194,7 @@ int perf_ringbuf_peek_at(const po_perf_ringbuf_t *rb, size_t idx, void **out) {
     return -1;
 }
 
-int perf_ringbuf_advance(po_perf_ringbuf_t *rb, size_t n) {
+int perf_ringbuf_advance(po_perf_ringbuf_t *restrict rb, size_t n) {
     for (size_t i = 0; i < n; i++) {
         if (perf_ringbuf_dequeue(rb, NULL) != 0) return -1;
     }

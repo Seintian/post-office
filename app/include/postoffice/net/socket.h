@@ -177,7 +177,7 @@ int po_socket_set_common_options(int fd, int enable_nodelay, int reuseaddr, int 
  *         would block and should be retried later.
  * @note Thread-safe: Yes (But interleaved bytes possible on shared FD).
  */
-ssize_t po_socket_send(int fd, const void *buf, size_t len, int flags) __nonnull((2));
+ssize_t po_socket_send(int fd, const void *restrict buf, size_t len, int flags) __nonnull((2));
 
 /**
  * @brief Receive bytes from a non-blocking socket with metrics instrumentation.
@@ -197,7 +197,7 @@ ssize_t po_socket_send(int fd, const void *buf, size_t len, int flags) __nonnull
  *         PO_SOCKET_WOULDBLOCK (-2) if the operation would block.
  * @note Thread-safe: Yes.
  */
-ssize_t po_socket_recv(int fd, void *buf, size_t len, int flags) __nonnull((2));
+ssize_t po_socket_recv(int fd, void *restrict buf, size_t len, int flags) __nonnull((2));
 
 #ifdef __cplusplus
 }

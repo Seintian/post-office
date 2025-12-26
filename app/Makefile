@@ -27,34 +27,48 @@ TESTS_DIR              = tests
 INCLUDE_DIR            = include
 POSTOFFICE_INCLUDE_DIR = $(INCLUDE_DIR)/postoffice
 THIRDPARTY_INCLUDE_DIR = $(INCLUDE_DIR)/thirdparty
+# Libraries Directories
 LIBS_DIR               = libs
-POSTOFFICE_LIBS_DIR    = $(LIBS_DIR)/postoffice
-THIRDPARTY_LIBS_DIR    = $(LIBS_DIR)/thirdparty
 SRC_DIR                = src
 
-# Libraries Directories
-## Post Office Libraries
-HASHTABLE_DIR          = $(POSTOFFICE_LIBS_DIR)/hashtable
-HASHSET_DIR            = $(POSTOFFICE_LIBS_DIR)/hashset
-NET_DIR                = $(POSTOFFICE_LIBS_DIR)/net
-PERF_DIR               = $(POSTOFFICE_LIBS_DIR)/perf
-METRICS_DIR            = $(POSTOFFICE_LIBS_DIR)/metrics
-PRIME_DIR              = $(POSTOFFICE_LIBS_DIR)/prime
-STORAGE_DIR            = $(POSTOFFICE_LIBS_DIR)/storage
-RANDOM_DIR             = $(POSTOFFICE_LIBS_DIR)/random
-TUI_LIB_DIR            = $(POSTOFFICE_LIBS_DIR)/tui
-LOG_DIR                = $(POSTOFFICE_LIBS_DIR)/log
-SYSINFO_DIR            = $(POSTOFFICE_LIBS_DIR)/sysinfo
-BACKTRACE_DIR          = $(POSTOFFICE_LIBS_DIR)/backtrace
-VECTOR_DIR             = $(POSTOFFICE_LIBS_DIR)/vector
-CONCURRENCY_DIR        = $(POSTOFFICE_LIBS_DIR)/concurrency
+RING0_DIR              = $(LIBS_DIR)/ring0
+RING1_DIR              = $(LIBS_DIR)/ring1
+RING2_DIR              = $(LIBS_DIR)/ring2
+RING3_DIR              = $(LIBS_DIR)/ring3
+RING4_DIR              = $(LIBS_DIR)/ring4
 
-## Third-party Libraries
+# Ring 0
+THIRDPARTY_LIBS_DIR    = $(RING0_DIR)/thirdparty
 INIH_DIR               = $(THIRDPARTY_LIBS_DIR)/inih
 LIBFORT_DIR            = $(THIRDPARTY_LIBS_DIR)/libfort
 LMDB_DIR               = $(THIRDPARTY_LIBS_DIR)/lmdb
 LOG_C_DIR              = $(THIRDPARTY_LIBS_DIR)/log_c
 UNITY_DIR              = $(THIRDPARTY_LIBS_DIR)/unity
+
+VECTOR_DIR             = $(RING0_DIR)/postoffice/vector
+PRIME_DIR              = $(RING0_DIR)/postoffice/prime
+RANDOM_DIR             = $(RING0_DIR)/postoffice/random
+PERF_RINGBUF_DIR       = $(RING0_DIR)/postoffice/perf
+
+# Ring 1
+HASHTABLE_DIR          = $(RING1_DIR)/postoffice/hashtable
+HASHSET_DIR            = $(RING1_DIR)/postoffice/hashset
+SYSINFO_DIR            = $(RING1_DIR)/postoffice/sysinfo
+CONCURRENCY_DIR        = $(RING1_DIR)/postoffice/concurrency
+
+# Ring 2
+METRICS_DIR            = $(RING2_DIR)/postoffice/metrics
+LOG_DIR                = $(RING2_DIR)/postoffice/log
+PERF_CORE_DIR          = $(RING2_DIR)/postoffice/perf
+
+# Ring 3
+BACKTRACE_DIR          = $(RING3_DIR)/postoffice/backtrace
+STORAGE_DIR            = $(RING3_DIR)/postoffice/storage
+PERF_ZEROCOPY_DIR      = $(RING3_DIR)/postoffice/perf
+
+# Ring 4
+NET_DIR                = $(RING4_DIR)/postoffice/net
+TUI_LIB_DIR            = $(RING4_DIR)/postoffice/tui
 
 ## Core source tree root
 CORE_SRC_DIR           = $(SRC_DIR)/core
@@ -78,7 +92,7 @@ EXPLODE_INI_PATH       = $(CONFIG_DIR)/explode.ini
 # *** Compiler flags *** #
 
 INCLUDES_I = -I$(INCLUDE_DIR) -I$(POSTOFFICE_INCLUDE_DIR) -I$(THIRDPARTY_INCLUDE_DIR)
-LIBS_I     = -Ilibs -I$(POSTOFFICE_LIBS_DIR) -I$(POSTOFFICE_LIBS_DIR)/tui -I$(THIRDPARTY_LIBS_DIR)
+LIBS_I     = -Ilibs -I$(RING0_DIR)/postoffice -I$(RING1_DIR)/postoffice -I$(RING2_DIR)/postoffice -I$(RING3_DIR)/postoffice -I$(RING4_DIR)/postoffice -I$(TUI_LIB_DIR) -I$(THIRDPARTY_LIBS_DIR)
 CORE_I     = -I$(CORE_SRC_DIR)/main -I$(CORE_SRC_DIR)/simulation
 SRC_I      = -I$(SRC_DIR)
 
@@ -182,7 +196,7 @@ TEST_MAIN_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)test_main
 HASHTABLE_SRC   = $(wildcard $(HASHTABLE_DIR)/*.c)
 HASHSET_SRC     = $(wildcard $(HASHSET_DIR)/*.c)
 NET_SRC         = $(wildcard $(NET_DIR)/*.c)
-PERF_SRC        = $(wildcard $(PERF_DIR)/*.c)
+PERF_SRC        = $(wildcard $(PERF_RINGBUF_DIR)/*.c) $(wildcard $(PERF_CORE_DIR)/*.c) $(wildcard $(PERF_ZEROCOPY_DIR)/*.c)
 METRICS_SRC     = $(wildcard $(METRICS_DIR)/*.c)
 PRIME_SRC       = $(wildcard $(PRIME_DIR)/*.c)
 STORAGE_SRC     = $(wildcard $(STORAGE_DIR)/*.c)
@@ -241,7 +255,9 @@ TEST_SRC              = $(shell find $(TESTS_DIR) -name '*.c') \
 HASHTABLE_OBJS      = $(patsubst $(HASHTABLE_DIR)/%.c,$(BUILD_DIR)/hashtable/%.o,$(HASHTABLE_SRC))
 HASHSET_OBJS        = $(patsubst $(HASHSET_DIR)/%.c,$(BUILD_DIR)/hashset/%.o,$(HASHSET_SRC))
 NET_OBJS            = $(patsubst $(NET_DIR)/%.c,$(BUILD_DIR)/net/%.o,$(NET_SRC))
-PERF_OBJS           = $(patsubst $(PERF_DIR)/%.c,$(BUILD_DIR)/perf/%.o,$(PERF_SRC))
+PERF_OBJS           = $(patsubst $(PERF_RINGBUF_DIR)/%.c,$(BUILD_DIR)/perf/%.o,$(wildcard $(PERF_RINGBUF_DIR)/*.c)) \
+                      $(patsubst $(PERF_CORE_DIR)/%.c,$(BUILD_DIR)/perf/%.o,$(wildcard $(PERF_CORE_DIR)/*.c)) \
+                      $(patsubst $(PERF_ZEROCOPY_DIR)/%.c,$(BUILD_DIR)/perf/%.o,$(wildcard $(PERF_ZEROCOPY_DIR)/*.c))
 METRICS_OBJS        = $(patsubst $(METRICS_DIR)/%.c,$(BUILD_DIR)/metrics/%.o,$(METRICS_SRC))
 PRIME_OBJS          = $(patsubst $(PRIME_DIR)/%.c,$(BUILD_DIR)/prime/%.o,$(PRIME_SRC))
 STORAGE_OBJS        = $(patsubst $(STORAGE_DIR)/%.c,$(BUILD_DIR)/storage/%.o,$(STORAGE_SRC))
@@ -574,7 +590,15 @@ $(BUILD_DIR)/net/%.o: $(NET_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-$(BUILD_DIR)/perf/%.o: $(PERF_DIR)/%.c
+$(BUILD_DIR)/perf/%.o: $(PERF_RINGBUF_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+$(BUILD_DIR)/perf/%.o: $(PERF_CORE_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+$(BUILD_DIR)/perf/%.o: $(PERF_ZEROCOPY_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
@@ -716,13 +740,13 @@ tidy:
 		exit 1; \
 	fi
 	@SRCS=$$(find . \
-	 -path './libs/thirdparty' -prune -o \
-	 -path './include/thirdparty' -prune -o \
-	 -name '*.c' -print); \
-	 [ -n "$$SRCS" ] || { echo "> Makefile: No C sources found."; exit 0; }; \
-	 echo "> Makefile: Files:"; echo "$$SRCS" | tr ' ' '\n'; \
-	 clang-tidy --format-style=file --config-file=.clang-tidy $$SRCS -- -std=c11 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -Iinclude -Iinclude/postoffice -Ilibs/postoffice -Isrc -Ilibs/thirdparty -Iinclude/thirdparty || true; \
-	 echo "> Makefile: clang-tidy completed."
+		-path './libs/thirdparty' -prune -o \
+		-path './include/thirdparty' -prune -o \
+		-name '*.c' -print); \
+		[ -n "$$SRCS" ] || { echo "> Makefile: No C sources found."; exit 0; }; \
+		echo "> Makefile: Files:"; echo "$$SRCS" | tr ' ' '\n'; \
+		clang-tidy --format-style=file --config-file=.clang-tidy $$SRCS -- -std=c11 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -Iinclude -Iinclude/postoffice -I$(RING0_DIR)/postoffice -I$(RING1_DIR)/postoffice -I$(RING2_DIR)/postoffice -I$(RING3_DIR)/postoffice -I$(RING4_DIR)/postoffice -Isrc -I$(THIRDPARTY_LIBS_DIR) -Iinclude/thirdparty || true; \
+		echo "> Makefile: clang-tidy completed."
 
 .PHONY: tidy-fix
 tidy-fix:
@@ -732,10 +756,10 @@ tidy-fix:
 		exit 1; \
 	fi
 	@SRCS=$$(find . \
-	 -path './libs/thirdparty' -prune -o \
-	 -path './include/thirdparty' -prune -o \
-	 -name '*.c' -print); \
-	 [ -n "$$SRCS" ] || { echo "> Makefile: No C sources found."; exit 0; }; \
-	 echo "> Makefile: Files:"; echo "$$SRCS" | tr ' ' '\n'; \
-	 clang-tidy -fix -fix-errors --format-style=file --config-file=.clang-tidy $$SRCS -- -std=c11 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -Iinclude -Iinclude/postoffice -Ilibs/postoffice -Isrc -Ilibs/thirdparty -Iinclude/thirdparty || true; \
-	 echo "> Makefile: clang-tidy fixes applied. Consider running 'make -C app format' afterwards."
+		-path './libs/thirdparty' -prune -o \
+		-path './include/thirdparty' -prune -o \
+		-name '*.c' -print); \
+		[ -n "$$SRCS" ] || { echo "> Makefile: No C sources found."; exit 0; }; \
+		echo "> Makefile: Files:"; echo "$$SRCS" | tr ' ' '\n'; \
+		clang-tidy -fix -fix-errors --format-style=file --config-file=.clang-tidy $$SRCS -- -std=c11 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -Iinclude -Iinclude/postoffice -I$(RING0_DIR)/postoffice -I$(RING1_DIR)/postoffice -I$(RING2_DIR)/postoffice -I$(RING3_DIR)/postoffice -I$(RING4_DIR)/postoffice -Isrc -I$(THIRDPARTY_LIBS_DIR) -Iinclude/thirdparty || true; \
+		echo "> Makefile: clang-tidy fixes applied. Consider running 'make -C app format' afterwards."

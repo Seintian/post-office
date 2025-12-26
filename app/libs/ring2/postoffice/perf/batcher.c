@@ -54,7 +54,7 @@ po_perf_batcher_t *perf_batcher_create(po_perf_ringbuf_t *rb, size_t batch_size,
     return b;
 }
 
-void perf_batcher_destroy(po_perf_batcher_t **b) {
+void perf_batcher_destroy(po_perf_batcher_t **restrict b) {
     if (!*b)
         return;
 
@@ -74,7 +74,7 @@ void perf_batcher_destroy(po_perf_batcher_t **b) {
     *b = NULL;
 }
 
-int perf_batcher_enqueue(po_perf_batcher_t *b, void *item) {
+int perf_batcher_enqueue(po_perf_batcher_t *restrict b, void *restrict item) {
     if (b->rb == NULL || b->efd < 0) {
         errno = EINVAL;
         return -1;
@@ -163,7 +163,7 @@ int perf_batcher_flush(po_perf_batcher_t *b, int fd) {
     return 0;
 }
 
-ssize_t perf_batcher_next(po_perf_batcher_t *b, void **out) {
+ssize_t perf_batcher_next(po_perf_batcher_t *restrict b, void **restrict out) {
     if (b->rb == NULL || b->efd < 0) {
         errno = EINVAL;
         return -1;

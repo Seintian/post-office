@@ -45,7 +45,7 @@ void perf_ringbuf_destroy(po_perf_ringbuf_t **rb);
  *
  * @note Thread-safe: No (Single Producer Only).
  */
-int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item);
+int perf_ringbuf_enqueue(po_perf_ringbuf_t *restrict rb, void *item);
 
 /**
  * @brief Dequeue an item from the ring buffer.
@@ -56,7 +56,7 @@ int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item);
  *
  * @note Thread-safe: No (Single Consumer Only).
  */
-int perf_ringbuf_dequeue(po_perf_ringbuf_t *rb, void **out);
+int perf_ringbuf_dequeue(po_perf_ringbuf_t *restrict rb, void **restrict out);
 
 /**
  * @brief Get the number of items currently in the ring buffer.
@@ -66,7 +66,7 @@ int perf_ringbuf_dequeue(po_perf_ringbuf_t *rb, void **out);
  *
  * @note Thread-safe: Yes (Approximate if concurrent access).
  */
-size_t perf_ringbuf_count(const po_perf_ringbuf_t *rb);
+size_t perf_ringbuf_count(const po_perf_ringbuf_t *restrict rb);
 
 /**
  * @brief Set the cacheline size for alignment.
@@ -86,7 +86,7 @@ void perf_ringbuf_set_cacheline(size_t cacheline_bytes);
  *
  * @note Thread-safe: No (Single Consumer Only).
  */
-int perf_ringbuf_peek(const po_perf_ringbuf_t *rb, void **out);
+int perf_ringbuf_peek(const po_perf_ringbuf_t *restrict rb, void **restrict out);
 
 /**
  * @brief Peek at an item at a specific offset from the head.
@@ -98,7 +98,7 @@ int perf_ringbuf_peek(const po_perf_ringbuf_t *rb, void **out);
  *
  * @note Thread-safe: No (Single Consumer Only).
  */
-int perf_ringbuf_peek_at(const po_perf_ringbuf_t *rb, size_t idx, void **out);
+int perf_ringbuf_peek_at(const po_perf_ringbuf_t *restrict rb, size_t idx, void **restrict out);
 
 /**
  * @brief Advance the head of the ring buffer (discard items).
@@ -109,7 +109,7 @@ int perf_ringbuf_peek_at(const po_perf_ringbuf_t *rb, size_t idx, void **out);
  *
  * @note Thread-safe: No (Single Consumer Only).
  */
-int perf_ringbuf_advance(po_perf_ringbuf_t *rb, size_t n);
+int perf_ringbuf_advance(po_perf_ringbuf_t *restrict rb, size_t n);
 
 #ifdef __cplusplus
 }

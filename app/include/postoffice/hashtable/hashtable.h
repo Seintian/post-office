@@ -117,7 +117,7 @@ po_hashtable_t *po_hashtable_create_sized(int (*compare)(const void *, const voi
  * @return 1 inserted new pair; 0 updated existing; -1 on allocation / internal error.
  * @note Thread-safe: No.
  */
-int po_hashtable_put(po_hashtable_t *table, void *key, void *value) __nonnull((1, 2));
+int po_hashtable_put(po_hashtable_t *restrict table, void *key, void *value) __nonnull((1, 2));
 
 /**
  * @brief Lookup value for key.
@@ -126,7 +126,7 @@ int po_hashtable_put(po_hashtable_t *table, void *key, void *value) __nonnull((1
  * @return Value pointer or NULL if absent.
  * @note Thread-safe: Yes (Read-only on table).
  */
-void *po_hashtable_get(const po_hashtable_t *table, const void *key) __nonnull((1, 2));
+void *po_hashtable_get(const po_hashtable_t *restrict table, const void *key) __nonnull((1, 2));
 
 /**
  * @brief Membership test.
@@ -135,7 +135,7 @@ void *po_hashtable_get(const po_hashtable_t *table, const void *key) __nonnull((
  * @return 1 present; 0 absent.
  * @note Thread-safe: Yes (Read-only on table).
  */
-int po_hashtable_contains_key(const po_hashtable_t *table, const void *key) __nonnull((1, 2));
+int po_hashtable_contains_key(const po_hashtable_t *restrict table, const void *key) __nonnull((1, 2));
 
 /**
  * @brief Remove key (if present); may trigger shrink at low watermark.
@@ -144,7 +144,7 @@ int po_hashtable_contains_key(const po_hashtable_t *table, const void *key) __no
  * @return 1 removed; 0 not found.
  * @note Thread-safe: No.
  */
-int po_hashtable_remove(po_hashtable_t *table, const void *key) __nonnull((1, 2));
+int po_hashtable_remove(po_hashtable_t *restrict table, const void *key) __nonnull((1, 2));
 
 /** 
  * @brief Number of stored key-value pairs. 
@@ -173,7 +173,7 @@ void **po_hashtable_keyset(const po_hashtable_t *table) __nonnull((1)) __attribu
  * @param[in,out] table Address of table pointer.
  * @note Thread-safe: No (Must be exclusive).
  */
-void po_hashtable_destroy(po_hashtable_t **table) __nonnull((1));
+void po_hashtable_destroy(po_hashtable_t **restrict table) __nonnull((1));
 
 // *** Extended hash table operations *** //
 
@@ -223,7 +223,7 @@ float po_hashtable_load_factor(const po_hashtable_t *table) __nonnull((1));
  * @return 1 replaced; 0 key not found.
  * @note Thread-safe: No.
  */
-int po_hashtable_replace(const po_hashtable_t *table, const void *key, void *new_value)
+int po_hashtable_replace(const po_hashtable_t *restrict table, const void *key, void *new_value)
     __nonnull((1, 2));
 
 /**

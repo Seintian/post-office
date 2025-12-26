@@ -111,7 +111,7 @@ static hashtable_node_t *hashtable_node_create(void *key, void *value) {
  *
  * @note Thread-safe: No (Modifies table structure).
  */
-static int po_hashtable_resize(po_hashtable_t *table, size_t new_capacity) {
+static int po_hashtable_resize(po_hashtable_t *restrict table, size_t new_capacity) {
     new_capacity = next_prime(new_capacity);
 
     hashtable_node_t **new_buckets = calloc(new_capacity, sizeof(hashtable_node_t *));
@@ -170,7 +170,7 @@ po_hashtable_t *po_hashtable_create(int (*compare)(const void *, const void *),
 
 // *** Basic hashtable operations *** //
 
-int po_hashtable_put(po_hashtable_t *table, void *key, void *value) {
+int po_hashtable_put(po_hashtable_t *restrict table, void *key, void *value) {
     float load_factor = po_hashtable_load_factor(table);
     if (load_factor > LOAD_FACTOR_UP_THRESHOLD &&
         po_hashtable_resize(table, table->capacity * 2) == -1 &&
@@ -200,7 +200,7 @@ int po_hashtable_put(po_hashtable_t *table, void *key, void *value) {
     return 1;
 }
 
-int po_hashtable_remove(po_hashtable_t *table, const void *key) {
+int po_hashtable_remove(po_hashtable_t *restrict table, const void *key) {
     if (po_hashtable_load_factor(table) < LOAD_FACTOR_DOWN_THRESHOLD &&
         table->capacity / 2 >= INITIAL_CAPACITY &&
         po_hashtable_resize(table, table->capacity / 2) == -1)
@@ -232,7 +232,7 @@ int po_hashtable_remove(po_hashtable_t *table, const void *key) {
     return 0;
 }
 
-void *po_hashtable_get(const po_hashtable_t *table, const void *key) {
+void *po_hashtable_get(const po_hashtable_t *restrict table, const void *key) {
     size_t hash = table->hash_func(key);
     size_t index = hash % table->capacity;
     hashtable_node_t *node = table->buckets[index];
@@ -247,7 +247,7 @@ void *po_hashtable_get(const po_hashtable_t *table, const void *key) {
     return NULL;
 }
 
-int po_hashtable_contains_key(const po_hashtable_t *table, const void *key) {
+int po_hashtable_contains_key(const po_hashtable_t *restrict table, const void *key) {
     size_t hash = table->hash_func(key);
     size_t index = hash % table->capacity;
     hashtable_node_t *node = table->buckets[index];
@@ -312,7 +312,7 @@ int po_hashtable_clear(po_hashtable_t *table) {
     return 1;
 }
 
-void po_hashtable_destroy(po_hashtable_t **table) {
+void po_hashtable_destroy(po_hashtable_t **restrict table) {
     if (!*table)
         return;
 
@@ -371,7 +371,7 @@ float po_hashtable_load_factor(const po_hashtable_t *table) {
     return (float)table->size / (float)table->capacity;
 }
 
-int po_hashtable_replace(const po_hashtable_t *table, const void *key, void *new_value) {
+int po_hashtable_replace(const po_hashtable_t *restrict table, const void *key, void *new_value) {
     size_t hash = table->hash_func(key);
     size_t index = hash % table->capacity;
     hashtable_node_t *node = table->buckets[index];

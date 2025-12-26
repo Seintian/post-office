@@ -11,6 +11,7 @@
 #include "perf/ringbuf.h"
 #include "utils/errors.h"
 #include "metrics/metrics.h"
+#include "sysinfo/sysinfo.h"
 #include <postoffice/log/logger.h>
 
 // Include pthread
@@ -25,7 +26,12 @@ struct perf_zcpool {
     pthread_mutex_t lock;
 };
 
-size_t perf_zcpool_bufsize(const perf_zcpool_t *pool) {
+static int get_log2_shift(unsigned long bytes) {
+    if (bytes == 0) return 0;
+    return __builtin_ctzl(bytes);
+}
+
+size_t perf_zcpool_bufsize(const perf_zcpool_t *restrict pool) {
     return pool->buf_size;
 }
 
@@ -35,14 +41,26 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size, perf_zcpool
         return NULL;
     }
 
-    // Compute total size, rounded up to multiple of 2 MiB
-    size_t region_size = buf_count * buf_size;
-    size_t page_2mb = 2UL << 20;
-    size_t aligned = (region_size + page_2mb - 1) & ~(page_2mb - 1);
+    // Compute total size
+    
+    // Default to 2MB if detection fails or is weird
+    size_t huge_page_bytes = 2UL << 20;
+    int huge_shift = 21;
 
-    // Try mmap with 2 MiB huge pages
+    po_sysinfo_t sys;
+    // best-effort sysinfo
+    if (po_sysinfo_collect(&sys) == 0 && sys.hugepage_info.size_kB > 0) {
+       huge_page_bytes = sys.hugepage_info.size_kB * 1024UL;
+       huge_shift = get_log2_shift(huge_page_bytes);
+    }
+
+    size_t region_size = buf_count * buf_size;
+    // Align to huge page size
+    size_t aligned = (region_size + huge_page_bytes - 1) & ~(huge_page_bytes - 1);
+
+    // Try mmap with detected huge pages
     void *base = mmap(NULL, aligned, PROT_READ | PROT_WRITE,
-                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | (21 << MAP_HUGE_SHIFT), -1, 0);
+                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | (huge_shift << MAP_HUGE_SHIFT), -1, 0);
     if (base == MAP_FAILED) {
         // fallback to normal pages
         base = mmap(NULL, aligned, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -110,7 +128,7 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size, perf_zcpool
     return p;
 }
 
-void perf_zcpool_destroy(perf_zcpool_t **p) {
+void perf_zcpool_destroy(perf_zcpool_t **restrict p) {
     if (!*p)
         return;
 
@@ -136,7 +154,7 @@ void perf_zcpool_destroy(perf_zcpool_t **p) {
     *p = NULL;
 }
 
-void *perf_zcpool_acquire(perf_zcpool_t *p) {
+void *perf_zcpool_acquire(perf_zcpool_t *restrict p) {
     if (!p->freeq) {
         errno = EINVAL;  // Use standard EINVAL instead of ZCP_EINVAL
         return NULL;
@@ -159,7 +177,7 @@ void *perf_zcpool_acquire(perf_zcpool_t *p) {
     return buf;
 }
 
-void perf_zcpool_release(perf_zcpool_t *p, void *buffer) {
+void perf_zcpool_release(perf_zcpool_t *restrict p, void *restrict buffer) {
     if (!p->freeq) {
         errno = EINVAL;  // Use standard EINVAL instead of ZCP_EINVAL
         return;
@@ -180,7 +198,7 @@ void perf_zcpool_release(perf_zcpool_t *p, void *buffer) {
         PO_METRIC_COUNTER_INC("zcpool.release");
 }
 
-size_t perf_zcpool_freecount(const perf_zcpool_t *p) {
+size_t perf_zcpool_freecount(const perf_zcpool_t *restrict p) {
     if (!p || !p->freeq) {
         errno = EINVAL;
         return 0;

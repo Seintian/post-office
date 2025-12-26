@@ -86,7 +86,7 @@ po_perf_ringbuf_t *perf_ringbuf_create(size_t capacity);
 /**
  * @brief Destroy a ring buffer (frees all internal memory) and NULLs the handle.
  */
-void perf_ringbuf_destroy(po_perf_ringbuf_t **rb) __nonnull((1));
+void perf_ringbuf_destroy(po_perf_ringbuf_t **restrict rb) __nonnull((1));
 
 /**
  * @brief Enqueue one pointer into the ring (non-blocking).
@@ -94,7 +94,7 @@ void perf_ringbuf_destroy(po_perf_ringbuf_t **rb) __nonnull((1));
  * @param item Pointer value to store (may be NULL if consumer tolerates it).
  * @return 0 on success, -1 if full.
  */
-int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item) __nonnull((1));
+int perf_ringbuf_enqueue(po_perf_ringbuf_t *restrict rb, void *restrict item) __nonnull((1));
 
 /**
  * @brief Dequeue one pointer from the ring (non-blocking).
@@ -102,14 +102,14 @@ int perf_ringbuf_enqueue(po_perf_ringbuf_t *rb, void *item) __nonnull((1));
  * @param out Destination for dequeued pointer (must not be NULL).
  * @return 0 on success (*out set), -1 if empty.
  */
-int perf_ringbuf_dequeue(po_perf_ringbuf_t *rb, void **out) __nonnull((1));
+int perf_ringbuf_dequeue(po_perf_ringbuf_t *restrict rb, void **restrict out) __nonnull((1));
 
 /**
  * @brief Return the approximate number of items currently in the ring.
  *
  * This value may be momentarily stale in concurrent scenarios.
  */
-size_t perf_ringbuf_count(const po_perf_ringbuf_t *rb) __nonnull((1));
+size_t perf_ringbuf_count(const po_perf_ringbuf_t *restrict rb) __nonnull((1));
 
 /**
  * @brief Peek at the item at the head of the ring without dequeuing.
@@ -117,7 +117,7 @@ size_t perf_ringbuf_count(const po_perf_ringbuf_t *rb) __nonnull((1));
  * @param out Destination for pointer.
  * @return 0 on success (*out set), -1 if empty.
  */
-int perf_ringbuf_peek(const po_perf_ringbuf_t *rb, void **out) __nonnull((1));
+int perf_ringbuf_peek(const po_perf_ringbuf_t *restrict rb, void **restrict out) __nonnull((1));
 
 /**
  * @brief Peek at the item at offset idx from the head (0=head, 1=next, ...).
@@ -126,7 +126,7 @@ int perf_ringbuf_peek(const po_perf_ringbuf_t *rb, void **out) __nonnull((1));
  * @param out Destination for pointer.
  * @return 0 on success (*out set), -1 if idx >= current count.
  */
-int perf_ringbuf_peek_at(const po_perf_ringbuf_t *rb, size_t idx, void **out) __nonnull((1));
+int perf_ringbuf_peek_at(const po_perf_ringbuf_t *restrict rb, size_t idx, void **restrict out) __nonnull((1));
 
 /**
  * @brief Advance (drop) exactly n items from the head.
@@ -134,7 +134,7 @@ int perf_ringbuf_peek_at(const po_perf_ringbuf_t *rb, size_t idx, void **out) __
  * @param n  Number of items to drop.
  * @return 0 on success, -1 if n > current count.
  */
-int perf_ringbuf_advance(po_perf_ringbuf_t *rb, size_t n) __nonnull((1));
+int perf_ringbuf_advance(po_perf_ringbuf_t *restrict rb, size_t n) __nonnull((1));
 
 #ifdef __cplusplus
 }
