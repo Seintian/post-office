@@ -64,7 +64,7 @@ const char *po_strerror(int err);
 #define INIH_NOTFOUND (INIH_EBASE + 11)
 #define INIH_ENOUSER (INIH_EBASE + 12)
 #define INIH_ERANGE (INIH_EBASE + 13)
-#define INIH_ETOP INIH_EUNKSECTION
+#define INIH_ETOP INIH_ERANGE
 
 /* libfort: no dedicated error codes (uses return booleans / sizes). */
 
@@ -275,7 +275,7 @@ const char *po_strerror(int err);
 #define ZCP_ENOMEM (ZCP_EBASE + 2) ///< Out of memory (pool creation)
 #define ZCP_EAGAIN (ZCP_EBASE + 3) ///< No buffers free (acquire would block)
 #define ZCP_EMMAP (ZCP_EBASE + 4)  ///< Memory mapping failed
-#define ZCP_ETOP ZCP_EAGAIN        ///< Topmost error
+#define ZCP_ETOP ZCP_EMMAP        ///< Topmost error
 
 /* hashtable / hashset / core: no dedicated error codes at present. */
 

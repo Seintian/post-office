@@ -219,8 +219,8 @@ void po_vector_iter_destroy(po_vector_iter_t *iter) {
     free(iter);
 }
 
-void *po_vector_iter_next(po_vector_iter_t *iter) {
-    if (!iter || iter->index >= iter->vec->size)
+void *po_vector_next(po_vector_iter_t *iter) {
+    if (iter->index >= iter->vec->size)
         return NULL;
 
     return iter->vec->data[iter->index++];
@@ -228,4 +228,14 @@ void *po_vector_iter_next(po_vector_iter_t *iter) {
 
 int po_vector_iter_has_next(const po_vector_iter_t *iter) {
     return iter->index < iter->vec->size;
+}
+
+int po_vector_is_empty(const po_vector_t *vec) {
+    return vec->size == 0;
+}
+
+void po_vector_sort(po_vector_t *vec, int (*compare)(const void *, const void *)) {
+    if (vec->size > 1) {
+        qsort(vec->data, vec->size, sizeof(void *), compare);
+    }
 }
