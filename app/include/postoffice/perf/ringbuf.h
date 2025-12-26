@@ -19,7 +19,7 @@ typedef enum {
 /**
  * @brief Create a new ring buffer.
  *
- * @param[in] capacity Capacity of the ring buffer (must be a power of two).
+ * @param[in] capacity Capacity of the ring buffer (must be a power of two). All slots are usable.
  * @param[in] flags Creation flags (e.g. to enable metrics).
  * @return Pointer to the new ring buffer, or NULL on failure.
  *

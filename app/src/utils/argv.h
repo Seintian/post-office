@@ -30,7 +30,7 @@ typedef struct {
     bool help;          /**< `true` if --help was requested (implies early exit). */
     bool version;       /**< `true` if --version was requested (implies early exit). */
     char *config_file;  /**< Path to configuration file (may be NULL). */
-    int loglevel;       /**< Logging verbosity level (application-defined scale). */
+    int loglevel;       /**< Logging verbosity level (application-defined scale). Default: 2 (LOG_INFO). */
 
     /* Logging/syslog options */
     bool syslog;        /**< Enable syslog sink if true. */

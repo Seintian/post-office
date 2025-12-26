@@ -39,7 +39,7 @@ static void recursive_delete(const char* dir) {
     nftw(dir, remove_callback, 64, FTW_DEPTH | FTW_PHYS);
 }
 
-TEST(BACKTRACE, GeneratesSnapshot) {
+TEST(BACKTRACE, GENERATES_SNAPSHOT) {
     char cwd[1024];
     if (getcwd(cwd, sizeof(cwd)) == NULL) {
         TEST_FAIL_MESSAGE("Failed to get CWD");
@@ -173,5 +173,5 @@ TEST(BACKTRACE, GeneratesSnapshot) {
 }
 
 TEST_GROUP_RUNNER(BACKTRACE) {
-    RUN_TEST_CASE(BACKTRACE, GeneratesSnapshot);
+    RUN_TEST_CASE(BACKTRACE, GENERATES_SNAPSHOT);
 }

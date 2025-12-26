@@ -35,7 +35,7 @@ TEST(ARGV, DEFAULT_VALUES) {
     TEST_ASSERT_FALSE(args.help);
     TEST_ASSERT_FALSE(args.version);
     TEST_ASSERT_NULL(args.config_file);
-    TEST_ASSERT_EQUAL_INT(0, args.loglevel);
+    TEST_ASSERT_EQUAL_INT(2, args.loglevel);
 }
 
 TEST(ARGV, HELP_SHORT) {

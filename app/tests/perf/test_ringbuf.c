@@ -55,14 +55,14 @@ TEST(RINGBUF, SINGLE_ENQUEUE_DEQUEUE) {
 TEST(RINGBUF, FULL_BUFFER) {
     size_t cap = 4;
 
-    int vals[4] = {1, 2, 3, 4};
-    // can hold cap-1 items = 3
-    for (int i = 0; i < (int)(cap - 1); i++) {
+    int vals[5] = {1, 2, 3, 4, 5};
+    // can hold cap items = 4
+    for (int i = 0; i < (int)cap; i++) {
         TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_enqueue(rb, &vals[i]));
     }
     // now full
-    TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_enqueue(rb, &vals[3]));
-    TEST_ASSERT_EQUAL_UINT(cap - 1, perf_ringbuf_count(rb));
+    TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_enqueue(rb, &vals[4]));
+    TEST_ASSERT_EQUAL_UINT(cap, perf_ringbuf_count(rb));
 }
 
 TEST(RINGBUF, WRAP_AROUND) {
@@ -131,6 +131,7 @@ TEST(RINGBUF, ENQUEUE_DEQUEUE) {
     int a = 1;
     int b = 2;
     int c = 3;
+    int d = 4;
     int *p;
 
     TEST_ASSERT_EQUAL_UINT64(0, perf_ringbuf_count(rb));
@@ -138,9 +139,10 @@ TEST(RINGBUF, ENQUEUE_DEQUEUE) {
     TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_enqueue(rb, &a));
     TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_enqueue(rb, &b));
     TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_enqueue(rb, &c));
-    // now full (3 of 3)
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_enqueue(rb, &d));
+    // now full (4 of 4)
     TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_enqueue(rb, &a));
-    TEST_ASSERT_EQUAL_UINT64(3, perf_ringbuf_count(rb));
+    TEST_ASSERT_EQUAL_UINT64(4, perf_ringbuf_count(rb));
 
     // dequeue in FIFO order
     TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void **)&p));
@@ -149,6 +151,8 @@ TEST(RINGBUF, ENQUEUE_DEQUEUE) {
     TEST_ASSERT_EQUAL_PTR(&b, p);
     TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void **)&p));
     TEST_ASSERT_EQUAL_PTR(&c, p);
+    TEST_ASSERT_EQUAL_INT(0, perf_ringbuf_dequeue(rb, (void **)&p));
+    TEST_ASSERT_EQUAL_PTR(&d, p);
     // now empty
     TEST_ASSERT_EQUAL_INT(-1, perf_ringbuf_dequeue(rb, (void **)&p));
     TEST_ASSERT_EQUAL_UINT64(0, perf_ringbuf_count(rb));
