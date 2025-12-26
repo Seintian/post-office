@@ -8,28 +8,24 @@ This document describes the format and structure of statistics collected during 
 
 The simulation maintains statistics primarily through two key structures:
 
-### Per‑Service Statistics Record
+### Per-Service Queue Statistics (`queue_status_t`)
+Each service type queue tracks:
 
-Each service type maintains a record with counters for:
+| Metric | Field | Description |
+|--------|-------|-------------|
+| Waiting Count | `waiting_count` | Current number of users in the queue |
+| Total Served | `total_served` | Cumulative number of customers served |
+| Last Ticket | `last_finished_ticket` | The ticket number most recently completed |
 
-| Metric | Description |
-|--------|-------------|
-| Serviced Users | Number of users who successfully completed the service |
-| Issued Services | Total number of service issuances (a user may request multiple times) |
-| Dropped/Not Issued Services | Requests that could not be fulfilled (queue exit / capacity) |
-| Cumulative Waiting Time | Sum of waiting durations (ns) across all requests (fulfilled + dropped) |
-| Cumulative Service Time | Sum of active service handling durations (ns) for fulfilled requests |
+### Global Statistics (`global_stats_t`)
+The system aggregates:
 
-### Global Aggregation Structure
-
-The global aggregation holds:
-
-| Element | Description |
-|---------|-------------|
-| Per‑Service Array | Collection of the per‑service records plus one synthetic global aggregate |
-| Active Operators (Today) | Count of operators who performed at least one issuance during the current day |
-| Operator Pauses (Total) | Total pauses taken (day or simulation cumulative depending on snapshot) |
-| Users Awaiting | Current number of users present in any waiting queue at snapshot time |
+| Metric | Field | Description |
+|--------|-------|-------------|
+| Total Tickets Issued | `total_tickets_issued` | Global count of all tickets issued |
+| Total Services Completed | `total_services_completed` | Global count of services finished |
+| Total Users Spawned | `total_users_spawned` | Total users created by Users Manager |
+| Connected Users | `connected_users` | Current number of users attached to SHM |
 
 ## Service Types
 

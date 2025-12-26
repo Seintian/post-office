@@ -99,7 +99,7 @@ LATEX_OUTPUT           = latex
 
 # USE_PDFLATEX		   = YES
 PDF_HYPERLINKS         = YES
-USE_MDFILE_AS_MAINPAGE = docs/mainpage.md
+USE_MDFILE_AS_MAINPAGE = docs/guides/mainpage.md
 
 #---------------------------------------------------------------------------
 # Configuration options for diagrams and graphs

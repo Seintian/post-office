@@ -104,7 +104,7 @@ Finally, per day the director also logs **worker statistics**:
 - **Total pauses taken**: sum of all break events across operators  
 - **Average pauses per active operator (day)**: total pauses today ÷ active operators today  
 
-All of these values are printed via `log_info()` and then appended to a CSV file for later analysis.
+All of these values are printed via `log_info()`. (CSV export is planned for future iterations).
 
 ## Libraries and APIs
 
@@ -254,7 +254,7 @@ The simulation can end under several conditions:
 
 ## Logging Strategy
 
-The project implements a comprehensive logging system built around the `log.c` library, extended by a custom `logger` API to support the specific needs of a multi-process environment. A key design choice is the use of **separated logging processes** to prevent log corruption and centralize log handling.
+The project implements a comprehensive logging system built around the `log.c` library, extended by a custom `logger` API to support the specific needs of a multi-process environment. A key design choice is the use of **asynchronous logging threads** to prevent blocking the main simulation loops.
 
 The system is initialized in each process via the `init_logger` macro, which configures the log level, file paths, and cleanup options. Log messages are formatted to include a timestamp, process ID (PID), log level, and source file location, providing essential context for debugging. The `logger` API abstracts file handling, using `flock` for atomic operations, and provides flags like `LOGGER_QUIET` to control console output and `CLEANUP_LOGS` to manage log rotation.
 
@@ -270,10 +270,10 @@ The system is initialized in each process via the `init_logger` macro, which con
     - Simplifies coordination and prevents resource leaks
     - Ensures consistent initialization order
 
-3. **Separated Logging Processes**:
-    - Prevents log corruption in multi-process environment
-    - Centralizes log handling
-    - Improves performance by offloading logging duties
+3. **Asynchronous Logging**:
+    - Uses background threads (`logger` library) to offload I/O
+    - Lock-free ring buffer for high throughput
+    - Prevents simulation stalls during heavy logging
 
 4. **Simulation State in Shared Memory**:
     - Provides atomic access to simulation state

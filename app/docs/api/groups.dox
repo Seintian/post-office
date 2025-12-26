@@ -1,0 +1,68 @@
+/** @defgroup libraries Post Office Libraries */
+/** @defgroup executables Simulation Processes */
+
+/** @defgroup ring0 Ring 0 (Core Primitives)
+ *  @ingroup libraries
+ *  Foundational data structures and third-party dependencies.
+ */
+/** @defgroup vector Vector
+ *  @ingroup ring0 */
+/** @defgroup prime Prime Utilities
+ *  @ingroup ring0 */
+/** @defgroup random Random
+ *  @ingroup ring0 */
+/** @defgroup perf Performance (Ringbuf)
+ *  @ingroup ring0 */
+
+/** @defgroup ring1 Ring 1 (System & Generic)
+ *  @ingroup libraries
+ *  OS abstractions and generic containers.
+ */
+/** @defgroup hashtable Hashtable
+ *  @ingroup ring1 */
+/** @defgroup hashset Hashset
+ *  @ingroup ring1 */
+/** @defgroup sysinfo System Information
+ *  @ingroup ring1 */
+/** @defgroup concurrency Concurrency
+ *  @ingroup ring1 */
+
+/** @defgroup ring2 Ring 2 (Observability)
+ *  @ingroup libraries
+ *  Logging and metrics.
+ */
+/** @defgroup metrics Metrics
+ *  @ingroup ring2 */
+/** @defgroup logger Logger
+ *  @ingroup ring2 */
+
+/** @defgroup ring3 Ring 3 (Storage & Persistence)
+ *  @ingroup libraries
+ *  Storage engines and serialization.
+ */
+/** @defgroup backtrace Backtrace
+ *  @ingroup ring3 */
+/** @defgroup storage Storage
+ *  @ingroup ring3 */
+/** @defgroup index In-Memory Log Index
+ *  @ingroup ring3 */
+/** @defgroup logstore Log Structured KV Store
+ *  @ingroup ring3 */
+/** @defgroup db_lmdb LMDB Wrapper
+ *  @ingroup ring3 */
+
+/** @defgroup ring4 Ring 4 (Networking & UI)
+ *  @ingroup libraries
+ *  High-level I/O and interaction.
+ */
+/** @defgroup net Networking
+ *  @ingroup ring4 */
+/** @defgroup tui Text User Interface
+ *  @ingroup ring4 */
+/** @defgroup tui_internal TUI Internal
+ *  @ingroup ring4 */
+
+/** @defgroup director Director Process
+ *  @ingroup executables */
+/** @defgroup utils Utilities
+ *  @ingroup libraries */

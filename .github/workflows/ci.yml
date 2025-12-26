@@ -25,7 +25,6 @@ jobs:
         run: |
           cd app
           make all
-          make
 
       - name: Run Unity Tests
         run: |

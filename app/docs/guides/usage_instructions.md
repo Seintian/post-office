@@ -62,7 +62,7 @@ make all
 
 This will compile all executables without starting the application.
 
-**NOTE**: Be sure to run the `make` commands from the [app/](../) folder.
+**NOTE**: Be sure to run the `make` commands from the [app/](../../) folder.
 
 \anchor running-modes
 
@@ -140,13 +140,18 @@ If you don't provide a configuration file, `make` will ask you to enter one in a
 Both the main executables accept the following command-line options:
 
 - `-h, --help`: Display a help message and exit
+- `-v, --version`: Show version information and exit
 - `-l, --loglevel LEVEL`: Set log level (`TRACE`|`DEBUG`|`INFO`|`WARN`|`ERROR`|`FATAL`)
 - `-c, --config FILE`: Specify the configuration file
+- `--syslog`: Enable syslog logging sink
+- `--syslog-ident S`: Set syslog ident (default: 'postoffice')
+- `--tui`: Run in TUI simulation mode
+- `--tui-demo`: Run a minimal TUI smoke demo and exit
 
 Example:
 
 ```bash
-./bin/SO_Proj-main --loglevel DEBUG --config config/timeout.ini
+./bin/post_office_main --loglevel DEBUG --config config/timeout.ini
 ```
 
 \anchor configuration-files
@@ -155,8 +160,8 @@ Example:
 
 The application uses INI configuration files located in the `config/` directory:
 
-- [timeout.ini](../config/timeout.ini): Configuration with timeout settings
-- [explode.ini](../config/explode.ini): Configuration with explosion settings
+- [timeout.ini](../../config/timeout.ini): Configuration with timeout settings
+- [explode.ini](../../config/explode.ini): Configuration with explosion settings
 
 To create a custom configuration, copy one of the existing files and modify it as needed.
 

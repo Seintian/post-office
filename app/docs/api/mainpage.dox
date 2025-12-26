@@ -31,19 +31,14 @@
  *  For performance knobs: \ref tuning_guide.md "tuning_guide.md" (if populated).
  *
  *  \section mp_module_index 2. Library Module Index
- *  The reusable components are grouped for navigation (see also groups.dox):
- *   - \ref logger            "Logger" - asynchronous, lock-minimized multi-sink logging
- *   - \ref perf              "Perf & Instrumentation" - ring buffer, batcher, metrics layer
- *   - \ref hashtable         "Hashtable" - generic key/value mapping
- *   - \ref hashset           "Hashset" - set abstraction
- *   - \ref index             "In-Memory Log Index" - key -> (offset,length) catalog
- *   - \ref logstore          "Log Structured KV Store" - append-only storage with fsync policies
- *   - \ref db_lmdb           "LMDB Wrapper" - thin facade for persistent buckets
- *   - \ref storage           "Storage Facade" - composition of index + logstore (+ optional DB)
- *   - \ref net               "Networking Primitives" - framing, protocol, poller, sockets
- *   - \ref utils             "Utilities" - argv, configs/INI, random, file helpers, errors
- *   - \ref sysinfo           "System Information" - runtime host metrics collection
- *   - \ref prime             "Prime Utilities" - hashing support / sizing heuristics
+ *  The reusable components are organized into architectural layers (Rings):
+ *   - \ref ring0             "Ring 0 (Core)" - Low-level primitives (Vector, Random, Perf, Prime)
+ *   - \ref ring1             "Ring 1 (System)" - Generic containers (Hashtable, Hashset) & Concurrency
+ *   - \ref ring2             "Ring 2 (Observability)" - Logger & Metrics
+ *   - \ref ring3             "Ring 3 (Persistence)" - Storage engines (Logstore, Index, LMDB)
+ *   - \ref ring4             "Ring 4 (Interact)" - Networking & TUI
+ *
+ *  See \ref modules.dox for detailed usage examples of each module.
  *
  *  An integrated end-to-end example combining many of these subsystems lives at
  *  \ref integration_scenario "Putting It All Together".
@@ -219,13 +214,11 @@
  *  <b>Overflow Notice</b>: Informational log emitted when drop/overwrite counts hit powers of two.
  *
  *  \section mp_related_groups 19. Group Index Shortcut
- *   - \ref libraries
- *   - \ref executables
- *   - \ref utils
- *   - \ref net
- *   - \ref storage
- *   - \ref perf
- *   - \ref sysinfo
+ *   - \ref ring0
+ *   - \ref ring1
+ *   - \ref ring2
+ *   - \ref ring3
+ *   - \ref ring4
  *
  *  \section mp_closing 20. Closing Remarks
  *  The project unifies educational clarity with production-grade concurrency patterns.
