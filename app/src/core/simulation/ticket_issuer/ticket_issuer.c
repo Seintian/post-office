@@ -18,6 +18,7 @@
 #include <postoffice/net/poller.h>
 #include <postoffice/log/logger.h>
 #include <postoffice/net/socket.h>
+#include <postoffice/sort/sort.h>
 #include <errno.h>
 #include <postoffice/sysinfo/sysinfo.h> // Sysinfo integration
 
@@ -62,6 +63,7 @@ int main(int argc, char *argv[]) {
         if (opt == 'p') pool_size = (size_t)atol(optarg);
         if (opt == 'l') loglevel = optarg;
     }
+    po_sort_init();
 
     if (pool_size == 0) {
         // Dynamic sizing: 4x cores, min 32
@@ -176,6 +178,7 @@ int main(int argc, char *argv[]) {
     poller_destroy(poller);
     net_shutdown_zerocopy();
     sim_ipc_shm_detach(shm);
+    po_sort_finish();
     po_logger_shutdown();
     return 0;
 }

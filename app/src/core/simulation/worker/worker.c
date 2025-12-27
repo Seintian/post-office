@@ -19,6 +19,7 @@
 #include <getopt.h>
 #include <postoffice/concurrency/threadpool.h>
 #include <postoffice/concurrency/waitgroup.h>
+#include <postoffice/sort/sort.h>
 
 typedef struct {
     int worker_id;
@@ -74,6 +75,7 @@ int main(int argc, char** argv) {
     int n_workers = 0;
 
     parse_cli_args(argc, argv, &worker_id, &service_type, &n_workers);
+    po_sort_init();
 
     // 1. Initialize Runtime Environment
     sim_shm_t *shm = initialize_worker_runtime();
@@ -144,5 +146,6 @@ int main(int argc, char** argv) {
 
     // 3. Cleanup
     teardown_worker_runtime(shm);
+    po_sort_finish();
     return 0;
 }

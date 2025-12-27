@@ -19,6 +19,7 @@
 
 #include <postoffice/log/logger.h>
 #include <postoffice/net/net.h>
+#include <postoffice/sort/sort.h>
 
 static int g_target_population = 0;
 static volatile sig_atomic_t g_shutdown_requested = 0;
@@ -58,6 +59,7 @@ int main(int argc, char *argv[]) {
         if (opt == 'p') pool_size = atoi(optarg);
         if (opt == 'l') loglevel = optarg;
     }
+    po_sort_init();
 
     g_target_population = initial;
 
@@ -143,6 +145,7 @@ int main(int argc, char *argv[]) {
     users_spawn_shutdown_all();
     net_shutdown_zerocopy();
     sim_ipc_shm_detach(shm);
+    po_sort_finish();
     po_logger_shutdown();
     return 0;
 }

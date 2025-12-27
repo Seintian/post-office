@@ -14,6 +14,7 @@
 #include <postoffice/log/logger.h>
 #include <postoffice/metrics/metrics.h>
 #include <postoffice/perf/perf.h>
+#include <postoffice/sort/sort.h>
 #include <postoffice/sysinfo/sysinfo.h>
 
 static int initialize_metrics(void) {
@@ -67,8 +68,9 @@ int app_bootstrap_system(const po_args_t *args, bool *out_is_tui) {
     // 3. Initialize Subsystems
     if (initialize_metrics() != 0) return -1;
     if (initialize_logger(args->loglevel, cacheline_size, args, is_tui) != 0) return -1;
-    
+
     backtrace_init("crash_reports");
+    po_sort_init();
 
     // 4. Start Background Samplers
     if (po_sysinfo_sampler_init() != 0) {
@@ -102,6 +104,7 @@ void app_shutdown_system(po_args_t *args) {
     po_sysinfo_sampler_stop();
     po_logger_shutdown();
     po_perf_shutdown(NULL);
+    po_sort_finish();
     po_metrics_shutdown();
     po_args_destroy(args);
 }

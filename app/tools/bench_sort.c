@@ -1,3 +1,15 @@
+/**
+ * @file bench_sort.c
+ * @brief Benchmark tool for comparing po_sort (FluxSort) against qsort.
+ * 
+ * PERFORMANCE NOTE:
+ * This tool exhibits significant performance variations based on optimization levels.
+ *   - Debug (-O1): po_sort is ~3x slower than qsort due to lack of inlining.
+ *   - Release (-O3): po_sort is ~5x-12x faster than qsort.
+ * 
+ * For a detailed performance analysis and profiling report, see:
+ * app/docs/bench_sort.md
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,8 +78,8 @@ static void fill_data(int *data, size_t n, data_mode_t mode) {
         for (size_t i = 0; i < n; i++) data[i] = (int)i;
         size_t swaps = n / 100; // 1%
         for (size_t i = 0; i < swaps; i++) {
-            size_t a = po_rand_range_i64(0, n - 1);
-            size_t b = po_rand_range_i64(0, n - 1);
+            size_t a = (size_t)po_rand_range_i64(0, (int64_t)n - 1);
+            size_t b = (size_t)po_rand_range_i64(0, (int64_t)n - 1);
             int tmp = data[a];
             data[a] = data[b];
             data[b] = tmp;
@@ -88,6 +100,11 @@ static void fill_data(int *data, size_t n, data_mode_t mode) {
                 break;
             case MODE_RANDOM_FEW_UNIQUE: 
                 data[i] = (int)po_rand_range_i64(0, 9); 
+                break;
+            case MODE_MOORE:
+            case MODE_SAWTOOTH:
+            case MODE_PERTURBED:
+                // Handled in special cases above
                 break;
             default: break;
         }

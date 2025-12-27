@@ -4,6 +4,7 @@
  */
 
 #include "vector/vector.h"
+#include "sort/sort.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -236,6 +237,6 @@ int po_vector_is_empty(const po_vector_t *vec) {
 
 void po_vector_sort(po_vector_t *vec, int (*compare)(const void *, const void *)) {
     if (vec->size > 1) {
-        qsort(vec->data, vec->size, sizeof(void *), compare);
+        po_sort(vec->data, vec->size, sizeof(void *), compare);
     }
 }

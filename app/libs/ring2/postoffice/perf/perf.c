@@ -713,6 +713,8 @@ static void print_line(FILE *out, const char *fmt, ...) {
     va_end(args);
 }
 
+#include <postoffice/sort/sort.h>
+
 int po_perf_report(FILE *out) {
     if (!ctx.is_initialized) return -1;
 
@@ -730,7 +732,7 @@ int po_perf_report(FILE *out) {
             print_line(out, "-- Counters -- (allocation failed)");
         } else {
             memcpy(local_c, ctx.shm->counters, nc * sizeof(shm_counter_t));
-            qsort(local_c, nc, sizeof(shm_counter_t), compare_shm_counters);
+            po_sort(local_c, nc, sizeof(shm_counter_t), compare_shm_counters);
             for (size_t i = 0; i < nc; i++) {
                 print_line(out, "%s: %lu", local_c[i].name, (unsigned long)atomic_load(&local_c[i].value));
             }
@@ -752,7 +754,7 @@ int po_perf_report(FILE *out) {
             print_line(out, "-- Timers -- (allocation failed)");
         } else {
             memcpy(local_t, ctx.shm->timers, nt * sizeof(shm_timer_t));
-            qsort(local_t, nt, sizeof(shm_timer_t), compare_shm_timers);
+            po_sort(local_t, nt, sizeof(shm_timer_t), compare_shm_timers);
             for (size_t i = 0; i < nt; i++) {
                 print_line(out, "%s: %lu ns", local_t[i].name, (unsigned long)atomic_load(&local_t[i].total_ns));
             }
@@ -772,7 +774,7 @@ int po_perf_report(FILE *out) {
             print_line(out, "-- Histograms -- (allocation failed)");
         } else {
             memcpy(local_h, ctx.shm->histograms, nh * sizeof(shm_histogram_t));
-            qsort(local_h, nh, sizeof(shm_histogram_t), compare_shm_histograms);
+            po_sort(local_h, nh, sizeof(shm_histogram_t), compare_shm_histograms);
             for (size_t i = 0; i < nh; i++) {
                 print_line(out, "%s:", local_h[i].name);
                 for (size_t b = 0; b < local_h[i].nbins; b++) {

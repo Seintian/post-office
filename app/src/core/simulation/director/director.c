@@ -11,6 +11,7 @@
 #include "ctrl_bridge/bridge_mainloop.h"
 #include "ipc/simulation_ipc.h"
 #include "utils/signals.h"
+#include <postoffice/sort/sort.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,6 +31,7 @@ int main(int argc, char *argv[]) {
     director_config_t cfg;
     initialize_configuration_defaults(&cfg);
     parse_command_line_configuration(&cfg, argc, argv);
+    po_sort_init();
 
     // 2. Logging
     if (po_logger_init(&(po_logger_config_t){
@@ -80,6 +82,7 @@ int main(int argc, char *argv[]) {
         bridge_mainloop_stop();
     }
     sim_ipc_shm_destroy();
+    po_sort_finish();
     po_logger_shutdown();
     return 0;
 }

@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <postoffice/sort/sort.h>
 
 #include "../ipc/simulation_ipc.h"
 
@@ -45,6 +46,7 @@ int main(int argc, char** argv) {
     int service_type = -1;
 
     parse_cli_args(argc, argv, &user_id, &service_type);
+    po_sort_init();
 
     if (user_id == -1 || service_type == -1) {
         fprintf(stderr, "Usage: %s -i <id> -s <type>\n", argv[0]);
@@ -59,5 +61,6 @@ int main(int argc, char** argv) {
     int result = run_user_simulation_loop(user_id, service_type, shared_memory, NULL);
 
     teardown_user_runtime(shared_memory);
+    po_sort_finish();
     return result;
 }
