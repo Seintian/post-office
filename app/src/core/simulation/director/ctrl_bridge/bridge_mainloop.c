@@ -5,6 +5,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "bridge_mainloop.h"
 #include <postoffice/metrics/metrics.h>
+#include <postoffice/concurrency/threadpool.h>
 #include <postoffice/log/logger.h>
 #include <postoffice/net/net.h>
 #include <postoffice/net/socket.h>
@@ -28,6 +29,14 @@ static const char* ctrl_socket_path = "/tmp/post_office_ctrl.sock";
 
 static volatile int g_bridge_running = 0;
 static poller_t *g_poller = NULL;
+static threadpool_t *g_bridge_pool = NULL;
+static void handle_client_fd(int client_fd);
+
+static void bridge_client_task(void *arg) {
+    int client_fd = *(int*)arg;
+    free(arg);
+    handle_client_fd(client_fd);
+}
 
 static void handle_client_fd(int client_fd) {
     // Receive command with protocol header
@@ -54,7 +63,7 @@ static void handle_client_fd(int client_fd) {
     // Process command (payload is the command string)
     char *cmd = (char *)payload;
     size_t cmd_len = hdr.payload_len;
-    
+
     // Null-terminate for safety (ensure we don't overflow)
     if (cmd_len > 0 && cmd_len < 512) {
         char command[512];
@@ -81,13 +90,19 @@ static void handle_client_fd(int client_fd) {
     po_socket_close(client_fd);
 }
 
-int bridge_mainloop_init(void) {
+int bridge_mainloop_init(sim_shm_t *shm) {
     // Cleanup old socket
     unlink(ctrl_socket_path);
 
     // Initialize metrics
     PO_METRIC_COUNTER_CREATE("director.bridge.connections");
     PO_METRIC_COUNTER_CREATE("director.bridge.commands");
+
+    g_bridge_pool = tp_create(8, 0); 
+    if (!g_bridge_pool) return -1;
+    if (shm) {
+        tp_set_active_counter(g_bridge_pool, &shm->stats.active_threads);
+    }
 
     return 0;
 }
@@ -99,7 +114,7 @@ int bridge_mainloop_run(void) {
         LOG_ERROR("bridge: listen failed: %s", strerror(errno));
         return -1;
     }
-    
+
     // Best effort permissions
     chmod(ctrl_socket_path, 0600);
 
@@ -124,7 +139,7 @@ int bridge_mainloop_run(void) {
     LOG_INFO("bridge: listening on %s", ctrl_socket_path);
 
     struct epoll_event events[16];
-    
+
     while (g_bridge_running) {
         // Wait for events (1s timeout to check g_bridge_running)
         int n = poller_wait(g_poller, events, 16, 1000);
@@ -142,21 +157,12 @@ int bridge_mainloop_run(void) {
                 
                 if (client_fd >= 0) {
                     PO_METRIC_COUNTER_INC("director.bridge.connections");
-                    // Handle client (blocking for now in separate thread or inline)
-                    // We'll spawn a thread to keep the main loop responsive to new connections
-                    pthread_t t;
+                    // Handle client via threadpool
                     int *pfd = malloc(sizeof(int));
                     if (pfd) {
                         *pfd = client_fd;
-                        void* client_thread(void* arg) {
-                            int cfd = *(int*)arg;
-                            free(arg);
-                            handle_client_fd(cfd);
-                            return NULL;
-                        }
-                        if (pthread_create(&t, NULL, client_thread, pfd) == 0) {
-                            pthread_detach(t);
-                        } else {
+                        if (tp_submit(g_bridge_pool, bridge_client_task, pfd) != 0) {
+                            LOG_ERROR("bridge: failed to submit task");
                             free(pfd);
                             po_socket_close(client_fd);
                         }
@@ -179,5 +185,9 @@ void bridge_mainloop_stop(void) {
     g_bridge_running = 0;
     if (g_poller) {
         poller_wake(g_poller);
+    }
+    if (g_bridge_pool) {
+        tp_destroy(g_bridge_pool, true);
+        g_bridge_pool = NULL;
     }
 }

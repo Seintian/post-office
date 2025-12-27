@@ -109,7 +109,7 @@ static int compare_str(const void *a, const void *b) {
     return strcmp(sa, sb);
 }
 
-TEST(VECTOR, Sort) {
+TEST(VECTOR, SORT) {
     char *s1 = "C";
     char *s2 = "A";
     char *s3 = "B";
@@ -164,7 +164,7 @@ TEST_GROUP_RUNNER(VECTOR) {
     RUN_TEST_CASE(VECTOR, Insert);
     RUN_TEST_CASE(VECTOR, Remove);
     RUN_TEST_CASE(VECTOR, ReserveAndShrink);
-    RUN_TEST_CASE(VECTOR, Sort);
+    RUN_TEST_CASE(VECTOR, SORT);
     RUN_TEST_CASE(VECTOR, Copy);
     RUN_TEST_CASE(VECTOR, Iterator);
 }

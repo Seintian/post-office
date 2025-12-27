@@ -53,7 +53,7 @@ int main(int argc, char *argv[]) {
     apply_configuration_to_shared_memory(&cfg, shm);
 
     if (!cfg.is_headless) {
-        bridge_mainloop_init();
+        bridge_mainloop_init(shm);
     }
 
     // 5. Signals
@@ -71,6 +71,9 @@ int main(int argc, char *argv[]) {
 
     // 8. Shutdown
     LOG_INFO("Director shutting down...");
+    if (shm) {
+        atomic_fetch_sub(&shm->stats.active_threads, 1);
+    }
     terminate_all_simulation_subsystems();
 
     if (!cfg.is_headless) {

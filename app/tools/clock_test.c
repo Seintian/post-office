@@ -10,32 +10,31 @@
 int main() {
     struct timespec ts;
     uint64_t start, end;
-    int i;
     int count = 10000000;
 
     // Test Coarse
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    start = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
-    
-    for(i=0; i<count; i++) {
+    clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+    start = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+
+    for(int i=0; i<count; i++) {
         clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
     }
-    
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    end = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
-    printf("Coarse: %lu ns per call\n", (end - start) / count);
+
+    clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+    end = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+    printf("Coarse: %lu ns per call\n", (end - start) / (uint64_t)count);
 
     // Test Normal
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    start = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
-    
-    for(i=0; i<count; i++) {
+    start = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+
+    for(int i=0; i<count; i++) {
         clock_gettime(CLOCK_MONOTONIC, &ts);
     }
-    
+
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    end = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
-    printf("Normal: %lu ns per call\n", (end - start) / count);
-    
+    end = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+    printf("Normal: %lu ns per call\n", (end - start) / (uint64_t)count);
+
     return 0;
 }

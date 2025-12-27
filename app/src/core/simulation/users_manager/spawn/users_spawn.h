@@ -13,7 +13,7 @@ typedef struct {
     int worker_idx; 
 } user_slot_t;
 
-void users_spawn_init(size_t pool_size);
+void users_spawn_init(sim_shm_t *shm, size_t pool_size);
 
 /**
  * @brief Spawns a new user thread.

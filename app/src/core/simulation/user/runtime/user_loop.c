@@ -139,7 +139,7 @@ static void wait_for_office(int user_id, sim_shm_t *shm, volatile _Atomic bool *
     pthread_mutex_unlock(&shm->time_control.mutex);
 }
 
-static void join_queue(int user_id, int service, uint32_t ticket, sim_shm_t *shm) {
+static unsigned int join_queue(int user_id, int service, uint32_t ticket, sim_shm_t *shm) {
     queue_status_t *q = &shm->queues[service];
     LOG_DEBUG("User %d joining queue %d [Ticket #%u]", user_id, service, ticket);
     atomic_fetch_add(&q->waiting_count, 1);
@@ -153,9 +153,10 @@ static void join_queue(int user_id, int service, uint32_t ticket, sim_shm_t *shm
     pthread_mutex_lock(&q->mutex);
     pthread_cond_signal(&q->cond_added);
     pthread_mutex_unlock(&q->mutex);
+    return idx;
 }
 
-static bool wait_service(int user_id, uint32_t ticket, int service, sim_shm_t *shm, volatile _Atomic bool *should_continue) {
+static bool wait_service(int user_id, uint32_t ticket, int service, unsigned int q_idx, sim_shm_t *shm, volatile _Atomic bool *should_continue) {
     queue_status_t *q = &shm->queues[service];
     bool done = false;
     int d, h, m;
@@ -164,19 +165,25 @@ static bool wait_service(int user_id, uint32_t ticket, int service, sim_shm_t *s
     while (should_continue && atomic_load(should_continue) && !g_proc_shutdown) {
         if (!atomic_load(&shm->time_control.sim_active)) break;
 
+        sim_client_read_time(shm, &d, &h, &m);
+        if (h >= 17) {
+            // Office closed. Try to atomically remove our ticket from the queue.
+            uint32_t val = ticket + 1;
+            if (atomic_compare_exchange_strong(&q->tickets[q_idx], &val, 0)) {
+                LOG_WARN("[Day %d %02d:%02d] User %d Kicked out (Office Closed). Ticket removed.", d, h, m, user_id);
+                atomic_fetch_sub(&q->waiting_count, 1);
+                done = false; 
+                break; 
+            }
+            // If compare_exchange failed, it means a worker ALREADY picked up the ticket.
+            // In that case, we MUST continue to wait for the worker to finish the service.
+            LOG_DEBUG("User %d Office Closed but worker already has ticket. Waiting finish...", user_id);
+        }
+
         if (atomic_load(&q->last_finished_ticket) >= ticket) {
-            sim_client_read_time(shm, &d, &h, &m);
             LOG_DEBUG("[Day %d %02d:%02d] User %d Finished.", d, h, m, user_id);
             done = true;
             break;
-        }
-
-        // Check for Office Closing (Kickout)
-        sim_client_read_time(shm, &d, &h, &m);
-        if (h >= 17) {
-            LOG_WARN("[Day %d %02d:%02d] User %d Kicked out (Office Closed).", d, h, m, user_id);
-            done = false; 
-            break; 
         }
 
         struct timespec ts;
@@ -237,13 +244,18 @@ int run_user_simulation_loop(int user_id, int service_type, sim_shm_t *shm, vola
         LOG_INFO("User %d obtained ticket #%u (Service Type: %d)", user_id, t, service_type);
 
         // 3. Join Queue
-        join_queue(user_id, service_type, t, shm);
-        LOG_DEBUG("User %d Joined Queue %d [Ticket #%u]", user_id, service_type, t);
+        unsigned int q_idx = join_queue(user_id, service_type, t, shm);
+        LOG_DEBUG("User %d Joined Queue %d [Ticket #%u] at idx %u", user_id, service_type, t, q_idx);
 
         // 4. Wait Service
-        if (wait_service(user_id, t, service_type, shm, should_continue_flag)) {
+        if (wait_service(user_id, t, service_type, q_idx, shm, should_continue_flag)) {
             LOG_INFO("User %d Service Complete [Ticket #%u]", user_id, t);
         } else {
+            sim_client_read_time(shm, &d, &h, &m);
+            if (h >= 17) {
+                LOG_INFO("User %d leaving office (Closing Time). Task finished.", user_id);
+                return 0; // EXIT THE SIMULATION THREAD
+            }
             LOG_ERROR("User %d Service Interrupted/Failed [Ticket #%u]", user_id, t);
         }
     }

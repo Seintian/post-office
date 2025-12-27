@@ -23,12 +23,18 @@ void synchronize_simulation_barrier(sim_shm_t *shm, int day, volatile sig_atomic
         pthread_mutex_unlock(&shm->queues[i].mutex);
     }
 
-    uint32_t req = atomic_load(&shm->sync.required_count);
-    LOG_DEBUG("Synchronizing Day %d (Waiting for %u participants)...", day, req);
+    uint32_t ext_req = atomic_load(&shm->sync.required_count);
+    uint32_t total = atomic_load(&shm->stats.connected_threads);
+    uint32_t active = atomic_load(&shm->stats.active_threads);
+    // uint32_t pop = atomic_load(&shm->stats.connected_users); // 0 at this point of day
+    uint32_t idle = (total > active) ? (total - active) : 0;
+
+    LOG_DEBUG("Synchronizing Day %d (%u External Processes | Threads: %u active, %u idle [%u total])...", 
+              day, ext_req, active, idle, total);
 
     struct timespec ts;
     while (*running_flag) {
-        if (atomic_load(&shm->sync.ready_count) >= req) break;
+        if (atomic_load(&shm->sync.ready_count) >= ext_req) break;
 
         clock_gettime(CLOCK_MONOTONIC, &ts);
         ts.tv_nsec += 100000000; 

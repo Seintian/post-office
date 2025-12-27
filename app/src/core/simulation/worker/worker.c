@@ -17,22 +17,26 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <getopt.h>
+#include <postoffice/concurrency/threadpool.h>
+#include <postoffice/concurrency/waitgroup.h>
 
 typedef struct {
     int worker_id;
     int service_type;
     sim_shm_t *shm;
     worker_sync_t *sync_ctx;
+    waitgroup_t *wg;
 } worker_thread_context_t;
 
 /**
  * @brief Thread entry point for an individual worker.
  */
-static void* execute_worker_thread(void* arg) {
+static void execution_task_wrapper(void* arg) {
     worker_thread_context_t* ctx = (worker_thread_context_t*)arg;
     run_worker_service_loop(ctx->worker_id, ctx->service_type, ctx->shm, ctx->sync_ctx);
+    waitgroup_t *wg = ctx->wg;
     free(ctx);
-    return NULL;
+    wg_done(wg);
 }
 
 /**
@@ -81,12 +85,17 @@ int main(int argc, char** argv) {
     // 2. Spawn Workers
     if (n_workers > 0) {
         // Multi-threaded Mode
-        pthread_t* threads = malloc(sizeof(pthread_t) * (size_t)n_workers);
-        if (!threads) {
-            LOG_ERROR("Failed to allocate thread handles");
+        threadpool_t *tp = tp_create((size_t)n_workers + 4, 0); // Unbounded queue
+        if (!tp) {
+            LOG_ERROR("Failed to create thread pool");
             teardown_worker_runtime(shm);
             return 1;
         }
+        atomic_fetch_add(&shm->stats.connected_threads, (uint32_t)n_workers + 1);
+        atomic_fetch_add(&shm->stats.active_threads, 1); // Main thread is active
+        tp_set_active_counter(tp, &shm->stats.active_threads);
+
+        waitgroup_t *wg = wg_create();
 
         // Initialize Synchronization Context
         worker_sync_t sync_ctx;
@@ -102,17 +111,19 @@ int main(int argc, char** argv) {
             ctx->service_type = i % SIM_MAX_SERVICE_TYPES; // Round-robin assignment
             ctx->shm = shm;
             ctx->sync_ctx = &sync_ctx; // Pass reference
-
-            if (pthread_create(&threads[i], NULL, execute_worker_thread, ctx) != 0) {
-                LOG_ERROR("pthread_create failed for worker %d", i);
-            }
+            ctx->wg = wg;
+            
+            wg_add(wg, 1);
+            tp_submit(tp, execution_task_wrapper, ctx);
         }
 
         // Wait for completion
-        for (int i = 0; i < n_workers; i++) {
-            pthread_join(threads[i], NULL);
-        }
-        free(threads);
+        wg_wait(wg);
+        
+        wg_destroy(wg);
+        atomic_fetch_sub(&shm->stats.active_threads, 1);
+        atomic_fetch_sub(&shm->stats.connected_threads, (uint32_t)n_workers + 1);
+        tp_destroy(tp, true);
         pthread_barrier_destroy(&sync_ctx.barrier);
 
     } else if (worker_id != -1 && service_type != -1) {

@@ -60,6 +60,7 @@ CONCURRENCY_DIR        = $(RING1_DIR)/postoffice/concurrency
 METRICS_DIR            = $(RING2_DIR)/postoffice/metrics
 LOG_DIR                = $(RING2_DIR)/postoffice/log
 PERF_CORE_DIR          = $(RING2_DIR)/postoffice/perf
+SORT_DIR               = $(RING2_DIR)/postoffice/sort
 
 # Ring 3
 BACKTRACE_DIR          = $(RING3_DIR)/postoffice/backtrace
@@ -202,11 +203,12 @@ PRIME_SRC       = $(wildcard $(PRIME_DIR)/*.c)
 STORAGE_SRC     = $(wildcard $(STORAGE_DIR)/*.c)
 UTILS_SRC       = $(wildcard $(UTILS_DIR)/*.c)
 RANDOM_SRC      = $(wildcard $(RANDOM_DIR)/*.c)
+SORT_SRC        = $(wildcard $(SORT_DIR)/*.c)
 LOG_SRC         = $(wildcard $(LOG_DIR)/*.c)
 SYSINFO_SRC     = $(wildcard $(SYSINFO_DIR)/*.c)
-BACKTRACE_SRC     = $(wildcard $(BACKTRACE_DIR)/*.c)
-VECTOR_SRC        = $(wildcard $(VECTOR_DIR)/*.c)
-CONCURRENCY_SRC   = $(wildcard $(CONCURRENCY_DIR)/*.c)
+BACKTRACE_SRC   = $(wildcard $(BACKTRACE_DIR)/*.c)
+VECTOR_SRC      = $(wildcard $(VECTOR_DIR)/*.c)
+CONCURRENCY_SRC = $(wildcard $(CONCURRENCY_DIR)/*.c)
 
 ## Third-party Libraries
 INIH_SRC        = $(wildcard $(INIH_DIR)/*.c)
@@ -231,8 +233,8 @@ DIRECTOR_APP_SRC      = $(wildcard $(DIRECTOR_DIR)/*.c)
 DIRECTOR_BRIDGE_DIR   = $(DIRECTOR_DIR)/ctrl_bridge
 DIRECTOR_BRIDGE_SRC   = $(wildcard $(DIRECTOR_BRIDGE_DIR)/*.c)
 # Director scheduler (nested) sources
-DIRECTOR_SCHED_DIR   = $(DIRECTOR_DIR)/schedule
-DIRECTOR_SCHED_SRC   = $(wildcard $(DIRECTOR_SCHED_DIR)/*.c)
+DIRECTOR_SCHED_DIR    = $(DIRECTOR_DIR)/schedule
+DIRECTOR_SCHED_SRC    = $(wildcard $(DIRECTOR_SCHED_DIR)/*.c)
 TICKET_ISSUER_APP_SRC = $(shell find $(TICKET_ISSUER_DIR) -name '*.c')
 USERS_MANAGER_APP_SRC = $(shell find $(USERS_MANAGER_DIR) -name '*.c')
 WORKER_APP_SRC        = $(shell find $(WORKER_DIR) -name '*.c')
@@ -263,6 +265,7 @@ PRIME_OBJS          = $(patsubst $(PRIME_DIR)/%.c,$(BUILD_DIR)/prime/%.o,$(PRIME
 STORAGE_OBJS        = $(patsubst $(STORAGE_DIR)/%.c,$(BUILD_DIR)/storage/%.o,$(STORAGE_SRC))
 UTILS_OBJS          = $(patsubst $(UTILS_DIR)/%.c,$(BUILD_DIR)/utils/%.o,$(UTILS_SRC))
 RANDOM_OBJS         = $(patsubst $(RANDOM_DIR)/%.c,$(BUILD_DIR)/random/%.o,$(RANDOM_SRC))
+SORT_OBJS           = $(patsubst $(SORT_DIR)/%.c,$(BUILD_DIR)/sort/%.o,$(SORT_SRC))
 LOG_OBJS            = $(patsubst $(LOG_DIR)/%.c,$(BUILD_DIR)/log/%.o,$(LOG_SRC))
 SYSINFO_OBJS        = $(patsubst $(SYSINFO_DIR)/%.c,$(BUILD_DIR)/sysinfo/%.o,$(SYSINFO_SRC))
 BACKTRACE_OBJS      = $(patsubst $(BACKTRACE_DIR)/%.c,$(BUILD_DIR)/backtrace/%.o,$(BACKTRACE_SRC))
@@ -278,7 +281,7 @@ LIBFORT_OBJS        = $(patsubst $(LIBFORT_DIR)/%.c,$(BUILD_DIR)/libfort/%.o,$(L
 
 # Common library objects needed by most executables
 DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(RANDOM_OBJS) $(HASHTABLE_OBJS) \
-                      $(PRIME_OBJS) $(LOG_C_OBJS) $(METRICS_OBJS) \
+                      $(PRIME_OBJS) $(LOG_C_OBJS) $(METRICS_OBJS) $(SORT_OBJS) \
 					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
 					  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS) $(SYSINFO_OBJS) \
 					  $(BACKTRACE_OBJS) $(VECTOR_OBJS) $(CONCURRENCY_OBJS)
@@ -286,18 +289,18 @@ DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(RANDOM_OBJS) $(HASHTABLE_OBJS
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
 MAIN_SIM_OBJS 			= $(patsubst $(MAIN_SIM_DIR)/%.c,$(BUILD_DIR)/main/simulation/%.o,$(MAIN_SIM_SRC))
-TUI_OBJS              = $(patsubst $(TUI_LIB_DIR)/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SRC))
-APP_MAIN_TUI_OBJS     = $(patsubst $(APP_MAIN_TUI_LIB_DIR)/%.c,$(BUILD_DIR)/app_tui/%.o,$(APP_MAIN_TUI_SRC))
+TUI_OBJS              	= $(patsubst $(TUI_LIB_DIR)/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SRC))
+APP_MAIN_TUI_OBJS     	= $(patsubst $(APP_MAIN_TUI_LIB_DIR)/%.c,$(BUILD_DIR)/app_tui/%.o,$(APP_MAIN_TUI_SRC))
 DIRECTOR_APP_OBJS 		= $(patsubst $(DIRECTOR_DIR)/%.c,$(BUILD_DIR)/director/%.o,$(DIRECTOR_APP_SRC))
-DIRECTOR_BRIDGE_OBJS     = $(patsubst $(DIRECTOR_BRIDGE_DIR)/%.c,$(BUILD_DIR)/director/ctrl_bridge/%.o,$(DIRECTOR_BRIDGE_SRC))
-DIRECTOR_SCHED_OBJS      = $(patsubst $(DIRECTOR_SCHED_DIR)/%.c,$(BUILD_DIR)/director/schedule/%.o,$(DIRECTOR_SCHED_SRC))
+DIRECTOR_BRIDGE_OBJS    = $(patsubst $(DIRECTOR_BRIDGE_DIR)/%.c,$(BUILD_DIR)/director/ctrl_bridge/%.o,$(DIRECTOR_BRIDGE_SRC))
+DIRECTOR_SCHED_OBJS     = $(patsubst $(DIRECTOR_SCHED_DIR)/%.c,$(BUILD_DIR)/director/schedule/%.o,$(DIRECTOR_SCHED_SRC))
 TICKET_ISSUER_APP_OBJS 	= $(patsubst $(TICKET_ISSUER_DIR)/%.c,$(BUILD_DIR)/ticket_issuer/%.o,$(TICKET_ISSUER_APP_SRC))
 USERS_MANAGER_APP_OBJS 	= $(patsubst $(USERS_MANAGER_DIR)/%.c,$(BUILD_DIR)/users_manager/%.o,$(USERS_MANAGER_APP_SRC))
 WORKER_APP_OBJS 		= $(patsubst $(WORKER_DIR)/%.c,$(BUILD_DIR)/worker/%.o,$(WORKER_APP_SRC))
 USER_APP_OBJS 			= $(patsubst $(USER_DIR)/%.c,$(BUILD_DIR)/user/%.o,$(USER_APP_SRC))
-SIM_IPC_OBJS          = $(patsubst $(SIM_IPC_DIR)/%.c,$(BUILD_DIR)/sim_ipc/%.o,$(SIM_IPC_SRC))
-TEST_ONLY_SRCS         = $(shell find $(TESTS_DIR) -name '*.c')
-TEST_OBJS              = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_ONLY_SRCS))
+SIM_IPC_OBJS            = $(patsubst $(SIM_IPC_DIR)/%.c,$(BUILD_DIR)/sim_ipc/%.o,$(SIM_IPC_SRC))
+TEST_ONLY_SRCS          = $(shell find $(TESTS_DIR) -name '*.c')
+TEST_OBJS               = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_ONLY_SRCS))
 
 # Full dependency list for each final executable
 MAIN_OBJS           = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
@@ -309,11 +312,11 @@ USER_OBJS 			= $(USER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS)
 USER_LIB_OBJS       = $(filter-out $(BUILD_DIR)/user/user.o, $(USER_APP_OBJS))
 
 # Application objects (except entrypoints) to link into tests
-APP_ALL_OBJS       = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DIRECTOR_SCHED_OBJS) \
+APP_ALL_OBJS        = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DIRECTOR_SCHED_OBJS) \
                      $(TICKET_ISSUER_APP_OBJS) $(USERS_MANAGER_APP_OBJS) $(WORKER_APP_OBJS) $(USER_APP_OBJS)
 APP_ENTRYPOINT_OBJS = $(BUILD_DIR)/main/main.o $(BUILD_DIR)/director/director.o $(BUILD_DIR)/ticket_issuer/ticket_issuer.o \
                       $(BUILD_DIR)/users_manager/users_manager.o $(BUILD_DIR)/worker/worker.o $(BUILD_DIR)/user/user.o
-APP_COMMON_OBJS    = $(filter-out $(APP_ENTRYPOINT_OBJS),$(APP_ALL_OBJS))
+APP_COMMON_OBJS     = $(filter-out $(APP_ENTRYPOINT_OBJS),$(APP_ALL_OBJS))
 
 TEST_MAIN_OBJS 		= $(TEST_OBJS) $(APP_COMMON_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(UNITY_OBJS)
 
@@ -619,6 +622,10 @@ $(BUILD_DIR)/utils/%.o: $(UTILS_DIR)/%.c
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
 $(BUILD_DIR)/random/%.o: $(RANDOM_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+$(BUILD_DIR)/sort/%.o: $(SORT_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 

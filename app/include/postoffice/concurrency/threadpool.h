@@ -41,4 +41,15 @@ int tp_submit(threadpool_t *pool, tp_task_func_t func, void *arg);
  */
 void tp_destroy(threadpool_t *pool, bool graceful);
 
+#include <stdint.h>
+#include <stdatomic.h>
+
+/**
+ * @brief Set an external atomic counter to track active threads.
+ * 
+ * @param[in] pool Pool instance.
+ * @param[in] counter Pointer to atomic uint32_t counter.
+ */
+void tp_set_active_counter(threadpool_t *pool, atomic_uint *counter);
+
 #endif // PO_CONCURRENCY_THREADPOOL_H

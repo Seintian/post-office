@@ -19,6 +19,7 @@
 #include <postoffice/log/logger.h>
 #include <postoffice/net/socket.h>
 #include <errno.h>
+#include <postoffice/sysinfo/sysinfo.h> // Sysinfo integration
 
 static volatile sig_atomic_t g_shutdown = 0;
 static void on_sig(int s, siginfo_t* i, void* c) {
@@ -43,9 +44,12 @@ static void worker_task(void *arg) {
 }
 
 int main(int argc, char *argv[]) {
+    po_sysinfo_t sysinfo;
+    po_sysinfo_collect(&sysinfo);
+
     // 1. Args
     char *loglevel = "INFO";
-    size_t pool_size = 64;
+    size_t pool_size = 0; // Default to dynamic
 
     struct option long_opts[] = {
         {"pool-size", required_argument, 0, 'p'},
@@ -57,6 +61,12 @@ int main(int argc, char *argv[]) {
     while ((opt = getopt_long(argc, argv, "l:", long_opts, NULL)) != -1) {
         if (opt == 'p') pool_size = (size_t)atol(optarg);
         if (opt == 'l') loglevel = optarg;
+    }
+
+    if (pool_size == 0) {
+        // Dynamic sizing: 4x cores, min 32
+        pool_size = (size_t)sysinfo.physical_cores * 4;
+        if (pool_size < 32) pool_size = 32;
     }
 
     // 2. Init
@@ -100,6 +110,9 @@ int main(int argc, char *argv[]) {
         LOG_FATAL("Failed to create thread pool");
         return 1;
     }
+    atomic_fetch_add(&shm->stats.connected_threads, (uint32_t)pool_size + 1);
+    atomic_fetch_add(&shm->stats.active_threads, 1); // Main thread is active
+    tp_set_active_counter(tp, &shm->stats.active_threads);
     poller_t *poller = poller_create();
     poller_add(poller, fd, EPOLLIN);
 
@@ -157,6 +170,8 @@ int main(int argc, char *argv[]) {
     }
 
     LOG_INFO("Ticket Issuer Shutting Down...");
+    atomic_fetch_sub(&shm->stats.active_threads, 1);
+    atomic_fetch_sub(&shm->stats.connected_threads, (uint32_t)pool_size + 1);
     tp_destroy(tp, true);
     poller_destroy(poller);
     net_shutdown_zerocopy();

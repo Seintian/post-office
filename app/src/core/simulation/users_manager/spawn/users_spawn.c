@@ -10,9 +10,13 @@
 #include <postoffice/log/logger.h>
 #include <postoffice/concurrency/threadpool.h>
 #include <postoffice/net/net.h>
+#include <postoffice/sysinfo/sysinfo.h>
+#include <postoffice/concurrency/waitgroup.h>
 
 static user_slot_t g_user_slots[MAX_USER_CAPACITY];
-static volatile _Atomic int g_current_population_count = 0;
+static sim_shm_t *g_shm = NULL; // Save for thread tracking
+static uint32_t g_last_threads_count = 0;
+static waitgroup_t *g_user_wg = NULL;
 static threadpool_t *g_user_thread_pool = NULL;
 
 typedef struct {
@@ -22,14 +26,35 @@ typedef struct {
     sim_shm_t *shm;
 } user_task_ctx_t;
 
-void users_spawn_init(size_t pool_size) {
+void users_spawn_init(sim_shm_t *shm, size_t pool_size) {
+    g_shm = shm;
     LOG_INFO("Initializing User Thread Pool (PoolSize: %zu, MaxCapacity: %d)", pool_size, MAX_USER_CAPACITY);
     for (int i = 0; i < MAX_USER_CAPACITY; i++) {
         atomic_init(&g_user_slots[i].is_occupied, false);
         atomic_init(&g_user_slots[i].should_continue_running, false);
     }
-    atomic_init(&g_current_population_count, 0);
-    g_user_thread_pool = tp_create((size_t)sysconf(_SC_NPROCESSORS_ONLN) + pool_size + 4, MAX_USER_CAPACITY);
+
+    g_user_wg = wg_create();
+
+    po_sysinfo_t info;
+    size_t cores;
+    if (po_sysinfo_collect(&info) == 0 && info.physical_cores > 0) {
+        cores = (size_t)info.physical_cores;
+    } else {
+        cores = (size_t)sysconf(_SC_NPROCESSORS_ONLN);
+    }
+
+    // Default to pool_size + cores if pool_size is small, or just explicitly manage it
+    size_t threads = cores + pool_size + 4; 
+    g_last_threads_count = (uint32_t)threads;
+    g_user_thread_pool = tp_create(threads, (size_t)MAX_USER_CAPACITY);
+
+    if (g_shm) {
+        // Track: 1 (UM Main) + threads (Pool)
+        atomic_fetch_add(&g_shm->stats.connected_threads, g_last_threads_count + 1);
+        atomic_fetch_add(&g_shm->stats.active_threads, 1); // UM Main is active
+        tp_set_active_counter(g_user_thread_pool, &g_shm->stats.active_threads);
+    }
 }
 
 static void execute_user_simulation(void *arg) {
@@ -44,16 +69,19 @@ static void execute_user_simulation(void *arg) {
     // Run simulation loop using the shared SHM mapping from the manager
     run_user_simulation_loop(ctx->user_id, ctx->service_type, ctx->shm, 
         &g_user_slots[slot_idx].should_continue_running);
-    
+
     atomic_fetch_sub(&ctx->shm->stats.connected_users, 1);
 
     atomic_store(&g_user_slots[slot_idx].is_occupied, false);
-    atomic_fetch_sub(&g_current_population_count, 1);
+
+    // Notify completion via waitgroup
+    wg_done(g_user_wg);
+
     free(ctx);
 }
 
 int users_spawn_new(sim_shm_t *shm) {
-    if (atomic_load(&g_current_population_count) >= MAX_USER_CAPACITY) {
+    if (wg_active_count(g_user_wg) >= MAX_USER_CAPACITY) {
         LOG_WARN("Cannot spawn user: Max capacity (%d) reached.", MAX_USER_CAPACITY);
         return -1;
     }
@@ -86,16 +114,24 @@ int users_spawn_new(sim_shm_t *shm) {
     ctx->slot = slot;  // Store actual slot
     ctx->shm = shm;
 
-    tp_submit(g_user_thread_pool, execute_user_simulation, ctx);
-    atomic_fetch_add(&g_current_population_count, 1);
-    
-    LOG_INFO("Spawned User %d in Slot %d (Population: %d)", ctx->user_id, slot, atomic_load(&g_current_population_count));
+    // Track active user count via waitgroup
+    wg_add(g_user_wg, 1);
+
+    if (tp_submit(g_user_thread_pool, execute_user_simulation, ctx) != 0) {
+        // Rollback if submission failed
+        wg_done(g_user_wg);
+        atomic_store(&g_user_slots[slot].is_occupied, false);
+        free(ctx);
+        return -1;
+    }
+
+    LOG_INFO("Spawned User %d in Slot %d (Population: %d)", ctx->user_id, slot, wg_active_count(g_user_wg));
 
     return 0;
 }
 
 int users_spawn_count(void) {
-    return atomic_load(&g_current_population_count);
+    return wg_active_count(g_user_wg);
 }
 
 void users_spawn_stop_random(void) {
@@ -111,9 +147,16 @@ void users_spawn_stop_random(void) {
 }
 
 void users_spawn_shutdown_all(void) {
+    if (g_shm && g_last_threads_count > 0) {
+        atomic_fetch_sub(&g_shm->stats.active_threads, 1);
+        atomic_fetch_sub(&g_shm->stats.connected_threads, g_last_threads_count + 1);
+    }
     for (int i = 0; i < MAX_USER_CAPACITY; i++) {
         atomic_store(&g_user_slots[i].should_continue_running, false);
     }
     tp_destroy(g_user_thread_pool, true);
     g_user_thread_pool = NULL;
+
+    wg_destroy(g_user_wg);
+    g_user_wg = NULL;
 }

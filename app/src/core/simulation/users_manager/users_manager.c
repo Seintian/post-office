@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    users_spawn_init((size_t)pool_size);
+    users_spawn_init(shm, (size_t)pool_size);
 
     if (net_init_zerocopy(128, 128, 4096) != 0) {
         LOG_FATAL("Users Manager: Failed to initialize net zerocopy");

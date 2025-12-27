@@ -35,8 +35,10 @@
  * out.
  */
 
-/* Initialize bridge resources. Returns 0 on success. */
-int bridge_mainloop_init(void);
+#include "ipc/simulation_protocol.h"
+
+/* Initialize bridge resources with SHM access for thread tracking. Returns 0 on success. */
+int bridge_mainloop_init(sim_shm_t *shm);
 
 /* Run the bridge mainloop. Should block until stopped or an error occurs.
  * Return 0 on clean stop, non-zero on error.

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <stdint.h>
 
 typedef struct tp_task_s {
     tp_task_func_t func;
@@ -22,6 +23,7 @@ struct threadpool_s {
     size_t queue_count;
     bool shutdown;
     bool graceful;
+    atomic_uint *external_active_counter;
 };
 
 /**
@@ -57,7 +59,13 @@ static void* tp_worker(void *arg) {
         pthread_mutex_unlock(&pool->lock);
 
         if (task) {
+            if (pool->external_active_counter) {
+                atomic_fetch_add(pool->external_active_counter, 1);
+            }
             task->func(task->arg);
+            if (pool->external_active_counter) {
+                atomic_fetch_sub(pool->external_active_counter, 1);
+            }
             free(task);
         }
     }
@@ -78,7 +86,7 @@ threadpool_t* tp_create(size_t num_threads, size_t queue_size) {
         return NULL;
     }
     pool->num_threads = num_threads;
-    pool->queue_size = queue_size;
+    pool->queue_size = (queue_size == 0) ? SIZE_MAX : queue_size;
 
     pool->threads = (pthread_t*)calloc(num_threads, sizeof(pthread_t));
     if (!pool->threads) {
@@ -164,4 +172,10 @@ void tp_destroy(threadpool_t *pool, bool graceful) {
     pthread_cond_destroy(&pool->notify);
     free(pool->threads);
     free(pool);
+}
+
+void tp_set_active_counter(threadpool_t *pool, atomic_uint *counter) {
+    if (pool) {
+        pool->external_active_counter = counter;
+    }
 }

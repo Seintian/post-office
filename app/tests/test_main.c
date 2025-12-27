@@ -30,6 +30,7 @@ extern TEST_GROUP_RUNNER(ERRORS);
 extern TEST_GROUP_RUNNER(SIGNALS);
 extern TEST_GROUP_RUNNER(THREADPOOL);
 extern TEST_GROUP_RUNNER(SAMPLER);
+extern TEST_GROUP_RUNNER(SORT);
 
 static void RunAllTests(void) {
     RUN_TEST_GROUP(ARGV);
@@ -60,6 +61,7 @@ static void RunAllTests(void) {
     RUN_TEST_GROUP(SIGNALS);
     RUN_TEST_GROUP(THREADPOOL);
     RUN_TEST_GROUP(SAMPLER);
+    RUN_TEST_GROUP(SORT);
 }
 
 int main(int argc, const char *argv[]) {

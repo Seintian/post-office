@@ -96,6 +96,8 @@ typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) global_stats_s {
     atomic_uint total_services_completed;
     atomic_uint total_users_spawned;
     atomic_uint connected_users; // Users currently attached to SHM
+    atomic_uint connected_threads; // Total threads in the entire simulation
+    atomic_uint active_threads;    // Threads currently executing a task
 } global_stats_t;
 _Static_assert(sizeof(global_stats_t) % PO_CACHE_LINE_MAX == 0, "global_stats_t size mismatch");
 
@@ -106,6 +108,7 @@ typedef struct sim_params_s {
     uint32_t n_workers;
     uint32_t sim_duration_days;
     uint32_t explode_threshold;
+    uint32_t is_headless;
     uint64_t tick_nanos; // Nanoseconds per simulation minute
 } sim_params_t;
 
