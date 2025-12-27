@@ -24,4 +24,13 @@ void app_tui_run_demo(void);
  */
 void app_tui_run_simulation(void);
 
+/**
+ * @brief Navigates to a specific screen by name.
+ * 
+ * Selects the corresponding item in the sidebar, which triggers the screen switch.
+ * 
+ * @param screen_name The name of the screen to navigate to (must match sidebar item text).
+ */
+void app_tui_navigate_to(const char *screen_name);
+
 #endif

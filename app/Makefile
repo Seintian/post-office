@@ -69,7 +69,6 @@ PERF_ZEROCOPY_DIR      = $(RING3_DIR)/postoffice/perf
 
 # Ring 4
 NET_DIR                = $(RING4_DIR)/postoffice/net
-TUI_LIB_DIR            = $(RING4_DIR)/postoffice/tui
 
 ## Core source tree root
 CORE_SRC_DIR           = $(SRC_DIR)/core
@@ -93,7 +92,7 @@ EXPLODE_INI_PATH       = $(CONFIG_DIR)/explode.ini
 # *** Compiler flags *** #
 
 INCLUDES_I = -I$(INCLUDE_DIR) -I$(POSTOFFICE_INCLUDE_DIR) -I$(THIRDPARTY_INCLUDE_DIR)
-LIBS_I     = -Ilibs -I$(RING0_DIR)/postoffice -I$(RING1_DIR)/postoffice -I$(RING2_DIR)/postoffice -I$(RING3_DIR)/postoffice -I$(RING4_DIR)/postoffice -I$(TUI_LIB_DIR) -I$(THIRDPARTY_LIBS_DIR)
+LIBS_I     = -Ilibs -I$(RING0_DIR)/postoffice -I$(RING1_DIR)/postoffice -I$(RING2_DIR)/postoffice -I$(RING3_DIR)/postoffice -I$(RING4_DIR)/postoffice -I$(THIRDPARTY_LIBS_DIR)
 CORE_I     = -I$(CORE_SRC_DIR)/main -I$(CORE_SRC_DIR)/simulation
 SRC_I      = -I$(SRC_DIR)
 
@@ -159,21 +158,25 @@ PROCESSES 		= main director ticket_issuer users_manager worker user
 PROCESSES 	   := $(addprefix $(PROJECT_PREFIX), $(PROCESSES))
 
 # Prompt the configuration file to run the simulation with, if not set when make was called
-CONFIG ?= $(shell \
+# Note: Some targets (like start-tui) may explicitly unset this to skip prompting.
+CONFIG ?= $(if $(filter start-tui,$(MAKECMDGOALS)),,$(shell \
 	read $(READ_FLAGS) \
 		-p "< Makefile: CONFIG not set. Please enter the path for configuration: " CONFIG; \
-		printf "%s" "$$CONFIG";)
+		printf "%s" "$$CONFIG";))
+
+# Configuration argument helper
+CONFIG_ARG = $(if $(CONFIG),--config "$(CONFIG)",)
 
 # Default logger level (TRACE, DEBUG, INFO, WARN, ERROR, FATAL)
 LOG_LEVEL ?= DEBUG
 
 # Arguments for main process
-MAIN_ARGS = --config "$(CONFIG)" --loglevel "$(LOG_LEVEL)"
+MAIN_ARGS = $(CONFIG_ARG) --loglevel "$(LOG_LEVEL)"
 MAIN_TUI_ARGS = $(MAIN_ARGS) --tui
 MAIN_EXEC = $(PROFILER) $(BIN_DIR)/$(PROJECT_PREFIX)main
 
 # Arguments for director process
-DIRECTOR_ARGS = --config "$(CONFIG)" --loglevel "$(LOG_LEVEL)" --headless
+DIRECTOR_ARGS = $(CONFIG_ARG) --loglevel "$(LOG_LEVEL)" --headless
 DIRECTOR_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)director
 
 # Executables for simulation processes
@@ -224,9 +227,7 @@ UNITY_SRC       = $(wildcard $(UNITY_DIR)/*.c)
 # Nested trees (main/tui, director/ctrl_bridge) are handled separately below.
 MAIN_APP_SRC          = $(wildcard $(MAIN_DIR)/*.c)
 MAIN_SIM_SRC          = $(wildcard $(MAIN_SIM_DIR)/*.c)
-TUI_SRC_UNNORMALIZED  = $(shell find $(TUI_LIB_DIR) -name '*.c')
 APP_MAIN_TUI_SRC_UNNORMALIZED = $(shell find $(APP_MAIN_TUI_LIB_DIR) -name '*.c')
-TUI_SRC               = $(patsubst ./%,%,$(TUI_SRC_UNNORMALIZED))
 APP_MAIN_TUI_SRC      = $(patsubst ./%,%,$(APP_MAIN_TUI_SRC_UNNORMALIZED))
 DIRECTOR_APP_SRC      = $(wildcard $(DIRECTOR_DIR)/*.c)
 # Director control bridge (nested) sources (kept separate to preserve directory layout)
@@ -289,7 +290,6 @@ DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(RANDOM_OBJS) $(HASHTABLE_OBJS
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
 MAIN_SIM_OBJS 			= $(patsubst $(MAIN_SIM_DIR)/%.c,$(BUILD_DIR)/main/simulation/%.o,$(MAIN_SIM_SRC))
-TUI_OBJS              	= $(patsubst $(TUI_LIB_DIR)/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SRC))
 APP_MAIN_TUI_OBJS     	= $(patsubst $(APP_MAIN_TUI_LIB_DIR)/%.c,$(BUILD_DIR)/app_tui/%.o,$(APP_MAIN_TUI_SRC))
 DIRECTOR_APP_OBJS 		= $(patsubst $(DIRECTOR_DIR)/%.c,$(BUILD_DIR)/director/%.o,$(DIRECTOR_APP_SRC))
 DIRECTOR_BRIDGE_OBJS    = $(patsubst $(DIRECTOR_BRIDGE_DIR)/%.c,$(BUILD_DIR)/director/ctrl_bridge/%.o,$(DIRECTOR_BRIDGE_SRC))
@@ -303,7 +303,7 @@ TEST_ONLY_SRCS          = $(shell find $(TESTS_DIR) -name '*.c')
 TEST_OBJS               = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_ONLY_SRCS))
 
 # Full dependency list for each final executable
-MAIN_OBJS           = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
+MAIN_OBJS           = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(APP_MAIN_TUI_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
 DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DIRECTOR_SCHED_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 USERS_MANAGER_OBJS 	= $(USERS_MANAGER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
@@ -312,7 +312,7 @@ USER_OBJS 			= $(USER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS)
 USER_LIB_OBJS       = $(filter-out $(BUILD_DIR)/user/user.o, $(USER_APP_OBJS))
 
 # Application objects (except entrypoints) to link into tests
-APP_ALL_OBJS        = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DIRECTOR_SCHED_OBJS) \
+APP_ALL_OBJS        = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(APP_MAIN_TUI_OBJS) $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DIRECTOR_SCHED_OBJS) \
                      $(TICKET_ISSUER_APP_OBJS) $(USERS_MANAGER_APP_OBJS) $(WORKER_APP_OBJS) $(USER_APP_OBJS)
 APP_ENTRYPOINT_OBJS = $(BUILD_DIR)/main/main.o $(BUILD_DIR)/director/director.o $(BUILD_DIR)/ticket_issuer/ticket_issuer.o \
                       $(BUILD_DIR)/users_manager/users_manager.o $(BUILD_DIR)/worker/worker.o $(BUILD_DIR)/user/user.o
@@ -569,11 +569,6 @@ $(BUILD_DIR)/user/%.o: $(USER_DIR)/%.c
 $(BUILD_DIR)/sim_ipc/%.o: $(SIM_IPC_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
-
-# Rule for shared TUI library objects
-$(BUILD_DIR)/tui/%.o: $(TUI_LIB_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 # Rule for app main TUI objects
 $(BUILD_DIR)/app_tui/%.o: $(APP_MAIN_TUI_LIB_DIR)/%.c
