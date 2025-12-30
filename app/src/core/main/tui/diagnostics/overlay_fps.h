@@ -9,3 +9,7 @@
  *  Aggregation performed every N frames to amortize cost.
  */
 
+#ifndef OVERLAY_FPS_H
+#define OVERLAY_FPS_H
+
+#endif // OVERLAY_FPS_H

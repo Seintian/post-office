@@ -3,6 +3,7 @@
 
 #include <stdatomic.h>
 #include <stdbool.h>
+
 #include "../../ipc/simulation_protocol.h"
 
 /**
@@ -20,13 +21,14 @@ void teardown_user_runtime(sim_shm_t *shm);
 
 /**
  * @brief Executes the simulation loop for a single user agent.
- * 
+ *
  * @param user_id The unique ID of the user.
  * @param service_type The service this user is seeking.
  * @param shm Pointer to shared memory.
  * @param should_continue_flag Optional atomic flag to control loop execution from external threads.
  * @return 0 on success, non-zero on termination/error.
  */
-int run_user_simulation_loop(int user_id, int service_type, sim_shm_t *shm, volatile _Atomic bool *should_continue_flag);
+int run_user_simulation_loop(int user_id, int service_type, sim_shm_t *shm,
+                             volatile atomic_bool *should_continue_flag);
 
 #endif

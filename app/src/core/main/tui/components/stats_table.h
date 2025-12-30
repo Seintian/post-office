@@ -7,5 +7,5 @@
  *         with color-coded thresholds and optional delta columns.
  */
 
-#endif
+#endif // COMPONENTS_STATS_TABLE_H
 

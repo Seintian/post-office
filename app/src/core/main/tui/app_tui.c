@@ -1,267 +1,140 @@
 #include "app_tui.h"
-#include <postoffice/tui/tui.h>
-#include <unistd.h>
-#include <string.h>
+
+#ifndef CLAY_IMPLEMENTATION
+#include <clay/clay.h>
+#endif
+
+#include <renderer/clay_ncurses_renderer.h>
+#include <stdbool.h>
 #include <stdlib.h>
-#include <stdio.h>
-#include <ncurses.h> // For KEY_UP, etc.
-#include <tui/ui.h> // For dialogs
+#include <unistd.h>
 
-// Components
-#include "components/topbar.h"
-#include "components/sidebar.h"
-#include "components/command_field.h"
+// --- Dashboard State ---
+// This would ideally come from the simulation, for now we mock it or just show static UI.
 
-// Screens
-#include "screens/screen_dashboard.h"
-#include "screens/screen_entities.h"
-#include "screens/screen_template.h" 
-#include "screens/screen_performance.h"
-#include "screens/screen_config.h"
+// --- Helper Macros ---
 
-// Forward declaration
-static void on_sidebar_select(tui_list_t* list, int index, void* data);
+#define DASHBOARD_PANEL(id)                                                                        \
+    CLAY(CLAY_ID(id),                                                                              \
+         {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_GROW()},        \
+                     .padding = {1, 1, 1, 1},                                                      \
+                     .childGap = 1,                                                                \
+                     .layoutDirection = CLAY_TOP_TO_BOTTOM},                                       \
+          .border = {.width = CLAY_BORDER_OUTSIDE(1), .color = {255, 255, 255, 255}}})
 
-// Context
-/**
- * @brief Application context holding references to key UI widgets.
- */
-typedef struct {
-    tui_widget_t* content_container; /**< Container for dynamic screen content */
-    tui_widget_t* topbar;            /**< Top status bar widget */
-    tui_list_t* sidebar_list;        /**< Sidebar navigation list */
-    tui_window_t* main_window;       /**< Main window wrapper for dialog management */
-} app_context_t;
-
-static app_context_t g_ctx;
-
-// Global event handler
-/**
- * @brief Global event handler for application-wide key events.
- *
- * Handles:
- * - ESC: Closes dialogs, clears focus, or shows a "Not Implemented" modal.
- * - Arrow Keys: Navigates the sidebar (Up/Down) or tab containers (Left/Right).
- *
- * @param event The event to handle.
- * @param user_data User data (unused).
- * @return true if the event was consumed, false otherwise.
- */
-static bool on_global_event(const tui_event_t* event, void* user_data) {
-    (void)user_data;
-    if (event->type == TUI_EVENT_KEY) {
-        // Esc Handling
-        if (event->data.key == 27) { // ESC
-            // 1. Close active dialog if any
-            if (g_ctx.main_window && g_ctx.main_window->active_dialog) {
-                tui_dialog_close(g_ctx.main_window);
-                return true;
-            }
-
-            // 2. Clear focus if any
-            tui_widget_t* focused = tui_get_focused_widget();
-            if (focused) {
-                tui_set_focus(NULL);
-                tui_widget_draw(tui_get_root()); // Redraw to clear cursor/focus styles
-                return true;
-            }
-            
-            // 3. Show modal if nothing else to do
-            if (g_ctx.main_window) {
-               tui_message_box_show(g_ctx.main_window, "Menu", "Feature coming soon...");
-               return true;
-            }
-            return true;
-        }
-
-        // Sidebar Navigation (Up/Down)
-        // Only if sidebar list is valid
-        if (g_ctx.sidebar_list) {
-            if (event->data.key == KEY_UP) {
-                // Manually trigger list navigation
-                int current = tui_list_get_selected_index(g_ctx.sidebar_list);
-                if (current > 0) {
-                    tui_list_set_selected_index(g_ctx.sidebar_list, current - 1);
-                    on_sidebar_select(g_ctx.sidebar_list, current - 1, NULL);
-                    tui_widget_draw((tui_widget_t*)g_ctx.sidebar_list);
-                    return true; 
-                }
-            } else if (event->data.key == KEY_DOWN) {
-                if (g_ctx.sidebar_list->selected_index < g_ctx.sidebar_list->item_count - 1) {
-                    int next = g_ctx.sidebar_list->selected_index + 1;
-                    tui_list_set_selected_index(g_ctx.sidebar_list, next);
-                    on_sidebar_select(g_ctx.sidebar_list, next, NULL);
-                    tui_widget_draw((tui_widget_t*)g_ctx.sidebar_list);
-                    return true;
-                }
-            }
-        }
-
-        // Tab Navigation (Left/Right)
-        if (g_ctx.content_container && g_ctx.content_container->type == TUI_WIDGET_PANEL) { // Actually content_container is panel
-             tui_container_t* c = (tui_container_t*)g_ctx.content_container;
-             if (c->first_child && c->first_child->type == TUI_WIDGET_TAB_CONTAINER) {
-                 tui_tab_container_t* tabs = (tui_tab_container_t*)c->first_child;
-                 if (event->data.key == KEY_LEFT) {
-                     int curr = tabs->selected_tab;
-                     if (curr > 0) {
-                         tui_tab_container_set_selected_tab(tabs, curr - 1);
-                         tui_widget_draw((tui_widget_t*)tabs);
-                         return true;
-                     }
-                 } else if (event->data.key == KEY_RIGHT) {
-                     int curr = tabs->selected_tab;
-                     int count = tui_tab_container_get_tab_count(tabs);
-                     if (curr < count - 1) {
-                         tui_tab_container_set_selected_tab(tabs, curr + 1);
-                         tui_widget_draw((tui_widget_t*)tabs);
-                         return true;
-                     }
-                 }
-             }
-        }
-    }
-    return false;
-}
-
-// Callback for sidebar
-/**
- * @brief Callback for sidebar item selection.
- *
- * Switches the content view based on the selected sidebar item (e.g., "Director", "Ticket Issuer").
- *
- * @param list The sidebar list widget.
- * @param index The index of the selected item.
- * @param data User data (unused).
- */
-static void on_sidebar_select(tui_list_t* list, int index, void* data) {
-    (void)data;
-    if (!g_ctx.content_container) return;
-
-    // Clear current content
-    tui_container_remove_all((tui_container_t*)g_ctx.content_container);
-
-    tui_widget_t* new_content = NULL;
-    const char* item_text = tui_list_get_item(list, index);
-    
-    if (item_text) {
-        if (strcmp(item_text, "Director") == 0) {
-            new_content = screen_dashboard_create();
-        } else if (strcmp(item_text, "Ticket Issuer") == 0) {
-            new_content = screen_entities_create("Ticket Issuer", 12);
-        } else if (strcmp(item_text, "Users Manager") == 0) {
-            new_content = screen_entities_create("Users Manager", 3);
-        } else if (strcmp(item_text, "Worker") == 0) {
-            new_content = screen_entities_create("Worker", 5);
-        } else if (strcmp(item_text, "User") == 0) {
-            new_content = screen_user_create();
-        } else if (strcmp(item_text, "Performance") == 0) {
-            new_content = screen_performance_create();
-        } else if (strcmp(item_text, "Configuration") == 0) {
-            new_content = screen_config_create();
-        }
-    }
-
-    if (new_content) {
-        new_content->layout_params.expand_x = true;
-        new_content->layout_params.expand_y = true;
-        new_content->layout_params.fill_x = true;
-        new_content->layout_params.fill_y = true;
-        tui_container_add((tui_container_t*)g_ctx.content_container, new_content);
-    }
-    
-    // Update status in topbar
-    if (g_ctx.topbar) {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "View: %s", item_text ? item_text : "Unknown");
-        topbar_set_status(g_ctx.topbar, buf);
+static void DashboardItem(Clay_String label, Clay_String value) {
+    CLAY(CLAY_ID("DashboardItem"),
+         {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_FIXED(1)},
+                     .layoutDirection = CLAY_LEFT_TO_RIGHT,
+                     .childGap = 2}}) {
+        CLAY_TEXT(label, CLAY_TEXT_CONFIG({.textColor = {200, 200, 200, 255}}));
+        CLAY_TEXT(value, CLAY_TEXT_CONFIG({.textColor = {255, 255, 255, 255},
+                                           .fontId = CLAY_NCURSES_FONT_BOLD}));
     }
 }
 
-void app_tui_run_simulation(void) {
-    if (!tui_init()) return;
+// --- Main Loop ---
 
-    // screen_config_set_path(config_path); // Removed: Config is now global and set in main
+static void RunDashboardLoop(void) {
+    // 1. Initialize
+    // Arena size: 16MB
+    uint64_t totalMemorySize = 16 * 1024 * 1024;
+    Clay_Arena arena =
+        Clay_CreateArenaWithCapacityAndMemory(totalMemorySize, malloc(totalMemorySize));
+    Clay_Initialize(arena, (Clay_Dimensions){0, 0}, (Clay_ErrorHandler){0});
+    Clay_SetMeasureTextFunction(Clay_Ncurses_MeasureText, NULL);
 
-    tui_set_global_event_handler(on_global_event, NULL);
+    Clay_Ncurses_Initialize();
 
-    tui_size_t screen = tui_get_screen_size();
-    tui_rect_t bounds = {{0, 0}, screen};
-    
-    // Root container (Stack for Layers)
-    tui_container_t* root = tui_container_create();
-    tui_widget_set_bounds((tui_widget_t*)root, bounds);
-    tui_container_set_layout(root, tui_layout_stack_create());
-    tui_set_root((tui_widget_t*)root);
+    bool running = true;
+    while (running) {
+        // 2. Input
+        int key = Clay_Ncurses_ProcessInput(stdscr);
+        if (key == 'q' || key == 27) {
+            running = false;
+        }
 
-    // App Layer (Vertical Box)
-    tui_container_t* app_layer = tui_container_create();
-    // App layer should fill the screen
-    app_layer->base.layout_params.expand_x = true;
-    app_layer->base.layout_params.expand_y = true;
-    app_layer->base.layout_params.fill_x = true;
-    app_layer->base.layout_params.fill_y = true;
-    
-    tui_container_set_layout(app_layer, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 0));
-    tui_container_add(root, (tui_widget_t*)app_layer);
+        // 3. Layout Update
+        Clay_SetLayoutDimensions(Clay_Ncurses_GetLayoutDimensions());
 
-    // Setup Window context for dialogs (wraps root stack)
-    g_ctx.main_window = calloc(1, sizeof(tui_window_t));
-    g_ctx.main_window->root = (tui_widget_t*)root;
-    g_ctx.main_window->running = true;
+        Clay_BeginLayout();
 
-    // 1. Topbar (Added to App Layer)
-    tui_widget_t* topbar = topbar_create();
-    topbar->layout_params.fill_x = true;
-    topbar->layout_params.min_height = 3;
-    tui_container_add(app_layer, topbar);
-    g_ctx.topbar = topbar;
+        CLAY(CLAY_ID("Root"),
+             {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_GROW()},
+                         .layoutDirection = CLAY_TOP_TO_BOTTOM},
+              .backgroundColor = {0, 0, 0, 255}}) {
+            // Header
+            CLAY(
+                CLAY_ID("Header"),
+                {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_FIXED(3)},
+                            .padding = {2, 1, 0, 0},
+                            .childGap = 2},
+                 .border = {.width = {.bottom = 1}, .color = {255, 255, 255, 255}}}) {
+                CLAY_TEXT(CLAY_STRING("POST OFFICE SIMULATION"),
+                          CLAY_TEXT_CONFIG({.fontId = CLAY_NCURSES_FONT_BOLD}));
+                CLAY_TEXT(CLAY_STRING("|  Real-time Dashboard"),
+                          CLAY_TEXT_CONFIG({.textColor = {150, 150, 150, 255}}));
+            }
 
-    // 2. Middle (Sidebar + Content)
-    tui_container_t* middle = tui_container_create();
-    middle->base.layout_params.weight_y = 1.0f;
-    middle->base.layout_params.fill_x = true;
-    middle->base.layout_params.expand_y = true;
-    tui_container_set_layout(middle, tui_layout_box_create(TUI_ORIENTATION_HORIZONTAL, 0));
-    tui_container_add(app_layer, (tui_widget_t*)middle);
+            // Main Content Area
+            CLAY(CLAY_ID("Body"),
+                 {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_GROW()},
+                             .layoutDirection = CLAY_LEFT_TO_RIGHT,
+                             .padding = {1, 1, 1, 1},
+                             .childGap = 1}}) {
+                // Left Column: Stats
+                DASHBOARD_PANEL("StatsPanel") {
+                    CLAY_TEXT(CLAY_STRING("[ System Status ]"),
+                              CLAY_TEXT_CONFIG({.fontId = CLAY_NCURSES_FONT_UNDERLINE}));
+                    DashboardItem(CLAY_STRING("Status:"), CLAY_STRING("Running"));
+                    DashboardItem(CLAY_STRING("Uptime:"), CLAY_STRING("00:00:10")); // Mock
+                    DashboardItem(CLAY_STRING("Memory:"), CLAY_STRING("128 MB"));
 
-    // Sidebar
-    tui_widget_t* sidebar = sidebar_create(on_sidebar_select, NULL, &g_ctx.sidebar_list);
-    sidebar->layout_params.min_width = 25;
-    sidebar->layout_params.expand_y = true;
-    tui_container_add(middle, sidebar);
+                    CLAY_AUTO_ID(
+                        {.layout = {.sizing = {.height = CLAY_SIZING_FIXED(1)}}}); // Spacer
 
-    // Content
-    tui_container_t* content = tui_container_create();
-    content->base.layout_params.weight_x = 1.0f; 
-    content->base.layout_params.expand_y = true; 
-    content->base.layout_params.fill_x = true;
-    tui_container_set_layout(content, tui_layout_box_create(TUI_ORIENTATION_VERTICAL, 0));
-    // Margin to separate from sidebar
-    tui_layout_params_set_margin(&content->base.layout_params, 1, 0, 0, 0);
-    tui_container_add(middle, (tui_widget_t*)content);
-    g_ctx.content_container = (tui_widget_t*)content;
+                    CLAY_TEXT(CLAY_STRING("[ Queue Metrics ]"),
+                              CLAY_TEXT_CONFIG({.fontId = CLAY_NCURSES_FONT_UNDERLINE}));
+                    DashboardItem(CLAY_STRING("Pending Users:"), CLAY_STRING("42"));
+                    DashboardItem(CLAY_STRING("Active Workers:"), CLAY_STRING("5"));
+                }
 
-    // 3. Command Field
-    tui_widget_t* cmd = command_field_create();
-    cmd->layout_params.fill_x = true;
-    cmd->layout_params.min_height = 3; 
-    // Margin bottom removed as field invalid
-    tui_container_add(app_layer, cmd);
+                // Right Column: Logs or Activity
+                DASHBOARD_PANEL("ActivityPanel") {
+                    CLAY_TEXT(CLAY_STRING("[ Recent Activity ]"),
+                              CLAY_TEXT_CONFIG({.fontId = CLAY_NCURSES_FONT_UNDERLINE}));
+                    CLAY_TEXT(CLAY_STRING("> User 101 entered queue"),
+                              CLAY_TEXT_CONFIG({.textColor = {100, 255, 100, 255}}));
+                    CLAY_TEXT(CLAY_STRING("> Worker A finished task"),
+                              CLAY_TEXT_CONFIG({.textColor = {100, 200, 255, 255}}));
+                    CLAY_TEXT(CLAY_STRING("> Issue detected in Logic"),
+                              CLAY_TEXT_CONFIG({.textColor = {255, 100, 100, 255}}));
+                }
+            }
 
-    // Initial Screen
-    tui_widget_t* start_screen = screen_dashboard_create();
-    start_screen->layout_params.expand_x = true;
-    start_screen->layout_params.expand_y = true;
-    start_screen->layout_params.fill_x = true;
-    start_screen->layout_params.fill_y = true;
-    tui_container_add((tui_container_t*)g_ctx.content_container, start_screen);
+            // Footer
+            CLAY(CLAY_ID("Footer"), {.layout = {.sizing = {.width = CLAY_SIZING_GROW(),
+                                                           .height = CLAY_SIZING_FIXED(1)},
+                                                .padding = {2, 0, 0, 0}}}) {
+                CLAY_TEXT(CLAY_STRING("Press 'q' to exit simulation."),
+                          CLAY_TEXT_CONFIG({.textColor = {120, 120, 120, 255}}));
+            }
+        }
 
-    tui_render();
-    tui_run();
-    tui_cleanup();
+        Clay_RenderCommandArray commands = Clay_EndLayout();
+        Clay_Ncurses_Render(commands);
+
+        // Sleep to cap framerate ~30fps
+        usleep(33000);
+    }
+
+    Clay_Ncurses_Terminate();
 }
 
 void app_tui_run_demo(void) {
-    app_tui_run_simulation();
+    RunDashboardLoop();
+}
+
+void app_tui_run_simulation(void) {
+    RunDashboardLoop();
 }

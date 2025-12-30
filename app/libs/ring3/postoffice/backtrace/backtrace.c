@@ -19,10 +19,8 @@
 
 #include <sys/mman.h>
 #include <ctype.h>
-#include <inttypes.h>
 #include <dirent.h>
 #include <sys/syscall.h>
-#include <errno.h>
 
 #include "postoffice/backtrace/backtrace.h"
 #include "postoffice/log/logger.h"
@@ -163,7 +161,7 @@ struct linux_dirent64 {
 /* Print list of open file descriptors using raw syscalls (async-safe) */
 static void print_open_fds(int fd) {
     safe_write(fd, "\nOpen File Descriptors:\n");
-    
+
     int dfd = open("/proc/self/fd", O_RDONLY | O_DIRECTORY);
     if (dfd == -1) {
         safe_write(fd, "  Failed to open /proc/self/fd\n");
@@ -180,18 +178,6 @@ static void print_open_fds(int fd) {
             struct linux_dirent64 *d = (struct linux_dirent64 *) (buf + bpos);
             if (d->d_type == DT_LNK) {
                 char target[1024];
-                // Manually construct path to avoid snprintf if possible, but safe_write/snprintf is used elsewhere.
-                // We'll trust our safe_write helper for the base dump, but here we need path construction.
-                // Since this logic runs in crash handler, simple snprintf is risky (locks in some libc).
-                // But we are already using snprintf in safe_write.
-                // NOTE: User pointed out snprintf is not async-safe. safe_write uses it. 
-                // However, fixing ALL usages of safe_write is a bigger task.
-                // We will stick to the pattern but acknowledge the risk.
-                // For FD enumeration, let's try to be cleaner.
-                
-                // Construct "/proc/self/fd/<d_name>"
-                // d_name is null terminated.
-                // Minimal manual construction:
                 char fd_path[64]; // FDs are integers, short path
 
                 // Quick manual copy
@@ -351,16 +337,13 @@ static int is_address_readable(const void *addr, size_t len) {
     // This is async-signal-safe (open/write/close are safe)
     int null_fd = open("/dev/null", O_WRONLY);
     if (null_fd == -1) return 0; // Conservative assume not readable if can't open null
-    
     ssize_t ret = write(null_fd, addr, len);
-    int saved_errno = errno;
     close(null_fd);
-    
+
     if (ret == (ssize_t)len) return 1;
-    
+
     // If write failed with EFAULT, it implies bad address
     // other errors might be ambiguous, but for crash dump let's fail safe
-    (void)saved_errno;
     return 0;
 }
 
@@ -374,7 +357,7 @@ static void print_stack_memory(int fd, const void *sp) {
 
     uintptr_t start = (uintptr_t)sp - 256;
     start &= ~(uintptr_t)0xF;
-    
+
     // Validate the *entire* range we intend to read (512 bytes).
     // is_address_readable uses write() which will fault (EFAULT) if ANY part of the buffer is invalid,
     // but because it's a syscall, the kernel handles the fault and returns error, rather than killing us.
@@ -471,7 +454,7 @@ static void resolve_addr2line(void* addr, char* out_file, size_t file_len, char*
 
                 /* Check for consistency/validity */
                 if (second_line && *second_line) {
-                     snprintf(out_file, file_len, "%s", second_line);
+                    snprintf(out_file, file_len, "%s", second_line);
                 }
             } else {
                 /* Only one line? treat as func, file unknown */
@@ -677,10 +660,6 @@ void backtrace_init(const char* crash_dump_dir) {
         }
     }
 
-    /* Register for common crash signals using the project's signal utility */
-    /* Ideally we'd use sigutil_handle_terminating but we want a specific handler */
-
-    /* Just manually hook our special handler */
     int signals[] = {
         SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE, SIGTRAP
 #ifdef SIGSYS

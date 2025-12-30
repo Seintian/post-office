@@ -6,6 +6,7 @@
 // Feature test macros MUST be defined before any system header to expose
 // pwritev(2). _GNU_SOURCE is sufficient on glibc; POSIX 200809L enables
 // clock_gettime and other APIs we rely on.
+#include <stdatomic.h>
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE 1
 #endif
@@ -122,7 +123,7 @@ void *_ls_worker_main(void *arg) {
         uint64_t *offs = malloc(sizeof(uint64_t) * (size_t)live);
         uint32_t *lens = malloc(sizeof(uint32_t) * (size_t)live);
         uint32_t *kls_arr = malloc(sizeof(uint32_t) * (size_t)live);
-        
+
         // Check if the test hook requests a failure
         if (po_test_logstore_fail_vector_alloc(0)) {
             // Simulate allocation failure by freeing any partial buffers and nulling pointers.
@@ -207,24 +208,16 @@ void *_ls_worker_main(void *arg) {
             cur += (uint64_t)req->vlen;
             rec_index++;
         }
-        // Primary path: atomic positional write via pwritev where available.
-        // We intentionally use pwritev for correctness under concurrent writers
-        // (even if today only this thread appends) and to avoid disturbing the
-        // file offset, which keeps the fallback path simpler.
         ssize_t w = -1;
 #if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || defined(__GLIBC__)
-        // Some minimal libc / kernel combinations might lack pwritev at link
-        // time. We keep a runtime ENOSYS fallback to a seek+writev sequence.
         errno = 0;
         w = pwritev(ls->fd, iov, (int)iov_cnt, base);
         if (w < 0 && (errno == ENOSYS || errno == EINVAL)) {
-            // Fallback: emulate with lseek + writev. Non-atomic, but preserves functionality.
             if (lseek(ls->fd, base, SEEK_SET) >= 0) {
                 w = writev(ls->fd, iov, (int)iov_cnt);
             }
         }
 #else
-        // Conservative portable fallback: reposition then writev.
         if (lseek(ls->fd, base, SEEK_SET) >= 0)
             w = writev(ls->fd, iov, (int)iov_cnt);
 #endif

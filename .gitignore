@@ -59,7 +59,10 @@ dkms.conf
 *.code-workspace
 .history/
 compile_commands.json
+compile_flags.txt
 .cache/
+.clangd
+.cspell.json
 
 # Utilities
 # !*.sh

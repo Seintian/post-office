@@ -15,3 +15,7 @@
  *  marking dirty rows when underlying entity changed.
  */
 
+#ifndef ADAPTER_ENTITIES_H
+#define ADAPTER_ENTITIES_H
+
+#endif // ADAPTER_ENTITIES_H

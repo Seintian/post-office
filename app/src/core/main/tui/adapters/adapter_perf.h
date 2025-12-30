@@ -28,3 +28,7 @@
  *  - Custom user-defined metric grouping.
  */
 
+#ifndef ADAPTER_PERF_H
+#define ADAPTER_PERF_H
+
+#endif // ADAPTER_PERF_H

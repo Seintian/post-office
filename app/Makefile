@@ -67,9 +67,11 @@ BACKTRACE_DIR          = $(RING3_DIR)/postoffice/backtrace
 STORAGE_DIR            = $(RING3_DIR)/postoffice/storage
 PERF_ZEROCOPY_DIR      = $(RING3_DIR)/postoffice/perf
 
+
 # Ring 4
 NET_DIR                = $(RING4_DIR)/postoffice/net
-TUI_LIB_DIR            = $(RING4_DIR)/postoffice/tui
+RENDERER_DIR           = $(RING4_DIR)/postoffice/renderer
+
 
 ## Core source tree root
 CORE_SRC_DIR           = $(SRC_DIR)/core
@@ -93,12 +95,11 @@ EXPLODE_INI_PATH       = $(CONFIG_DIR)/explode.ini
 # *** Compiler flags *** #
 
 INCLUDES_I = -I$(INCLUDE_DIR) -I$(POSTOFFICE_INCLUDE_DIR) -I$(THIRDPARTY_INCLUDE_DIR)
-LIBS_I     = -Ilibs -I$(RING0_DIR)/postoffice -I$(RING1_DIR)/postoffice -I$(RING2_DIR)/postoffice -I$(RING3_DIR)/postoffice -I$(RING4_DIR)/postoffice -I$(TUI_LIB_DIR) -I$(THIRDPARTY_LIBS_DIR)
+LIBS_I     = -Ilibs -I$(RING0_DIR)/postoffice -I$(RING1_DIR)/postoffice -I$(RING2_DIR)/postoffice -I$(RING3_DIR)/postoffice -I$(RING4_DIR)/postoffice -I$(THIRDPARTY_LIBS_DIR)
 CORE_I     = -I$(CORE_SRC_DIR)/main -I$(CORE_SRC_DIR)/simulation
 SRC_I      = -I$(SRC_DIR)
 
-APP_MAIN_TUI_LIB_DIR   = $(CORE_SRC_DIR)/main/tui
-ALL_I              = $(INCLUDES_I) $(LIBS_I) $(CORE_I) $(SRC_I)
+ALL_I      = $(INCLUDES_I) $(LIBS_I) $(CORE_I) $(SRC_I)
 
 #! set to `true` to enable debug flags
 DEV = true
@@ -201,6 +202,7 @@ PERF_SRC        = $(wildcard $(PERF_RINGBUF_DIR)/*.c) $(wildcard $(PERF_CORE_DIR
 METRICS_SRC     = $(wildcard $(METRICS_DIR)/*.c)
 PRIME_SRC       = $(wildcard $(PRIME_DIR)/*.c)
 STORAGE_SRC     = $(wildcard $(STORAGE_DIR)/*.c)
+RENDERER_SRC    = $(wildcard $(RENDERER_DIR)/*.c)
 UTILS_SRC       = $(wildcard $(UTILS_DIR)/*.c)
 RANDOM_SRC      = $(wildcard $(RANDOM_DIR)/*.c)
 SORT_SRC        = $(wildcard $(SORT_DIR)/*.c)
@@ -218,23 +220,8 @@ LOG_C_SRC       = $(wildcard $(LOG_C_DIR)/*.c)
 UNITY_SRC       = $(wildcard $(UNITY_DIR)/*.c)
 
 # Source Files for each process
-## NOTE:
-# Use non-recursive collection for MAIN and DIRECTOR to avoid feeding nested
-# paths to static pattern rules (which only allow a single-directory stem).
-# Nested trees (main/tui, director/ctrl_bridge) are handled separately below.
-MAIN_APP_SRC          = $(wildcard $(MAIN_DIR)/*.c)
-MAIN_SIM_SRC          = $(wildcard $(MAIN_SIM_DIR)/*.c)
-TUI_SRC_UNNORMALIZED  = $(shell find $(TUI_LIB_DIR) -name '*.c')
-APP_MAIN_TUI_SRC_UNNORMALIZED = $(shell find $(APP_MAIN_TUI_LIB_DIR) -name '*.c')
-TUI_SRC               = $(patsubst ./%,%,$(TUI_SRC_UNNORMALIZED))
-APP_MAIN_TUI_SRC      = $(patsubst ./%,%,$(APP_MAIN_TUI_SRC_UNNORMALIZED))
-DIRECTOR_APP_SRC      = $(wildcard $(DIRECTOR_DIR)/*.c)
-# Director control bridge (nested) sources (kept separate to preserve directory layout)
-DIRECTOR_BRIDGE_DIR   = $(DIRECTOR_DIR)/ctrl_bridge
-DIRECTOR_BRIDGE_SRC   = $(wildcard $(DIRECTOR_BRIDGE_DIR)/*.c)
-# Director scheduler (nested) sources
-DIRECTOR_SCHED_DIR    = $(DIRECTOR_DIR)/schedule
-DIRECTOR_SCHED_SRC    = $(wildcard $(DIRECTOR_SCHED_DIR)/*.c)
+MAIN_APP_SRC          = $(shell find $(MAIN_DIR) -name '*.c')
+DIRECTOR_APP_SRC      = $(shell find $(DIRECTOR_DIR) -name '*.c')
 TICKET_ISSUER_APP_SRC = $(shell find $(TICKET_ISSUER_DIR) -name '*.c')
 USERS_MANAGER_APP_SRC = $(shell find $(USERS_MANAGER_DIR) -name '*.c')
 WORKER_APP_SRC        = $(shell find $(WORKER_DIR) -name '*.c')
@@ -263,6 +250,7 @@ PERF_OBJS           = $(patsubst $(PERF_RINGBUF_DIR)/%.c,$(BUILD_DIR)/perf/%.o,$
 METRICS_OBJS        = $(patsubst $(METRICS_DIR)/%.c,$(BUILD_DIR)/metrics/%.o,$(METRICS_SRC))
 PRIME_OBJS          = $(patsubst $(PRIME_DIR)/%.c,$(BUILD_DIR)/prime/%.o,$(PRIME_SRC))
 STORAGE_OBJS        = $(patsubst $(STORAGE_DIR)/%.c,$(BUILD_DIR)/storage/%.o,$(STORAGE_SRC))
+RENDERER_OBJS       = $(patsubst $(RENDERER_DIR)/%.c,$(BUILD_DIR)/renderer/%.o,$(RENDERER_SRC))
 UTILS_OBJS          = $(patsubst $(UTILS_DIR)/%.c,$(BUILD_DIR)/utils/%.o,$(UTILS_SRC))
 RANDOM_OBJS         = $(patsubst $(RANDOM_DIR)/%.c,$(BUILD_DIR)/random/%.o,$(RANDOM_SRC))
 SORT_OBJS           = $(patsubst $(SORT_DIR)/%.c,$(BUILD_DIR)/sort/%.o,$(SORT_SRC))
@@ -282,18 +270,13 @@ LIBFORT_OBJS        = $(patsubst $(LIBFORT_DIR)/%.c,$(BUILD_DIR)/libfort/%.o,$(L
 # Common library objects needed by most executables
 DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(RANDOM_OBJS) $(HASHTABLE_OBJS) \
                       $(PRIME_OBJS) $(LOG_C_OBJS) $(METRICS_OBJS) $(SORT_OBJS) \
-					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) \
+					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) $(RENDERER_OBJS) \
 					  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS) $(SYSINFO_OBJS) \
 					  $(BACKTRACE_OBJS) $(VECTOR_OBJS) $(CONCURRENCY_OBJS)
 
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
-MAIN_SIM_OBJS 			= $(patsubst $(MAIN_SIM_DIR)/%.c,$(BUILD_DIR)/main/simulation/%.o,$(MAIN_SIM_SRC))
-TUI_OBJS              	= $(patsubst $(TUI_LIB_DIR)/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SRC))
-APP_MAIN_TUI_OBJS     	= $(patsubst $(APP_MAIN_TUI_LIB_DIR)/%.c,$(BUILD_DIR)/app_tui/%.o,$(APP_MAIN_TUI_SRC))
 DIRECTOR_APP_OBJS 		= $(patsubst $(DIRECTOR_DIR)/%.c,$(BUILD_DIR)/director/%.o,$(DIRECTOR_APP_SRC))
-DIRECTOR_BRIDGE_OBJS    = $(patsubst $(DIRECTOR_BRIDGE_DIR)/%.c,$(BUILD_DIR)/director/ctrl_bridge/%.o,$(DIRECTOR_BRIDGE_SRC))
-DIRECTOR_SCHED_OBJS     = $(patsubst $(DIRECTOR_SCHED_DIR)/%.c,$(BUILD_DIR)/director/schedule/%.o,$(DIRECTOR_SCHED_SRC))
 TICKET_ISSUER_APP_OBJS 	= $(patsubst $(TICKET_ISSUER_DIR)/%.c,$(BUILD_DIR)/ticket_issuer/%.o,$(TICKET_ISSUER_APP_SRC))
 USERS_MANAGER_APP_OBJS 	= $(patsubst $(USERS_MANAGER_DIR)/%.c,$(BUILD_DIR)/users_manager/%.o,$(USERS_MANAGER_APP_SRC))
 WORKER_APP_OBJS 		= $(patsubst $(WORKER_DIR)/%.c,$(BUILD_DIR)/worker/%.o,$(WORKER_APP_SRC))
@@ -303,8 +286,8 @@ TEST_ONLY_SRCS          = $(shell find $(TESTS_DIR) -name '*.c')
 TEST_OBJS               = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(TEST_ONLY_SRCS))
 
 # Full dependency list for each final executable
-MAIN_OBJS           = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
-DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DIRECTOR_SCHED_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
+MAIN_OBJS           = $(MAIN_APP_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
+DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 USERS_MANAGER_OBJS 	= $(USERS_MANAGER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 WORKER_OBJS 		= $(WORKER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS)
@@ -312,8 +295,8 @@ USER_OBJS 			= $(USER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS)
 USER_LIB_OBJS       = $(filter-out $(BUILD_DIR)/user/user.o, $(USER_APP_OBJS))
 
 # Application objects (except entrypoints) to link into tests
-APP_ALL_OBJS        = $(MAIN_APP_OBJS) $(MAIN_SIM_OBJS) $(TUI_OBJS) $(APP_MAIN_TUI_OBJS) $(DIRECTOR_APP_OBJS) $(DIRECTOR_BRIDGE_OBJS) $(DIRECTOR_SCHED_OBJS) \
-                     $(TICKET_ISSUER_APP_OBJS) $(USERS_MANAGER_APP_OBJS) $(WORKER_APP_OBJS) $(USER_APP_OBJS)
+APP_ALL_OBJS        = $(MAIN_APP_OBJS) $(DIRECTOR_APP_OBJS) \
+                      $(TICKET_ISSUER_APP_OBJS) $(USERS_MANAGER_APP_OBJS) $(WORKER_APP_OBJS) $(USER_APP_OBJS)
 APP_ENTRYPOINT_OBJS = $(BUILD_DIR)/main/main.o $(BUILD_DIR)/director/director.o $(BUILD_DIR)/ticket_issuer/ticket_issuer.o \
                       $(BUILD_DIR)/users_manager/users_manager.o $(BUILD_DIR)/worker/worker.o $(BUILD_DIR)/user/user.o
 APP_COMMON_OBJS     = $(filter-out $(APP_ENTRYPOINT_OBJS),$(APP_ALL_OBJS))
@@ -515,28 +498,17 @@ $(TEST_MAIN_EXEC): $(TEST_MAIN_OBJS) | $(BIN_DIR)
 # This is the robust way to compile object files. Each rule is explicitly
 # tied to the list of objects it's responsible for building.
 
+# Relax flags for app_tui.o (Clay implementation triggers warnings)
+$(BUILD_DIR)/main/tui/app_tui.o: CFLAGS := $(filter-out -Werror,$(CFLAGS))
+$(BUILD_DIR)/utils/clay_impl.o: CFLAGS := $(filter-out -Werror,$(CFLAGS))
+
 # Rule for main application objects
 $(BUILD_DIR)/main/%.o: $(MAIN_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
-# Rule for main simulation objects
-$(BUILD_DIR)/main/simulation/%.o: $(MAIN_SIM_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
-
 # Rule for director application objects
 $(BUILD_DIR)/director/%.o: $(DIRECTOR_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
-
-# Rule for director control bridge objects
-$(BUILD_DIR)/director/ctrl_bridge/%.o: $(DIRECTOR_BRIDGE_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
-
-# Rule for director scheduler objects
-$(BUILD_DIR)/director/schedule/%.o: $(DIRECTOR_SCHED_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
@@ -570,15 +542,7 @@ $(BUILD_DIR)/sim_ipc/%.o: $(SIM_IPC_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
-# Rule for shared TUI library objects
-$(BUILD_DIR)/tui/%.o: $(TUI_LIB_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
-# Rule for app main TUI objects
-$(BUILD_DIR)/app_tui/%.o: $(APP_MAIN_TUI_LIB_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 # Rule for our internal libraries
 $(BUILD_DIR)/hashtable/%.o: $(HASHTABLE_DIR)/%.c
@@ -664,6 +628,10 @@ $(BUILD_DIR)/libfort/%.o: $(LIBFORT_DIR)/%.c
 	$(CC) -MMD -MP $(THIRDPARTY_CFLAGS) $(ALL_I) -c $< -o $@
 
 $(BUILD_DIR)/lmdb/%.o: $(LMDB_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(THIRDPARTY_CFLAGS) $(ALL_I) -c $< -o $@
+
+$(BUILD_DIR)/renderer/%.o: $(RENDERER_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(THIRDPARTY_CFLAGS) $(ALL_I) -c $< -o $@
 

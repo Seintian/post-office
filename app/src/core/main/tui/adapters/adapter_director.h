@@ -15,3 +15,8 @@
  *  Employ static buffers / string builder utilities for formatting.
  */
 
+#ifndef ADAPTER_DIRECTOR_H
+#define ADAPTER_DIRECTOR_H
+
+#endif // ADAPTER_DIRECTOR_H
+

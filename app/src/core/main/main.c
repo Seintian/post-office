@@ -1,21 +1,20 @@
 /**
  * @file main.c
  * @brief Main Entry Point for the Post Office Application.
- * 
- * Orchestrates initialization, mode selection (Headless vs TUI), 
+ *
+ * Orchestrates initialization, mode selection (Headless vs TUI),
  * and cleanup using helper modules.
  */
 
 #define _POSIX_C_SOURCE 200809L
 
+#include <postoffice/log/logger.h>
+#include <postoffice/metrics/metrics.h> // For generic metric counters
+#include <unistd.h>
+
 #include "bootstrap.h"
 #include "simulation/simulation_lifecycle.h"
 #include "tui/app_tui.h"
-
-#include <stdio.h>
-#include <unistd.h>
-#include <postoffice/log/logger.h>
-#include <postoffice/metrics/metrics.h> // For generic metric counters
 
 static int process_command_line_arguments(po_args_t *args, int argc, char *argv[]) {
     po_args_init(args);
@@ -62,11 +61,13 @@ int main(int argc, char *argv[]) {
 
     // Initialize logic layer
     initialize_simulation_configuration(args.config_file);
-    
+
     app_log_system_info(is_tui);
 
-    if (args.tui_demo) return execute_interactive_demo_mode(&args);
-    if (args.tui_sim)  return execute_interactive_simulation_mode(&args);
-    
+    if (args.tui_demo)
+        return execute_interactive_demo_mode(&args);
+    if (args.tui_sim)
+        return execute_interactive_simulation_mode(&args);
+
     return execute_headless_simulation_mode(&args);
 }

@@ -28,3 +28,7 @@
  *  - Color theme mapping by severity.
  */
 
+#ifndef ADAPTER_LOGSTORE_H
+#define ADAPTER_LOGSTORE_H
+
+#endif // ADAPTER_LOGSTORE_H

@@ -1,16 +1,17 @@
 #ifndef USERS_SPAWN_H
 #define USERS_SPAWN_H
 
-#include <stdbool.h>
 #include <postoffice/net/net.h>
+#include <stdbool.h>
+
 #include "ipc/simulation_ipc.h"
 
 #define MAX_USER_CAPACITY 2000
 
 typedef struct {
-    volatile _Atomic bool is_occupied;
-    volatile _Atomic bool should_continue_running;
-    int worker_idx; 
+    volatile atomic_bool is_occupied;
+    volatile atomic_bool should_continue_running;
+    int worker_idx;
 } user_slot_t;
 
 void users_spawn_init(sim_shm_t *shm, size_t pool_size);

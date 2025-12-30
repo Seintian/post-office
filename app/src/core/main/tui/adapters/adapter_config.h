@@ -20,3 +20,7 @@
  *  - Export to file command from UI.
  */
 
+#ifndef ADAPTER_CONFIG_H
+#define ADAPTER_CONFIG_H
+
+#endif // ADAPTER_CONFIG_H

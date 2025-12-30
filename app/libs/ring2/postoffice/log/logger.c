@@ -6,26 +6,26 @@
 #define _GNU_SOURCE 1
 #endif
 // For __nonnull attribute
-#include <sys/cdefs.h>
-
 #include "log/logger.h"
-#include "perf/cache.h"
 
 #include <errno.h>
 #include <pthread.h>
+#include <stdalign.h>
 #include <stdarg.h>
 #include <stdatomic.h>
-#include <stdalign.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/syscall.h>
+#include <sys/cdefs.h>
 #include <sys/stat.h>
-#include <sys/types.h>
+#include <sys/syscall.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "perf/cache.h"
 
 // Save syslog values that conflict with our enum
 static const int SYSLOG_VAL_DEBUG = LOG_DEBUG;
@@ -77,13 +77,13 @@ static unsigned g_nworkers = 0;
 static po_logger_overflow_policy_t g_policy = LOGGER_OVERWRITE_OLDEST;
 static unsigned int g_sinks_mask = 0u;
 static file_sink_t *g_file_sinks = NULL;
-static _Atomic int g_running = 0;
+static atomic_int g_running = 0;
 static __thread uint32_t _po_logger_thread_category = 0;
-static alignas(PO_CACHE_LINE_MAX) _Atomic unsigned long g_dropped_new = 0;
-static alignas(PO_CACHE_LINE_MAX) _Atomic unsigned long g_overwritten_old = 0;
-static alignas(PO_CACHE_LINE_MAX) _Atomic unsigned long g_processed = 0;
-static alignas(PO_CACHE_LINE_MAX) _Atomic unsigned long g_batches = 0;
-static _Atomic unsigned long g_max_batch = 0; // high water mark
+static alignas(PO_CACHE_LINE_MAX) atomic_ulong g_dropped_new = 0;
+static alignas(PO_CACHE_LINE_MAX) atomic_ulong g_overwritten_old = 0;
+static alignas(PO_CACHE_LINE_MAX) atomic_ulong g_processed = 0;
+static alignas(PO_CACHE_LINE_MAX) atomic_ulong g_batches = 0;
+static atomic_ulong g_max_batch = 0; // high water mark
 static int g_syslog_open = 0;
 static char *g_syslog_ident = NULL;
 static custom_sink_t *g_custom_sinks = NULL;
@@ -108,13 +108,16 @@ static const char *const level_metrics[] = {"logger.level.trace", "logger.level.
  * @note Thread-safety: Unknown (depends on mkdir implementation, likely yes).
  */
 static int mkdir_p(const char *path) {
-    if (!path || !*path) return -1;
+    if (!path || !*path)
+        return -1;
     char *subpath = strdup(path);
-    if (!subpath) return -1;
+    if (!subpath)
+        return -1;
 
     char *p = subpath;
     // Skip leading slash
-    if (*p == '/') p++;
+    if (*p == '/')
+        p++;
 
     for (; *p; p++) {
         if (*p == '/') {
@@ -212,7 +215,8 @@ static inline char *fast_utoa10(uint64_t v, char *p) {
 static inline char *fast_pad6(long v, char *p) {
     // Optimized for width=6 (microseconds)
     // v must be < 1000000
-    if (v < 0) v = 0;
+    if (v < 0)
+        v = 0;
     char buf[8];
     int i = 0;
     // Always write 6 digits
@@ -240,7 +244,7 @@ static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
     // Format: "%s.%06ld %lu %-5s %s:%d %s() - %s\n"
     // "YYYY-MM-DD HH:MM:SS" is 19 chars
 
-    // We assume outsz is large enough (MAX_RECORD_SIZE) so strict checking 
+    // We assume outsz is large enough (MAX_RECORD_SIZE) so strict checking
     // on every field isn't critical for crash safety but we should be reasonable.
     // The logger buffer is huge relative to these fields.
     (void)outsz;
@@ -277,13 +281,27 @@ static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
     // "TRACE", "DEBUG", "INFO ", "WARN ", "ERROR", "FATAL"
     const char *lvl_str;
     switch (r->level) {
-        case LOG_TRACE: lvl_str = "TRACE"; break;
-        case LOG_DEBUG: lvl_str = "DEBUG"; break;
-        case LOG_INFO:  lvl_str = "INFO "; break;
-        case LOG_WARN:  lvl_str = "WARN "; break;
-        case LOG_ERROR: lvl_str = "ERROR"; break;
-        case LOG_FATAL: lvl_str = "FATAL"; break;
-        default:        lvl_str = "UNK  "; break;
+    case LOG_TRACE:
+        lvl_str = "TRACE";
+        break;
+    case LOG_DEBUG:
+        lvl_str = "DEBUG";
+        break;
+    case LOG_INFO:
+        lvl_str = "INFO ";
+        break;
+    case LOG_WARN:
+        lvl_str = "WARN ";
+        break;
+    case LOG_ERROR:
+        lvl_str = "ERROR";
+        break;
+    case LOG_FATAL:
+        lvl_str = "FATAL";
+        break;
+    default:
+        lvl_str = "UNK  ";
+        break;
     }
     memcpy(p, lvl_str, 5);
     p += 5;
@@ -292,7 +310,8 @@ static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
 
     // 5. File
     const char *f = r->file;
-    while (*f) *p++ = *f++;
+    while (*f)
+        *p++ = *f++;
 
     *p++ = ':';
 
@@ -303,7 +322,8 @@ static void record_format_line(const log_record_t *r, char *out, size_t outsz) {
 
     // 9. Message
     const char *m = r->msg;
-    while (*m) *p++ = *m++;
+    while (*m)
+        *p++ = *m++;
 
     *p++ = '\n';
     *p = '\0';
@@ -365,11 +385,8 @@ static void write_record(const log_record_t *r) {
     }
 
     if ((g_sinks_mask & LOGGER_SINK_SYSLOG) && g_syslog_open)
-        syslog(
-            syslog_priority_for_level(r->level),
-            "%s:%d %s() - %s",
-            r->file, r->line, r->func, r->msg
-        );
+        syslog(syslog_priority_for_level(r->level), "%s:%d %s() - %s", r->file, r->line, r->func,
+               r->msg);
 
     for (custom_sink_t *c = g_custom_sinks; c; c = c->next)
         c->fn(line, c->ud);
@@ -476,7 +493,8 @@ int po_logger_init(const po_logger_config_t *cfg) {
     file_sink_t *fs = g_file_sinks;
     while (fs) {
         file_sink_t *next = fs->next;
-        if (fs->fp) fclose(fs->fp);
+        if (fs->fp)
+            fclose(fs->fp);
         free(fs);
         fs = next;
     }
@@ -643,8 +661,9 @@ int po_logger_add_sink_file_categorized(const char *path, bool append, uint32_t 
         char *slash = strrchr(dir, '/');
         if (slash) {
             *slash = '\0';
-            // Ignore errors here; straightforward fopen will fail if mkdir failed, checking that is enough
-            mkdir_p(dir); 
+            // Ignore errors here; straightforward fopen will fail if mkdir failed, checking that is
+            // enough
+            mkdir_p(dir);
         }
         free(dir);
     }
@@ -775,11 +794,9 @@ static inline void fill_overflow_notice(log_record_t *rec, unsigned long dropped
     rec->file[0] = '\0';
     strncpy(rec->func, "logger", sizeof(rec->func) - 1);
     rec->func[sizeof(rec->func) - 1] = '\0';
-    snprintf(
-        rec->msg, sizeof(rec->msg),
-        "logger overflow: dropped_new=%lu overwritten_old=%lu (policy=%s)",
-        dropped, overwritten, g_policy == LOGGER_DROP_NEW ? "DROP_NEW" : "OVERWRITE_OLDEST"
-    );
+    snprintf(rec->msg, sizeof(rec->msg),
+             "logger overflow: dropped_new=%lu overwritten_old=%lu (policy=%s)", dropped,
+             overwritten, g_policy == LOGGER_DROP_NEW ? "DROP_NEW" : "OVERWRITE_OLDEST");
 }
 
 void po_logger_logv(po_log_level_t level, const char *file, int line, const char *func,
@@ -801,12 +818,14 @@ void po_logger_logv(po_log_level_t level, const char *file, int line, const char
             const char *src = (len >= cap) ? (file + len - n) : file;
             memcpy(r.file, src, n);
             r.file[n] = '\0';
-        } else r.file[0] = '\0';
+        } else
+            r.file[0] = '\0';
 
         if (func) {
             strncpy(r.func, func, sizeof(r.func) - 1);
             r.func[sizeof(r.func) - 1] = '\0';
-        } else r.func[0] = '\0';
+        } else
+            r.func[0] = '\0';
 
         // Format message
         vsnprintf(r.msg, sizeof(r.msg), fmt, ap);
@@ -908,15 +927,21 @@ void po_logger_log(po_log_level_t level, const char *file, int line, const char 
     va_end(ap);
 }
 
-
 int po_logger_level_from_str(const char *str) {
-    if (!str) return -1;
-    if (strcasecmp(str, "TRACE") == 0) return LOG_TRACE;
-    if (strcasecmp(str, "DEBUG") == 0) return LOG_DEBUG;
-    if (strcasecmp(str, "INFO") == 0)  return LOG_INFO;
-    if (strcasecmp(str, "WARN") == 0)  return LOG_WARN;
-    if (strcasecmp(str, "ERROR") == 0) return LOG_ERROR;
-    if (strcasecmp(str, "FATAL") == 0) return LOG_FATAL;
+    if (!str)
+        return -1;
+    if (strcasecmp(str, "TRACE") == 0)
+        return LOG_TRACE;
+    if (strcasecmp(str, "DEBUG") == 0)
+        return LOG_DEBUG;
+    if (strcasecmp(str, "INFO") == 0)
+        return LOG_INFO;
+    if (strcasecmp(str, "WARN") == 0)
+        return LOG_WARN;
+    if (strcasecmp(str, "ERROR") == 0)
+        return LOG_ERROR;
+    if (strcasecmp(str, "FATAL") == 0)
+        return LOG_FATAL;
     return -1;
 }
 
@@ -924,36 +949,57 @@ void po_logger_crash_dump(int fd) {
     // Async-signal-safe dump. Avoids snprintf, localtime, malloc.
     // Uses write() and strlen() (which is generally safe) directly.
     const char *header = "\n--- Pending Log Messages (Ring Buffer Dump) ---\n";
-    if (write(fd, header, strlen(header)) < 0) {} 
+    if (write(fd, header, strlen(header)) < 0) {
+    }
 
     void *p;
     while (g_ring && perf_ringbuf_dequeue(g_ring, &p) == 0) {
         log_record_t *r = (log_record_t *)p;
         if (r && r != &g_sentinel) {
             const char *lvl = "UNKNOWN";
-            switch(r->level) {
-                case LOG_TRACE: lvl = "TRACE"; break;
-                case LOG_DEBUG: lvl = "DEBUG"; break;
-                case LOG_INFO:  lvl = "INFO "; break;
-                case LOG_WARN:  lvl = "WARN "; break;
-                case LOG_ERROR: lvl = "ERROR"; break;
-                case LOG_FATAL: lvl = "FATAL"; break;
+            switch (r->level) {
+            case LOG_TRACE:
+                lvl = "TRACE";
+                break;
+            case LOG_DEBUG:
+                lvl = "DEBUG";
+                break;
+            case LOG_INFO:
+                lvl = "INFO ";
+                break;
+            case LOG_WARN:
+                lvl = "WARN ";
+                break;
+            case LOG_ERROR:
+                lvl = "ERROR";
+                break;
+            case LOG_FATAL:
+                lvl = "FATAL";
+                break;
             }
 
             // [LEVEL] func - msg
-            if (write(fd, "[", 1) < 0) {}
-            if (write(fd, lvl, 5) < 0) {}
-            if (write(fd, "] ", 2) < 0) {}
-
-            if (r->func[0]) {
-                if (write(fd, r->func, strlen(r->func)) < 0) {}
-                if (write(fd, " - ", 3) < 0) {}
+            if (write(fd, "[", 1) < 0) {
+            }
+            if (write(fd, lvl, 5) < 0) {
+            }
+            if (write(fd, "] ", 2) < 0) {
             }
 
-            if (write(fd, r->msg, strlen(r->msg)) < 0) {}
-            if (write(fd, "\n", 1) < 0) {}
+            if (r->func[0]) {
+                if (write(fd, r->func, strlen(r->func)) < 0) {
+                }
+                if (write(fd, " - ", 3) < 0) {
+                }
+            }
+
+            if (write(fd, r->msg, strlen(r->msg)) < 0) {
+            }
+            if (write(fd, "\n", 1) < 0) {
+            }
         }
     }
     const char *footer = "--- End of Pending Logs ---\n";
-    if (write(fd, footer, strlen(footer)) < 0) {} 
+    if (write(fd, footer, strlen(footer)) < 0) {
+    }
 }

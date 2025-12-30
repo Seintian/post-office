@@ -1,17 +1,19 @@
 #include "postoffice/concurrency/waitgroup.h"
+
 #include <pthread.h>
-#include <stdlib.h>
 #include <stdatomic.h>
+#include <stdlib.h>
 
 struct waitgroup_s {
-    _Atomic int count;
+    atomic_int count;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
 };
 
 waitgroup_t *wg_create(void) {
     waitgroup_t *wg = malloc(sizeof(waitgroup_t));
-    if (!wg) return NULL;
+    if (!wg)
+        return NULL;
     atomic_init(&wg->count, 0);
     pthread_mutex_init(&wg->mutex, NULL);
     pthread_cond_init(&wg->cond, NULL);
@@ -32,7 +34,8 @@ void wg_done(waitgroup_t *wg) {
 }
 
 void wg_wait(waitgroup_t *wg) {
-    if (atomic_load(&wg->count) == 0) return;
+    if (atomic_load(&wg->count) == 0)
+        return;
 
     pthread_mutex_lock(&wg->mutex);
     while (atomic_load(&wg->count) > 0) {
@@ -41,9 +44,9 @@ void wg_wait(waitgroup_t *wg) {
     pthread_mutex_unlock(&wg->mutex);
 }
 
-
 int wg_active_count(waitgroup_t *wg) {
-    if (!wg) return 0;
+    if (!wg)
+        return 0;
     return atomic_load(&wg->count);
 }
 

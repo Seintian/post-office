@@ -22,8 +22,8 @@ extern "C" {
 #include <sys/types.h>
 
 #include "perf/batcher.h"
-#include "perf/ringbuf.h"
 #include "perf/cache.h"
+#include "perf/ringbuf.h"
 #include "storage/db_lmdb.h"
 #include "storage/index.h"
 #include "storage/logstore.h"
@@ -62,40 +62,40 @@ struct po_logstore {
     pthread_t fsync_thread;                  // background fsync thread
     size_t max_key_bytes;                    // configured max key size
     size_t max_value_bytes;                  // configured max value size
-    int never_overwrite;                     // if set, append returns -1 when full instead of retrying
-    
+    int never_overwrite; // if set, append returns -1 when full instead of retrying
+
     // ========================================================================
     // HOT FIELDS (frequently accessed, isolated on separate cache lines)
     // ========================================================================
-    
+
     // Updated by producers (enqueue path)
-    _Atomic uint64_t seq;                    // sequence for logger sink keys
-    char _pad1[PO_CACHE_LINE_MAX - sizeof(_Atomic uint64_t)];
-    
+    atomic_uint_fast64_t seq; // sequence for logger sink keys
+    char _pad1[PO_CACHE_LINE_MAX - sizeof(atomic_uint_fast64_t)];
+
     // Updated by workers (flush path)
-    _Atomic uint64_t metric_batches_flushed;
-    char _pad2[PO_CACHE_LINE_MAX - sizeof(_Atomic uint64_t)];
-    
-    _Atomic uint64_t metric_records_flushed;
-    char _pad3[PO_CACHE_LINE_MAX - sizeof(_Atomic uint64_t)];
-    
+    atomic_uint_fast64_t metric_batches_flushed;
+    char _pad2[PO_CACHE_LINE_MAX - sizeof(atomic_uint_fast64_t)];
+
+    atomic_uint_fast64_t metric_records_flushed;
+    char _pad3[PO_CACHE_LINE_MAX - sizeof(atomic_uint_fast64_t)];
+
     // Updated by producers (error path)
-    _Atomic uint64_t metric_enqueue_failures;
-    char _pad4[PO_CACHE_LINE_MAX - sizeof(_Atomic uint64_t)];
-    
+    atomic_uint_fast64_t metric_enqueue_failures;
+    char _pad4[PO_CACHE_LINE_MAX - sizeof(atomic_uint_fast64_t)];
+
     // Updated by both producers and workers
-    _Atomic size_t outstanding_reqs;         // diagnostic: live append requests (debug/leak guard)
-    char _pad5[PO_CACHE_LINE_MAX - sizeof(_Atomic size_t)];
-    
+    atomic_size_t outstanding_reqs; // diagnostic: live append requests (debug/leak guard)
+    char _pad5[PO_CACHE_LINE_MAX - sizeof(atomic_size_t)];
+
     // Control flags (read frequently, written rarely)
-    _Atomic int running;                     // running flag
-    _Atomic int worker_ready;                // at least one worker entered main loop
-    _Atomic int fsync_thread_run;            // background fsync running flag
+    atomic_int running;          // running flag
+    atomic_int worker_ready;     // at least one worker entered main loop
+    atomic_int fsync_thread_run; // background fsync running flag
     char _pad6[PO_CACHE_LINE_MAX - 3 * sizeof(_Atomic int)];
-    
+
     // Timing fields (updated by fsync thread)
-    uint64_t last_fsync_ns;                  // last fsync timestamp
-    unsigned batches_since_fsync;            // counter for EVERY_N policy
+    uint64_t last_fsync_ns;       // last fsync timestamp
+    unsigned batches_since_fsync; // counter for EVERY_N policy
 };
 
 // Length validation helper (0 ok, -1 invalid)

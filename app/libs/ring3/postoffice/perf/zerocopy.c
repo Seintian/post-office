@@ -14,7 +14,6 @@
 #include "sysinfo/sysinfo.h"
 #include <postoffice/log/logger.h>
 
-// Include pthread
 #include <pthread.h>
 
 struct perf_zcpool {
@@ -42,7 +41,6 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size, perf_zcpool
     }
 
     // Compute total size
-    
     // Default to 2MB if detection fails or is weird
     size_t huge_page_bytes = 2UL << 20;
     int huge_shift = 21;
@@ -50,8 +48,8 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size, perf_zcpool
     po_sysinfo_t sys;
     // best-effort sysinfo
     if (po_sysinfo_collect(&sys) == 0 && sys.hugepage_info.size_kB > 0) {
-       huge_page_bytes = sys.hugepage_info.size_kB * 1024UL;
-       huge_shift = get_log2_shift(huge_page_bytes);
+        huge_page_bytes = sys.hugepage_info.size_kB * 1024UL;
+        huge_shift = get_log2_shift(huge_page_bytes);
     }
 
     size_t region_size = buf_count * buf_size;
@@ -80,11 +78,6 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size, perf_zcpool
     p->buf_size = buf_size;
     p->buf_count = buf_count;
     p->flags = flags;
-    // We do NOT use PERF_RINGBUF_METRICS for internal freeq unless ZCP_METRICS is set
-    // AND even then, the pool call usually implies the ring call.
-    // However, if we enable both, we get double metrics for enqueue/dequeue vs acquire/release.
-    // Let's NOT enable metrics on the internal ringbuf to keep it cleaner.
-    // Use buf_count + 1 to ensure we can hold all buf_count items (ringbuf full is N-1)
     p->freeq = perf_ringbuf_create(buf_count * 2, PERF_RINGBUF_NOFLAGS);
     if (!p->freeq) {
         munmap(base, aligned);
@@ -108,7 +101,7 @@ perf_zcpool_t *perf_zcpool_create(size_t buf_count, size_t buf_size, perf_zcpool
             enqueue_fails++;
         }
     }
-    
+
     if (enqueue_fails > 0 || perf_ringbuf_count(p->freeq) != buf_count) {
         LOG_ERROR("zcpool_create: enqueued %zu/%zu buffers. Fails: %d", 
             perf_ringbuf_count(p->freeq), buf_count, enqueue_fails);

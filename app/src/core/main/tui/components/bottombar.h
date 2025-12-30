@@ -7,5 +7,5 @@
  *         active filters, status messages) with adaptive truncation.
  */
 
-#endif
+#endif // COMPONENTS_BOTTOMBAR_H
 

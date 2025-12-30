@@ -7,24 +7,23 @@
 
 #include "sim_client.h"
 
+#include <errno.h>
+#include <postoffice/log/logger.h>
+#include <postoffice/net/socket.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <time.h>
 #include <sys/socket.h>
-#include <signal.h>
-#include <pthread.h>
-#include <stdbool.h>
-
-#include <postoffice/log/logger.h>
-#include <postoffice/net/socket.h>
+#include <time.h>
+#include <unistd.h>
 #include <utils/signals.h>
 
 // --- Connection ---
 
-int sim_client_connect_issuer(volatile _Atomic bool *should_continue, sim_shm_t *shm) {
+int sim_client_connect_issuer(volatile atomic_bool *should_continue, sim_shm_t *shm) {
     const char *user_home = getenv("HOME");
     char sock_path[512];
     if (user_home) {
@@ -33,12 +32,14 @@ int sim_client_connect_issuer(volatile _Atomic bool *should_continue, sim_shm_t 
         snprintf(sock_path, sizeof(sock_path), "/tmp/postoffice_%d_issuer.sock", getuid());
     }
 
-    LOG_DEBUG("Attempting to connect to Ticket Issuer socket: %s", sock_path); // Keep DEBUG or TRACE
+    LOG_DEBUG("Attempting to connect to Ticket Issuer socket: %s",
+              sock_path); // Keep DEBUG or TRACE
 
     int socket_fd = -1;
     // Retry for ~10 seconds (500 * 20ms) to accommodate slow starts (e.g. ASan)
     for (int i = 0; i < 500; i++) {
-        if (should_continue && !atomic_load(should_continue)) break;
+        if (should_continue && !atomic_load(should_continue))
+            break;
 
         socket_fd = po_socket_connect_unix(sock_path);
         if (socket_fd >= 0) {
@@ -56,9 +57,10 @@ int sim_client_connect_issuer(volatile _Atomic bool *should_continue, sim_shm_t 
 
     if (socket_fd < 0 && (!should_continue || atomic_load(should_continue))) {
         int d = 0, h = 0, m = 0;
-        if (shm) sim_client_read_time(shm, &d, &h, &m);
-        LOG_ERROR("[Day %d %02d:%02d] Failed to connect to %s after retries (errno=%d: %s)", 
-            d, h, m, sock_path, errno, strerror(errno));
+        if (shm)
+            sim_client_read_time(shm, &d, &h, &m);
+        LOG_ERROR("[Day %d %02d:%02d] Failed to connect to %s after retries (errno=%d: %s)", d, h,
+                  m, sock_path, errno, strerror(errno));
     }
 
     return socket_fd;
@@ -67,15 +69,18 @@ int sim_client_connect_issuer(volatile _Atomic bool *should_continue, sim_shm_t 
 // --- Time & Sync ---
 
 void sim_client_read_time(sim_shm_t *shm, int *day, int *hour, int *minute) {
-    if (!shm) return;
+    if (!shm)
+        return;
     uint64_t packed = atomic_load(&shm->time_control.packed_time);
     *day = (packed >> 16) & 0xFFFF;
     *hour = (packed >> 8) & 0xFF;
     *minute = packed & 0xFF;
 }
 
-void sim_client_wait_barrier(sim_shm_t *shm, int *last_synced_day, volatile sig_atomic_t *g_shutdown_flag) {
-    if (!shm || !g_shutdown_flag) return;
+void sim_client_wait_barrier(sim_shm_t *shm, int *last_synced_day,
+                             volatile sig_atomic_t *g_shutdown_flag) {
+    if (!shm || !g_shutdown_flag)
+        return;
 
     while (!*g_shutdown_flag) {
         unsigned int barrier_day = atomic_load(&shm->sync.day_seq);
@@ -84,13 +89,14 @@ void sim_client_wait_barrier(sim_shm_t *shm, int *last_synced_day, volatile sig_
         if ((int)barrier_day > *last_synced_day) {
             int retries = 0;
             while (!*g_shutdown_flag && !atomic_load(&shm->sync.barrier_active)) {
-                usleep(1000); // 1ms wait
+                usleep(1000);           // 1ms wait
                 if (++retries > 5000) { // 5s timeout safety
                     LOG_WARN("Waiting for barrier activation for Day %u...", barrier_day);
                     retries = 0;
                 }
             }
-            if (*g_shutdown_flag) return;
+            if (*g_shutdown_flag)
+                return;
 
             // Join the Barrier
             pthread_mutex_lock(&shm->sync.mutex);
@@ -107,7 +113,7 @@ void sim_client_wait_barrier(sim_shm_t *shm, int *last_synced_day, volatile sig_
                 struct timespec ts;
                 while (!*g_shutdown_flag && atomic_load(&shm->sync.barrier_active)) {
                     clock_gettime(CLOCK_MONOTONIC, &ts);
-                    ts.tv_sec += 1; 
+                    ts.tv_sec += 1;
                     pthread_cond_timedwait(&shm->sync.cond_day_start, &shm->sync.mutex, &ts);
                 }
             }
@@ -124,7 +130,7 @@ void sim_client_wait_barrier(sim_shm_t *shm, int *last_synced_day, volatile sig_
 
 // --- Signals ---
 
-void sim_client_setup_signals(void (*handler)(int, siginfo_t*, void*)) {
+void sim_client_setup_signals(void (*handler)(int, siginfo_t *, void *)) {
     if (sigutil_setup(handler, SIGUTIL_HANDLE_TERMINATING_ONLY, 0) != 0) {
         LOG_FATAL("Failed to setup signals");
         exit(1);
