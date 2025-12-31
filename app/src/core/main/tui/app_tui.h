@@ -4,11 +4,16 @@
 /**
  * @brief Runs the TUI in demo loop.
  */
-void app_tui_run_demo(void);
+/**
+ * @brief Runs the TUI in demo loop.
+ * @return 0 on success, non-zero on error.
+ */
+int app_tui_run_demo(void);
 
 /**
  * @brief Runs the TUI for the main simulation.
+ * @return 0 on success, non-zero on error.
  */
-void app_tui_run_simulation(void);
+int app_tui_run_simulation(void);
 
 #endif // APP_TUI_H

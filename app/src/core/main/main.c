@@ -8,6 +8,8 @@
 
 #define _POSIX_C_SOURCE 200809L
 
+#include <errno.h>
+#include "utils/errors.h"
 #include <postoffice/log/logger.h>
 #include <postoffice/metrics/metrics.h> // For generic metric counters
 #include <unistd.h>
@@ -26,15 +28,24 @@ static int process_command_line_arguments(po_args_t *args, int argc, char *argv[
 }
 
 static int execute_interactive_demo_mode(po_args_t *args) {
-    app_tui_run_demo();
+    if (app_tui_run_demo() != 0) {
+        LOG_FATAL("TUI execution failed: %s (%d).", po_strerror(errno), errno);
+        app_shutdown_system(args);
+        return 1;
+    }
     app_shutdown_system(args);
     return 0;
 }
 
 static int execute_interactive_simulation_mode(po_args_t *args) {
     launch_simulation_process(true, (int)po_logger_get_level());
-    app_tui_run_simulation();
+    int rc = app_tui_run_simulation();
     terminate_simulation_process();
+    if (rc != 0) {
+        LOG_FATAL("TUI execution failed: %s (%d).", po_strerror(errno), errno);
+        app_shutdown_system(args);
+        return 1;
+    }
     app_shutdown_system(args);
     return 0;
 }

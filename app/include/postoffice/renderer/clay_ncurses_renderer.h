@@ -66,4 +66,33 @@ void Clay_Ncurses_OnClick(void (*onClickFunc)(Clay_ElementId elementId,
                                               Clay_PointerData pointerData, void *userData),
                           void *userData);
 
+/**
+ * @brief Enables or disables raw mode for key capture.
+ * In raw mode, interrupt processing (Ctrl+C) and flow control (Ctrl+S/Q) are disabled
+ * at the terminal driver level, allowing the application to handle them.
+ * @param enable true to enable raw mode, false to disable (cbreak mode).
+ */
+void Clay_Ncurses_SetRawMode(bool enable);
+
+/**
+ * @brief Prepares the terminal for application suspension (e.g. SIGTSTP).
+ * Restores terminal settings and disables mouse tracking to allow shell interaction.
+ * Should be called before raising SIGSTOP or SIGTSTP.
+ */
+void Clay_Ncurses_PrepareSuspend(void);
+
+/**
+ * @brief Resumes the terminal state after suspension.
+ * Re-initializes Ncurses context, clears the screen to remove shell artifacts,
+ * and re-enables mouse tracking.
+ */
+void Clay_Ncurses_ResumeAfterSuspend(void);
+
+/**
+ * @brief Processes a single input event from the standard screen.
+ * Proxies to internal Ncurses wgetch(stdscr).
+ * @return The key code pressed, or ERR if no input.
+ */
+int Clay_Ncurses_ProcessInputStandard(void);
+
 #endif // POSTOFFICE_RENDERER_CLAY_NCURSES_RENDERER_H

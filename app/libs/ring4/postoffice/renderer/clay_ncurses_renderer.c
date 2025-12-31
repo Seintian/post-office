@@ -50,6 +50,9 @@ static int _screenHeight = 0;
 /** @brief Flag indicating if the ncurses subsystem has been successfully initialized. */
 static bool _isInitialized = false;
 
+/** @brief Keep track of raw mode state. */
+static bool _isRawMode = false;
+
 // Scissor / Clipping State
 
 /** @brief Maximum depth of the scissor/clipping stack. */
@@ -451,6 +454,9 @@ void Clay_Ncurses_Initialize() {
     mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
     mouseinterval(0);
 
+    // Enable non-blocking input
+    nodelay(stdscr, TRUE);
+
     // Force xterm mouse tracking (Any Event) to ensure we get position updates
     // even when buttons are not pressed. This fixes hover detection.
     puts("\033[?1003h");
@@ -465,6 +471,7 @@ void Clay_Ncurses_Initialize() {
     _scissorStackIndex = 0;
 
     _isInitialized = true;
+    _isRawMode = false;
 }
 
 /**
@@ -730,4 +737,41 @@ void Clay_Ncurses_OnClick(void (*onClickFunc)(Clay_ElementId elementId,
     if (onClickFunc) {
         Clay_OnHover(onClickFunc, userData);
     }
+}
+
+// -------------------------------------------------------------------------------------------------
+// -- Extended API Implementation
+// -------------------------------------------------------------------------------------------------
+
+void Clay_Ncurses_SetRawMode(bool enable) {
+    if (enable) {
+        raw();
+        _isRawMode = true;
+    } else {
+        cbreak(); // or noraw()
+        _isRawMode = false;
+    }
+}
+
+void Clay_Ncurses_PrepareSuspend(void) {
+    endwin();
+    puts("\033[?1003l");
+}
+
+void Clay_Ncurses_ResumeAfterSuspend(void) {
+    // Force full repaint by invalidating internal buffer
+    clear();
+    refresh();
+
+    // Restore TUI state
+    if (_isRawMode) {
+        raw();
+    } else {
+        cbreak();
+    }
+    puts("\033[?1003h");
+}
+
+int Clay_Ncurses_ProcessInputStandard(void) {
+    return Clay_Ncurses_ProcessInput(stdscr);
 }
