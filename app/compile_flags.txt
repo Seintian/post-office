@@ -1,0 +1,15 @@
+-Iinclude
+-Iinclude/postoffice
+-Iinclude/thirdparty
+-Ilibs
+-Ilibs/ring0/postoffice
+-Ilibs/ring1/postoffice
+-Ilibs/ring2/postoffice
+-Ilibs/ring3/postoffice
+-Ilibs/ring4/postoffice
+-Ilibs/ring0/thirdparty
+-Isrc
+-Isrc/core/main
+-Isrc/core/simulation
+-D_GNU_SOURCE
+-D_POSIX_C_SOURCE=200809L

@@ -1,11 +1,11 @@
-#ifndef COMPONENTS_BOTTOMBAR_H
-#define COMPONENTS_BOTTOMBAR_H
+#ifndef TUI_COMPONENTS_BOTTOMBAR_H
+#define TUI_COMPONENTS_BOTTOMBAR_H
 
-/** \file bottombar.h
- *  \ingroup tui
- *  \brief Bottom bar component rendering contextual hints (key bindings,
- *         active filters, status messages) with adaptive truncation.
+/**
+ * @brief Renders the bottom footer bar of the TUI.
+ * 
+ * Displays the command input field (including cursor) and keybinding hints.
  */
+void tui_RenderBottomBar(void);
 
-#endif // COMPONENTS_BOTTOMBAR_H
-
+#endif // TUI_COMPONENTS_BOTTOMBAR_H

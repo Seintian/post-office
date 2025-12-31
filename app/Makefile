@@ -327,7 +327,7 @@ start-tui:
 	@$(MAKE) all -j
 	@echo "> Makefile: Running the main process with TUI..."
 	@echo
-	@($(MAIN_EXEC) $(MAIN_TUI_ARGS) && \
+	@($(MAIN_EXEC) --tui --loglevel "$(LOG_LEVEL)" && \
 	(echo "> Makefile: Main process with TUI exited successfully.")) || \
 		(EXIT_CODE=$$? && echo "> Makefile: ERROR: Main process with TUI failed with exit code $$EXIT_CODE"; exit $$EXIT_CODE)
 
@@ -500,6 +500,8 @@ $(TEST_MAIN_EXEC): $(TEST_MAIN_OBJS) | $(BIN_DIR)
 
 # Relax flags for app_tui.o (Clay implementation triggers warnings)
 $(BUILD_DIR)/main/tui/app_tui.o: CFLAGS := $(filter-out -Werror,$(CFLAGS))
+$(BUILD_DIR)/main/tui/components/%.o: CFLAGS := $(filter-out -Werror,$(CFLAGS)) 
+$(BUILD_DIR)/main/tui/screens/%.o: CFLAGS := $(filter-out -Werror,$(CFLAGS))
 $(BUILD_DIR)/utils/clay_impl.o: CFLAGS := $(filter-out -Werror,$(CFLAGS))
 
 # Rule for main application objects

@@ -58,7 +58,7 @@ static bool _isRawMode = false;
 /** @brief Maximum depth of the scissor/clipping stack. */
 #define MAX_SCISSOR_STACK_DEPTH 16
 
-/** @brief Stack of clipping rectangles current active. */
+/** @brief Stack of clipping rectangles currently active. */
 static Clay_BoundingBox _scissorStack[MAX_SCISSOR_STACK_DEPTH];
 
 /** @brief Current index into the scissor stack. */
@@ -71,7 +71,7 @@ static int _scissorStackIndex = 0;
 
 /**
  * @brief Cache entry for an Ncurses color pair.
- * Mapes a generic foreground/background color combination to an Ncurses pair ID.
+ * Maps a generic foreground/background color combination to an Ncurses pair ID.
  */
 static struct {
     short fg;   /**< Foreground color index. */
@@ -128,12 +128,12 @@ static bool Clay_Ncurses_GetVisibleRect(int x, int y, int w, int h, int *outX, i
     Clay_BoundingBox clip = _scissorStack[_scissorStackIndex];
 
     // Convert clip to cell coords
-    int cx = (int)(clip.x / CLAY_NCURSES_CELL_WIDTH);
-    int cy = (int)(clip.y / CLAY_NCURSES_CELL_HEIGHT);
-    int cw = (int)(clip.width / CLAY_NCURSES_CELL_WIDTH);
-    int ch = (int)(clip.height / CLAY_NCURSES_CELL_HEIGHT);
+    int cx = (int)(clip.x / CLAY_NCURSES_CELL_WIDTH + 0.5f);
+    int cy = (int)(clip.y / CLAY_NCURSES_CELL_HEIGHT + 0.5f);
+    int cw = (int)(clip.width / CLAY_NCURSES_CELL_WIDTH + 0.5f);
+    int ch = (int)(clip.height / CLAY_NCURSES_CELL_HEIGHT + 0.5f);
 
-    // Intersect
+    // Intersection Logic
     int ix = (x > cx) ? x : cx;
     int iy = (y > cy) ? y : cy;
     int right = (x + w < cx + cw) ? (x + w) : (cx + cw);
@@ -191,10 +191,10 @@ static void Clay_Ncurses_InitLocale(void) {
  */
 static void Clay_Ncurses_RenderRectangle(Clay_RenderCommand *command) {
     Clay_BoundingBox box = command->boundingBox;
-    int x = (int)(box.x / CLAY_NCURSES_CELL_WIDTH);
-    int y = (int)(box.y / CLAY_NCURSES_CELL_HEIGHT);
-    int w = (int)(box.width / CLAY_NCURSES_CELL_WIDTH);
-    int h = (int)(box.height / CLAY_NCURSES_CELL_HEIGHT);
+    int x = (int)(box.x / CLAY_NCURSES_CELL_WIDTH + 0.5f);
+    int y = (int)(box.y / CLAY_NCURSES_CELL_HEIGHT + 0.5f);
+    int w = (int)(box.width / CLAY_NCURSES_CELL_WIDTH + 0.5f);
+    int h = (int)(box.height / CLAY_NCURSES_CELL_HEIGHT + 0.5f);
 
     int dx, dy, dw, dh;
     if (!Clay_Ncurses_GetVisibleRect(x, y, w, h, &dx, &dy, &dw, &dh))
@@ -224,8 +224,8 @@ static void Clay_Ncurses_RenderRectangle(Clay_RenderCommand *command) {
  */
 static void Clay_Ncurses_RenderText(Clay_RenderCommand *command) {
     Clay_BoundingBox box = command->boundingBox;
-    int x = (int)(box.x / CLAY_NCURSES_CELL_WIDTH);
-    int y = (int)(box.y / CLAY_NCURSES_CELL_HEIGHT);
+    int x = (int)(box.x / CLAY_NCURSES_CELL_WIDTH + 0.5f);
+    int y = (int)(box.y / CLAY_NCURSES_CELL_HEIGHT + 0.5f);
     Clay_StringSlice text = command->renderData.text.stringContents;
 
     int textWidth = Clay_Ncurses_MeasureStringWidth(text);
@@ -239,7 +239,6 @@ static void Clay_Ncurses_RenderText(Clay_RenderCommand *command) {
     short bg = Clay_Ncurses_GetBackgroundAt(dx, dy);
     int pair = Clay_Ncurses_GetColorPair(fg, bg);
 
-    attron(COLOR_PAIR(pair));
     attron(COLOR_PAIR(pair));
     if (command->renderData.text.fontId & CLAY_NCURSES_FONT_BOLD)
         attron(A_BOLD);
@@ -305,10 +304,10 @@ static void Clay_Ncurses_RenderText(Clay_RenderCommand *command) {
  */
 static void Clay_Ncurses_RenderBorder(Clay_RenderCommand *command) {
     Clay_BoundingBox box = command->boundingBox;
-    int x = (int)(box.x / CLAY_NCURSES_CELL_WIDTH);
-    int y = (int)(box.y / CLAY_NCURSES_CELL_HEIGHT);
-    int w = (int)(box.width / CLAY_NCURSES_CELL_WIDTH);
-    int h = (int)(box.height / CLAY_NCURSES_CELL_HEIGHT);
+    int x = (int)(box.x / CLAY_NCURSES_CELL_WIDTH + 0.5f);
+    int y = (int)(box.y / CLAY_NCURSES_CELL_HEIGHT + 0.5f);
+    int w = (int)(box.width / CLAY_NCURSES_CELL_WIDTH + 0.5f);
+    int h = (int)(box.height / CLAY_NCURSES_CELL_HEIGHT + 0.5f);
 
     int dx, dy, dw, dh;
     if (!Clay_Ncurses_GetVisibleRect(x, y, w, h, &dx, &dy, &dw, &dh))
@@ -320,8 +319,14 @@ static void Clay_Ncurses_RenderBorder(Clay_RenderCommand *command) {
 
     attron(COLOR_PAIR(pair));
 
+    // Check which borders exist
+    bool hasTop = command->renderData.border.width.top > 0;
+    bool hasBottom = command->renderData.border.width.bottom > 0;
+    bool hasLeft = command->renderData.border.width.left > 0;
+    bool hasRight = command->renderData.border.width.right > 0;
+
     // Draw Top
-    if (y >= dy && y < dy + dh) {
+    if (hasTop && y >= dy && y < dy + dh) {
         int startX = (x > dx) ? x : dx;
         int endX = (x + w < dx + dw) ? (x + w) : (dx + dw);
         if (x < startX)
@@ -342,7 +347,7 @@ static void Clay_Ncurses_RenderBorder(Clay_RenderCommand *command) {
     }
 
     // Draw Bottom
-    if (y + h - 1 >= dy && y + h - 1 < dy + dh) {
+    if (hasBottom && y + h - 1 >= dy && y + h - 1 < dy + dh) {
         int h_sx = x + 1;
         int h_ex = x + w - 1;
         int draw_sx = (h_sx > dx) ? h_sx : dx;
@@ -354,7 +359,7 @@ static void Clay_Ncurses_RenderBorder(Clay_RenderCommand *command) {
     }
 
     // Draw Left
-    if (x >= dx && x < dx + dw) {
+    if (hasLeft && x >= dx && x < dx + dw) {
         int v_sy = y + 1;
         int v_ey = y + h - 1;
         int draw_sy = (v_sy > dy) ? v_sy : dy;
@@ -366,7 +371,7 @@ static void Clay_Ncurses_RenderBorder(Clay_RenderCommand *command) {
     }
 
     // Draw Right
-    if (x + w - 1 >= dx && x + w - 1 < dx + dw) {
+    if (hasRight && x + w - 1 >= dx && x + w - 1 < dx + dw) {
         int v_sy = y + 1;
         int v_ey = y + h - 1;
         int draw_sy = (v_sy > dy) ? v_sy : dy;
@@ -383,16 +388,17 @@ static void Clay_Ncurses_RenderBorder(Clay_RenderCommand *command) {
     bool drawLeft = (x >= dx && x < dx + dw);
     bool drawRight = (x + w - 1 >= dx && x + w - 1 < dx + dw);
 
-    if (drawTop && drawLeft) {
+    // Only draw corners if BOTH connecting sides are present
+    if (hasTop && hasLeft && drawTop && drawLeft) {
         mvaddch(y, x, ACS_ULCORNER);
     }
-    if (drawTop && drawRight) {
+    if (hasTop && hasRight && drawTop && drawRight) {
         mvaddch(y, x + w - 1, ACS_URCORNER);
     }
-    if (drawBottom && drawLeft) {
+    if (hasBottom && hasLeft && drawBottom && drawLeft) {
         mvaddch(y + h - 1, x, ACS_LLCORNER);
     }
-    if (drawBottom && drawRight) {
+    if (hasBottom && hasRight && drawBottom && drawRight) {
         mvaddch(y + h - 1, x + w - 1, ACS_LRCORNER);
     }
 
@@ -743,6 +749,10 @@ void Clay_Ncurses_OnClick(void (*onClickFunc)(Clay_ElementId elementId,
 // -- Extended API Implementation
 // -------------------------------------------------------------------------------------------------
 
+/**
+ * @brief Enables or disables raw mode for key capture.
+ * @param enable True to enable raw mode, false for cbreak.
+ */
 void Clay_Ncurses_SetRawMode(bool enable) {
     if (enable) {
         raw();
@@ -753,13 +763,21 @@ void Clay_Ncurses_SetRawMode(bool enable) {
     }
 }
 
+/**
+ * @brief Prepares the terminal for suspension (reset to normal mode).
+ */
 void Clay_Ncurses_PrepareSuspend(void) {
     endwin();
     puts("\033[?1003l");
 }
 
+/**
+ * @brief Resumes the terminal state after suspension.
+ * Clears screen and re-enables TUI settings.
+ */
 void Clay_Ncurses_ResumeAfterSuspend(void) {
     // Force full repaint by invalidating internal buffer
+    // clear() wipes the screen and sets up for repaint
     clear();
     refresh();
 
@@ -769,9 +787,14 @@ void Clay_Ncurses_ResumeAfterSuspend(void) {
     } else {
         cbreak();
     }
+    // Re-enable mouse tracking
     puts("\033[?1003h");
 }
 
+/**
+ * @brief Convenience wrapper for processing standard input.
+ * @return Key code or ERR.
+ */
 int Clay_Ncurses_ProcessInputStandard(void) {
     return Clay_Ncurses_ProcessInput(stdscr);
 }
