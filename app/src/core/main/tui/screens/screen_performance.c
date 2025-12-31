@@ -10,12 +10,23 @@
  * @param count Number of tabs to render.
  * @param activeIndex Currently active tab index.
  */
+static void OnPerfTabClick(Clay_ElementId elementId, Clay_PointerData pointerData, void *userData) {
+    (void)elementId;
+    if (pointerData.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
+        int index = (int)(intptr_t)userData;
+        if (index >= 0 && index < 3) { // 3 is hardcoded count
+            g_tuiState.activePerfTab = (uint32_t)index;
+        }
+    }
+}
+
 static void RenderTabs(const char *titles[], uint32_t count, uint32_t activeIndex) {
     CLAY_AUTO_ID(
          {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_FIT()},
                      .childGap = 2 * TUI_CW,
                      .layoutDirection = CLAY_LEFT_TO_RIGHT,
-                     .padding = {1 * TUI_CW, 0, 0, 0}}}) {
+                     .padding = {0, 0, 0, 0}}}) {
+
         for (uint32_t i = 0; i < count; i++) {
             bool isActive = (i == activeIndex);
 
@@ -25,13 +36,18 @@ static void RenderTabs(const char *titles[], uint32_t count, uint32_t activeInde
                  .border = {.width = {1 * TUI_CW, 1 * TUI_CW, 1 * TUI_CH, 1 * TUI_CH, 0}, 
                             .color = isActive ? COLOR_ACCENT : COLOR_TEXT_DIM}}) {
 
+                Clay_Ncurses_OnClick(OnPerfTabClick, (void*)(intptr_t)i);
+                bool isHovered = Clay_Hovered();
+
                 CLAY_TEXT(CLAY_STRING_DYN((char*)titles[i]), 
-                    CLAY_TEXT_CONFIG({.textColor = isActive ? COLOR_ACCENT : COLOR_TEXT_DIM,
+                    CLAY_TEXT_CONFIG({.textColor = (isActive || isHovered) ? COLOR_ACCENT : COLOR_TEXT_DIM,
                                       .fontId = isActive ? CLAY_NCURSES_FONT_BOLD : 0}));
             }
+
         }
     }
 }
+
 
 /**
  * @brief Renders the Performance Monitor content.

@@ -1,33 +1,23 @@
-#include "app_tui.h"
-#include "tui_state.h"
-#include "components/topbar.h"
-#include "components/bottombar.h"
-#include "screens/screen_dashboard.h"
-#include "screens/screen_performance.h"
-
 #ifndef CLAY_IMPLEMENTATION
 #include <clay/clay.h>
 #endif
 
 #include <renderer/clay_ncurses_renderer.h>
 #include <utils/signals.h>
-#include <stdbool.h>
+#include <ncurses.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 #include <signal.h>
 
-/**
- * @file app_tui.c
- * @brief Main controller for the Text User Interface (TUI) application.
- * 
- * This module is responsible for:
- * - TUI Initialization and Termination.
- * - Main run loop processing.
- * - Input handling and signal management.
- * - Orchestrating the rendering of the main layout, sub-components, and screens.
- */
+#include "app_tui.h"
+#include "tui_state.h"
+#include "components/topbar.h"
+#include "components/bottombar.h"
+#include "screens/screen_dashboard.h"
+#include "screens/screen_performance.h"
+#include "screens/screen_logs.h"
+#include "screens/screen_config.h"
 
 // --- Macros ---
 #define CTRL_KEY(k) ((k) & 0x1f)
@@ -40,7 +30,11 @@ static int tui_ProcessInput(void);
 static void tui_Update(void);
 static void tui_Render(void);
 
+static void tui_RenderSidebar(void);
 static void HandleKeyInput(int key);
+static void OnSidebarClick(Clay_ElementId elementId, Clay_PointerData pointerData, void *userData);
+
+
 static int tui_OnSuspend(void);
 static void tui_OnQuit(void);
 static int tui_OnInterrupt(void);
@@ -52,7 +46,7 @@ static void RenderErrorOverlay(void);
 
 // --- Global State ---
 /**
- * Global TUI state instance, accessed by submodules for shared data.
+ * @brief Global TUI state instance, accessed by submodules for shared data.
  */
 tuiState g_tuiState = {
     .currentScreen = SCREEN_SIMULATION,
@@ -114,7 +108,11 @@ static void tui_Initialize(void) {
 
     Clay_Ncurses_Initialize();
     Clay_Ncurses_SetRawMode(true); // capture all keys
+
+    tui_InitLogsScreen();
+    tui_InitConfigScreen();
 }
+
 
 /**
  * @brief Cleans up Clay and Ncurses resources.
@@ -140,7 +138,43 @@ static int tui_ProcessInput(void) {
         if (key == -1 || key == ERR) break; // No more input
 
         // Check for Signal Keys first
-        if (key == CTRL_KEY('q') || key == CTRL_KEY('Q')) {
+        if (key == CLAY_NCURSES_KEY_SCROLL_UP) {
+            if (g_tuiState.currentScreen == SCREEN_LOGS) {
+                // Scroll "Up" means go back in file
+                g_tuiState.logReadOffset -= 256; 
+                if (g_tuiState.logReadOffset < 0) g_tuiState.logReadOffset = 0;
+            } else if (g_tuiState.currentScreen == SCREEN_CONFIG) {
+                g_tuiState.configScrollY -= 50.0f;
+                if (g_tuiState.configScrollY < 0) g_tuiState.configScrollY = 0;
+            } else {
+                Clay_UpdateScrollContainers(true, (Clay_Vector2){0, -50}, 0.1f);
+            }
+        } else if (key == CLAY_NCURSES_KEY_SCROLL_DOWN) {
+            if (g_tuiState.currentScreen == SCREEN_LOGS) {
+                // Scroll "Down" means go forward in file
+                g_tuiState.logReadOffset += 256;
+                // Clamping to filesize happens in render view as we don't know filesize here easily
+            } else if (g_tuiState.currentScreen == SCREEN_CONFIG) {
+                 g_tuiState.configScrollY += 50.0f;
+            } else {
+                Clay_UpdateScrollContainers(true, (Clay_Vector2){0, 50}, 0.1f);
+            }
+        } else if (key == CLAY_NCURSES_KEY_SCROLL_LEFT) {
+             if (g_tuiState.currentScreen == SCREEN_LOGS) {
+                // Horizontal is visual shift
+                g_tuiState.logScrollPosition.x += 50;
+                if (g_tuiState.logScrollPosition.x > 0) g_tuiState.logScrollPosition.x = 0;
+            } else {
+                Clay_UpdateScrollContainers(true, (Clay_Vector2){-50, 0}, 0.1f);
+            }
+        } else if (key == CLAY_NCURSES_KEY_SCROLL_RIGHT) {
+             if (g_tuiState.currentScreen == SCREEN_LOGS) {
+                g_tuiState.logScrollPosition.x -= 50;
+            } else {
+                Clay_UpdateScrollContainers(true, (Clay_Vector2){50, 0}, 0.1f);
+            }
+
+        } else if (key == CTRL_KEY('q') || key == CTRL_KEY('Q')) {
             tui_OnQuit();
         } else if (key == CTRL_KEY('c') || key == CTRL_KEY('C')) {
             return tui_OnInterrupt();
@@ -204,25 +238,73 @@ static int tui_OnSuspend(void) {
  * 
  * @param key The processed key code.
  */
+static bool HandleConfigInput(int key);
+
+/**
+ * @brief Handles standard key inputs for navigation and text entry.
+ * 
+ * @param key The processed key code.
+ */
 static void HandleKeyInput(int key) {
     if (key == ERR) return;
 
-    // Navigation
-    if (key == KEY_F(1)) {
-        g_tuiState.currentScreen = SCREEN_SIMULATION;
-        return;
-    }
-    if (key == KEY_F(2)) {
-        g_tuiState.currentScreen = SCREEN_PERFORMANCE;
+    if (key == CTRL_KEY('s') || key == CTRL_KEY('S')) {
+        if (g_tuiState.currentScreen == SCREEN_CONFIG) {
+            tui_SaveCurrentConfig();
+        }
         return;
     }
 
-    // Tab Switching
-    if (key == '\t') {
+    if (g_tuiState.currentScreen == SCREEN_CONFIG) {
+        if (HandleConfigInput(key)) return;
+        // Fallthrough if not consumed (e.g. typing for bottom bar)
+    }
+
+    // Main Tab Navigation
+    if (key == KEY_DOWN) {
+        g_tuiState.currentScreen = (g_tuiState.currentScreen + 1) % SCREEN_COUNT;
+        return;
+    }
+    if (key == KEY_UP) {
+        g_tuiState.currentScreen = (g_tuiState.currentScreen - 1 + SCREEN_COUNT) % SCREEN_COUNT;
+        return;
+    }
+    if (key == KEY_RIGHT) {
         if (g_tuiState.currentScreen == SCREEN_SIMULATION) {
             g_tuiState.activeSimTab = (g_tuiState.activeSimTab + 1) % TAB_SIM_COUNT;
-        } else {
+        } else if (g_tuiState.currentScreen == SCREEN_PERFORMANCE) {
             g_tuiState.activePerfTab = (g_tuiState.activePerfTab + 1) % TAB_PERF_COUNT;
+        } else if (g_tuiState.currentScreen == SCREEN_LOGS && g_tuiState.logFileCount > 0) {
+            g_tuiState.activeLogTab = (g_tuiState.activeLogTab + 1) % g_tuiState.logFileCount;
+            g_tuiState.logScrollPosition = (Clay_Vector2){0,0};
+            g_tuiState.logReadOffset = -1; // Reset to tail
+        }
+        return;
+    }
+    if (key == KEY_LEFT) {
+        if (g_tuiState.currentScreen == SCREEN_SIMULATION) {
+            g_tuiState.activeSimTab = (g_tuiState.activeSimTab - 1 + TAB_SIM_COUNT) % TAB_SIM_COUNT;
+        } else if (g_tuiState.currentScreen == SCREEN_PERFORMANCE) {
+            g_tuiState.activePerfTab = (g_tuiState.activePerfTab - 1 + TAB_PERF_COUNT) % TAB_PERF_COUNT;
+        } else if (g_tuiState.currentScreen == SCREEN_LOGS && g_tuiState.logFileCount > 0) {
+            g_tuiState.activeLogTab = (g_tuiState.activeLogTab - 1 + g_tuiState.logFileCount) % g_tuiState.logFileCount;
+            g_tuiState.logScrollPosition = (Clay_Vector2){0,0};
+            g_tuiState.logReadOffset = -1; // Reset to tail
+        }
+        return;
+    }
+
+    // Horizontal Scrolling via Keyboard (Shift+Arrows)
+    if (key == KEY_SLEFT) {
+        if (g_tuiState.currentScreen == SCREEN_LOGS) {
+            g_tuiState.logScrollPosition.x += 50;
+            if (g_tuiState.logScrollPosition.x > 0) g_tuiState.logScrollPosition.x = 0;
+        }
+        return;
+    }
+    if (key == KEY_SRIGHT) {
+        if (g_tuiState.currentScreen == SCREEN_LOGS) {
+            g_tuiState.logScrollPosition.x -= 50;
         }
         return;
     }
@@ -230,12 +312,19 @@ static void HandleKeyInput(int key) {
     // Text Input Command Dispatch
     if (key == '\n' || key == KEY_ENTER) {
         if (g_tuiState.inputCursor > 0) {
-            // TODO: dispatch command (ctrl_bridge)
-
             g_tuiState.inputCursor = 0;
             g_tuiState.inputBuffer[0] = '\0';
         }
+    } else if (key == KEY_PPAGE) { // Page Up
+        if (g_tuiState.currentScreen == SCREEN_LOGS) {
+            g_tuiState.logReadOffset = 0; // Jump to start
+        }
+    } else if (key == KEY_NPAGE) { // Page Down
+        if (g_tuiState.currentScreen == SCREEN_LOGS) {
+            g_tuiState.logReadOffset = -1; // Jump to end
+        }
     } else if (key == KEY_BACKSPACE || key == 127) {
+
         if (g_tuiState.inputCursor > 0) {
             g_tuiState.inputCursor--;
             g_tuiState.inputBuffer[g_tuiState.inputCursor] = '\0';
@@ -248,6 +337,50 @@ static void HandleKeyInput(int key) {
     }
 }
 
+extern void tui_ConfigNextTab(void);
+extern void tui_ConfigPrevTab(void);
+extern void tui_ConfigEnterEdit(void);
+extern void tui_ConfigCommitEdit(void);
+extern void tui_ConfigCancelEdit(void);
+extern void tui_ConfigAppendChar(char c);
+extern void tui_ConfigBackspace(void);
+
+static bool HandleConfigInput(int key) {
+    if (g_tuiState.isEditing) {
+        if (key == '\n' || key == KEY_ENTER) {
+            tui_ConfigCommitEdit();
+            return true;
+        } else if (key == 27) { // ESC
+            tui_ConfigCancelEdit();
+            return true;
+        } else if (key == KEY_BACKSPACE || key == 127) {
+            tui_ConfigBackspace();
+            return true;
+        } else if (key >= 32 && key <= 126) {
+            tui_ConfigAppendChar((char)key);
+            return true;
+        }
+    } else {
+        if (key == KEY_UP) {
+            if (g_tuiState.selectedConfigItemIndex > 0) g_tuiState.selectedConfigItemIndex--;
+            return true;
+        } else if (key == KEY_DOWN) {
+            if (g_tuiState.selectedConfigItemIndex < g_tuiState.configDisplayCount - 1) g_tuiState.selectedConfigItemIndex++;
+            return true;
+        } else if (key == KEY_LEFT) {
+            tui_ConfigPrevTab();
+            return true;
+        } else if (key == KEY_RIGHT) {
+            tui_ConfigNextTab();
+            return true;
+        } else if (key == '\n' || key == KEY_ENTER) {
+            tui_ConfigEnterEdit();
+            return true;
+        }
+    }
+    return false;
+}
+
 // --- Updates & Rendering ---
 
 /**
@@ -258,6 +391,31 @@ static void tui_Update(void) {
     g_tuiState.fps = 30.0f; 
     g_tuiState.cpuUsage = (float)(rand() % 1000) / 10.0f;
     g_tuiState.memUsage = 100 + (float)(rand() % 50);
+
+    // Config Scroll Tracking (Auto-scroll to keep selection in view ONLY on change)
+    if (g_tuiState.currentScreen == SCREEN_CONFIG) {
+        if (g_tuiState.selectedConfigItemIndex != g_tuiState.lastSelectedConfigItemIndex) {
+            g_tuiState.lastSelectedConfigItemIndex = g_tuiState.selectedConfigItemIndex;
+
+            Clay_Dimensions dims = Clay_Ncurses_GetLayoutDimensions();
+
+            // Item Height: 2 * TUI_CH (ConfigItemRow height) + 0 gap
+            float itemHeight = 2.0f * TUI_CH;
+
+            // View Height: Total - Headers/Footers
+            // TopBar: ~3, Tabs: 3, Toolbar: 2, BottomBar: ~3, Padding: 1? => ~12
+            float viewHeight = dims.height - (12.0f * TUI_CH); 
+            if (viewHeight < itemHeight) viewHeight = itemHeight;
+
+            float targetY = (float)g_tuiState.selectedConfigItemIndex * itemHeight;
+
+            if (targetY < g_tuiState.configScrollY) {
+                g_tuiState.configScrollY = targetY;
+            } else if (targetY + itemHeight > g_tuiState.configScrollY + viewHeight) {
+                g_tuiState.configScrollY = targetY + itemHeight - viewHeight;
+            }
+        }
+    }
 }
 
 /**
@@ -275,7 +433,16 @@ static void tui_Render(void) {
         .backgroundColor = {0, 0, 0, 255}}) {
 
         tui_RenderTopBar();
-        RenderContent();
+
+        CLAY(CLAY_ID("MainArea"), 
+            {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_GROW()},
+                        .layoutDirection = CLAY_LEFT_TO_RIGHT,
+                        .childGap = 0}}) {
+
+            tui_RenderSidebar();
+            RenderContent();
+        }
+
         RenderErrorOverlay();
         tui_RenderBottomBar();
     }
@@ -283,6 +450,52 @@ static void tui_Render(void) {
     Clay_RenderCommandArray commands = Clay_EndLayout();
     Clay_Ncurses_Render(commands);
 }
+
+// --- Sidebar ---
+static void tui_RenderSidebar(void) {
+    const char *screenNames[] = { "Simulation", "Performance", "Logs", "Config" };
+
+    CLAY(CLAY_ID("Sidebar"),
+
+        {.layout = {.sizing = {.width = CLAY_SIZING_FIXED(20 * TUI_CW), .height = CLAY_SIZING_GROW()},
+                    .padding = {1 * TUI_CW, 1 * TUI_CW, 1 * TUI_CH, 1 * TUI_CH},
+                    .childGap = 1 * TUI_CH,
+                    .layoutDirection = CLAY_TOP_TO_BOTTOM},
+         .backgroundColor = {0, 0, 0, 255},
+         .border = {.width = {0, 1, 0, 0, 0}, .color = {50, 50, 50, 255}}}) {
+
+        for (int i = 0; i < SCREEN_COUNT; i++) {
+            bool isActive = (g_tuiState.currentScreen == (tuiScreen)i);
+            CLAY(CLAY_ID_IDX("SidebarItem", (uint32_t)i),
+                {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_FIT()},
+                            .padding = {1 * TUI_CW, 1 * TUI_CW, 0, 0}}}) {
+
+                Clay_Ncurses_OnClick(OnSidebarClick, (void*)(intptr_t)i);
+                bool isHovered = Clay_Hovered();
+
+                CLAY_TEXT(CLAY_STRING_DYN((char*)screenNames[i]), 
+                    CLAY_TEXT_CONFIG({
+                        .textColor = (isActive || isHovered) ? COLOR_ACCENT : (Clay_Color){150, 150, 150, 255},
+                        .fontId = isActive ? CLAY_NCURSES_FONT_BOLD : 0
+                    }));
+            }
+        }
+
+    }
+}
+
+static void OnSidebarClick(Clay_ElementId elementId, Clay_PointerData pointerData, void *userData) {
+    (void)elementId;
+    if (pointerData.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
+        int index = (int)(intptr_t)userData;
+        if (index >= 0 && index < SCREEN_COUNT) {
+            g_tuiState.currentScreen = (tuiScreen)index;
+        }
+    }
+}
+
+
+
 
 // --- Layout Definitions ---
 
@@ -296,8 +509,12 @@ static void RenderContent(void) {
                     .padding = {1 * TUI_CW, 1 * TUI_CW, 0, 0}}}) {
         if (g_tuiState.currentScreen == SCREEN_SIMULATION) {
             tui_RenderSimulationScreen();
-        } else {
+        } else if (g_tuiState.currentScreen == SCREEN_PERFORMANCE) {
             tui_RenderPerformanceScreen();
+        } else if (g_tuiState.currentScreen == SCREEN_LOGS) {
+            tui_RenderLogsScreen();
+        } else if (g_tuiState.currentScreen == SCREEN_CONFIG) {
+            tui_RenderConfigScreen();
         }
     }
 }

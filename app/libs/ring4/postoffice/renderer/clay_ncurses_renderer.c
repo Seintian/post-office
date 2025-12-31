@@ -460,6 +460,9 @@ void Clay_Ncurses_Initialize() {
     mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
     mouseinterval(0);
 
+    // Minimize Esc key delay
+    set_escdelay(25);
+
     // Enable non-blocking input
     nodelay(stdscr, TRUE);
 
@@ -715,11 +718,17 @@ int Clay_Ncurses_ProcessInput(WINDOW *window) {
 // Handle Scroll Wheel
 #ifdef BUTTON4_PRESSED
             if (event.bstate & BUTTON4_PRESSED) {
+                if ((event.bstate & BUTTON_SHIFT) || (event.bstate & BUTTON_CTRL) || (event.bstate & BUTTON_ALT)) {
+                    return CLAY_NCURSES_KEY_SCROLL_LEFT;
+                }
                 return CLAY_NCURSES_KEY_SCROLL_UP;
             }
 #endif
 #ifdef BUTTON5_PRESSED
             if (event.bstate & BUTTON5_PRESSED) {
+                if ((event.bstate & BUTTON_SHIFT) || (event.bstate & BUTTON_CTRL) || (event.bstate & BUTTON_ALT)) {
+                    return CLAY_NCURSES_KEY_SCROLL_RIGHT;
+                }
                 return CLAY_NCURSES_KEY_SCROLL_DOWN;
             }
 #endif

@@ -428,3 +428,132 @@ void po_config_foreach(const po_config_t *cfg, po_config_entry_cb cb, void *user
     // Checked `hashtable.c`? No, header says "Allocate an iterator".
     // Usually iterators need freeing. `free(it)` is likely correct.
 }
+
+// --- Saving Support ---
+
+// --- Saving Support ---
+
+// Helper to strip whitespace from end
+static char* rtrim(char* s) {
+    char* back = s + strlen(s);
+    while(back > s && (*(back-1) == ' ' || *(back-1) == '\t' || *(back-1) == '\r' || *(back-1) == '\n')) {
+        back--;
+    }
+    *back = '\0';
+    return s;
+}
+
+// Check if a line is a section header [section]
+// Returns pointer to static buffer with section name, or NULL
+static char* parse_section_header(char *line) {
+    static char section[128];
+    while (*line == ' ' || *line == '\t') line++;
+    if (*line != '[') return NULL;
+    line++;
+    char *end = strchr(line, ']');
+    if (!end) return NULL;
+    size_t len = (size_t)(end - line);
+    if (len >= 127) len = 127;
+    memcpy(section, line, len);
+    section[len] = '\0';
+    return section;
+}
+
+// Parse key from line "key = value"
+// Returns pointer to static buffer with key name, or NULL
+static char* parse_key(char *line, char **out_val_pos) {
+    static char key[128];
+    while (*line == ' ' || *line == '\t') line++;
+    if (*line == ';' || *line == '#' || *line == '\0' || *line == '\n') return NULL; // Comment or empty
+
+    char *eq = strchr(line, '=');
+    if (!eq) return NULL; // No equals
+
+    if (out_val_pos) *out_val_pos = eq + 1;
+
+    // Extract key (trim trailing spaces before =)
+    char *k_end = eq - 1;
+    while (k_end > line && (*k_end == ' ' || *k_end == '\t')) k_end--;
+
+    size_t len = (size_t)(k_end - line + 1);
+    if (len >= 127) len = 127;
+    memcpy(key, line, len);
+    key[len] = '\0';
+    return key;
+}
+
+int po_config_save(const po_config_t *cfg, const char *filename) {
+    FILE *in = fopen(filename, "r");
+    if (!in) {
+        return -1; 
+    }
+
+    char tmp_name[256];
+    snprintf(tmp_name, sizeof(tmp_name), "%s.tmp", filename);
+    FILE *out = fopen(tmp_name, "w");
+    if (!out) {
+        fclose(in);
+        return -1;
+    }
+
+    char line[1024];
+    char current_section[128] = "";
+
+    while (fgets(line, sizeof(line), in)) {
+        char *sec = parse_section_header(line);
+        if (sec) {
+            strncpy(current_section, sec, 127);
+            current_section[127] = '\0';
+            fprintf(out, "%s", line);
+            continue;
+        }
+
+        char *val_start = NULL;
+        char *key = parse_key(line, &val_start);
+
+        if (key && current_section[0]) {
+            // Check if we have a value for this key in current config
+            const char *new_val = NULL;
+            if (po_config_get_str(cfg, current_section, key, &new_val) == 0) {
+                // We have a value. Preserving layout implies effectively replacing the value part.
+
+                // 1. Indentation
+                char *orig_content = line;
+                while (*orig_content == ' ' || *orig_content == '\t') orig_content++;
+                size_t indent_len = (size_t)(orig_content - line);
+
+                // 2. Write Indent + Key
+                fprintf(out, "%.*s%s", (int)indent_len, line, key);
+
+                // 3. Write Separator (try to preserve spacing around '='?)
+                // The 'val_start' points after '='.
+                // let's just use standard " = "
+                fprintf(out, " = %s", new_val);
+
+                // 4. Comments?
+                // Find comment char in original line *after* val_start
+                if (val_start) {
+                    char *comment = strpbrk(val_start, ";#");
+                    if (comment) {
+                        rtrim(comment); // Trim newline from comment if captured by fgets
+                        fprintf(out, "\t%s", comment); 
+                    }
+                }
+                fprintf(out, "\n");
+                continue;
+            }
+        }
+
+        // Default: copy line exactly
+        fprintf(out, "%s", line);
+    }
+
+    fclose(in);
+    fclose(out);
+
+    if (rename(tmp_name, filename) != 0) {
+        return -1;
+    }
+
+    return 0;
+}

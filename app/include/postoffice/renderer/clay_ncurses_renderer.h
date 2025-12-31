@@ -12,6 +12,9 @@
 #define CLAY_NCURSES_KEY_SCROLL_UP 123456   /**< Virtual key code for mouse scroll up. */
 #define CLAY_NCURSES_KEY_SCROLL_DOWN 123457 /**< Virtual key code for mouse scroll down. */
 #define CLAY_NCURSES_KEY_MOUSE_CLICK 123458 /**< Virtual key code for generic mouse click. */
+#define CLAY_NCURSES_KEY_SCROLL_LEFT 123459 /**< Virtual key code for mouse scroll left. */
+#define CLAY_NCURSES_KEY_SCROLL_RIGHT 123460 /**< Virtual key code for mouse scroll right. */
+
 
 /**
  * @brief Initializes the Ncurses library and internal renderer state.

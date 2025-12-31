@@ -17,6 +17,12 @@ extern const char* g_simulation_config_path;
 void initialize_simulation_configuration(const char* config_path);
 
 /**
+ * @brief Updates the config path, handling memory ownership safely.
+ * Frees previous path if it was dynamically allocated by this module.
+ */
+void simulation_set_config_path(const char* path);
+
+/**
  * @brief Start the simulation processes (Director, etc.).
  * Does not block.
  * @param[in] tui_mode If true, suppress stdout of child processes.

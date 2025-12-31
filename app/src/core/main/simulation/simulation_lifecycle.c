@@ -16,6 +16,7 @@
 extern char **environ;
 
 const char* g_simulation_config_path = NULL;
+static bool g_config_path_owned = false;
 static pid_t g_director_pid = -1;
 static volatile sig_atomic_t g_running = 0;
 
@@ -24,6 +25,21 @@ static volatile sig_atomic_t g_running = 0;
 
 void initialize_simulation_configuration(const char* config_path) {
     g_simulation_config_path = config_path; // Assumes config_path lifetime is managed by caller (main args)
+    g_config_path_owned = false;
+}
+
+void simulation_set_config_path(const char* path) {
+    if (g_config_path_owned && g_simulation_config_path) {
+        free((void*)g_simulation_config_path);
+    }
+    
+    if (path) {
+        g_simulation_config_path = strdup(path);
+        g_config_path_owned = true;
+    } else {
+        g_simulation_config_path = NULL;
+        g_config_path_owned = false;
+    }
 }
 
 void launch_simulation_process(bool tui_mode, int loglevel) {

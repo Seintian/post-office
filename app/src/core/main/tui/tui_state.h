@@ -8,6 +8,8 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "utils/configs.h"
+
 /**
  * @brief Header for shared TUI state, constants, and helper macros.
  * 
@@ -39,6 +41,8 @@
 typedef enum {
     SCREEN_SIMULATION,  // Dashboard / Simulation Overview
     SCREEN_PERFORMANCE, // Detailed Performance Metrics
+    SCREEN_LOGS,        // System Logs
+    SCREEN_CONFIG,      // Configuration Editor
     SCREEN_COUNT
 } tuiScreen;
 
@@ -61,6 +65,13 @@ typedef enum {
     TAB_PERF_COUNT
 } PerfTab;
 
+typedef struct {
+    char section[64];
+    char key[64];
+    char displayKey[128]; // Pre-formatted key for display "Section.Key"
+    char value[256];
+} ConfigItem;
+
 // --- State Struct ---
 
 /**
@@ -74,8 +85,37 @@ typedef struct {
     tuiScreen currentScreen;   // Currently active main screen
     uint32_t activeSimTab;     // Active tab index for Simulation Screen
     uint32_t activePerfTab;    // Active tab index for Performance Screen
+    uint32_t activeLogTab;     // Active tab index for Logs Screen
 
-    // Input State
+    uint32_t logFileCount;
+    char logFiles[16][64];     // Max 16 files, 64 chars each
+    Clay_Vector2 logScrollPosition;
+    long logReadOffset;        // File byte offset for "Top of View"
+
+    // Configuration State (Editor)
+    char configFiles[16][64];    // Available config files (Tabs)
+    uint32_t configFileCount;
+    uint32_t activeConfigTab;    // Index of active tab
+
+    // Editor Interaction
+    po_config_t *loadedConfigHandle; // Opaque handle to current config
+
+    // Display Cache (Flattened list for scrolling/selection)
+    ConfigItem configDisplayItems[128]; 
+    uint32_t configDisplayCount;
+    uint32_t selectedConfigItemIndex;
+    uint32_t lastSelectedConfigItemIndex; // Detect change for auto-scroll
+    uint32_t hoveredConfigItemIndex; // For mouse hover highlight
+    uint32_t maxKeyLength; // For dynamic column sizing
+    float configScrollY;
+
+    // Editing
+    bool isEditing;
+    char editValueBuffer[256];
+    char editInputDisplay[260]; // Persistent buffer for edit field display "Value_"
+
+    // Status
+    char lastSavedMessage[64]; // "Saved to disk" feedback
     char inputBuffer[INPUT_BUFFER_SIZE]; // Buffer for command input (footer)
     uint32_t inputCursor;                // Current cursor position in inputBuffer
 
@@ -89,6 +129,7 @@ typedef struct {
     bool showError;        // If true, an error overlay is rendered.
     char errorMessage[256];
 } tuiState;
+
 
 // --- ID Generation Helper ---
 // Simple index-based ID generation for dynamic lists (wrapper around Clay's IDI macros)

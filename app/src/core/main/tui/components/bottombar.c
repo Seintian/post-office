@@ -47,7 +47,15 @@ void tui_RenderBottomBar(void) {
         CLAY_AUTO_ID({.layout = {.sizing = {.width = CLAY_SIZING_GROW()}}}); 
 
         // Help Hints
-        CLAY_TEXT(CLAY_STRING("[F1] Sim  [F2] Perf  [TAB] Switch Tab  [Ctrl+q] Quit"), 
-                  CLAY_TEXT_CONFIG({.textColor = COLOR_TEXT_DIM}));
+        if (g_tuiState.currentScreen == SCREEN_LOGS) {
+            CLAY_TEXT(CLAY_STRING("[PgUp/PgDn] Start/End  [LEFT/RIGHT] Tab  [Scroll] Move  [Shift+Scroll/Arrows] Pan"), 
+                      CLAY_TEXT_CONFIG({.textColor = COLOR_TEXT_DIM}));
+        } else {
+
+            CLAY_TEXT(CLAY_STRING("[UP/DOWN] Screen  [LEFT/RIGHT] Tab  [Ctrl+q] Quit"), 
+                      CLAY_TEXT_CONFIG({.textColor = COLOR_TEXT_DIM}));
+        }
+
     }
+
 }

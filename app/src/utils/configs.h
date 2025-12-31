@@ -116,6 +116,18 @@ int po_config_set_str(po_config_t *cfg, const char *section, const char *key, co
     __nonnull((1, 3, 4));
 
 /**
+ * @brief Save the configuration to a file.
+ *
+ * Writes all current configuration entries to the specified file in INI format.
+ * Sections and keys are sorted alphabetically for deterministic output.
+ *
+ * @param cfg      Config handle.
+ * @param filename Target filename.
+ * @return 0 on success; non-zero on I/O or memory error.
+ */
+int po_config_save(const po_config_t *cfg, const char *filename) __nonnull((1, 2));
+
+/**
  * @brief Callback for configuration iteration.
  *
  * @param section   Section name.
