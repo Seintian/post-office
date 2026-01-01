@@ -8,6 +8,10 @@
 *.elf
 **/build/
 
+# Coverage build artifacts
+*.gcda
+*.gcno
+
 # Linker output
 *.ilk
 *.map
