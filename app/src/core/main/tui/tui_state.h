@@ -47,6 +47,9 @@ typedef enum {
     SCREEN_LOGS,        // System Logs
     SCREEN_CONFIG,      // Configuration Editor
     SCREEN_ENTITIES,    // Entities Table
+    SCREEN_NETWORK,     // Network / IPC Topology
+    SCREEN_HELP,        // Help & Shortcuts
+    SCREEN_DIRECTOR_CTRL, // Manual Director Controls
     SCREEN_COUNT
 } tuiScreen;
 
@@ -99,6 +102,34 @@ typedef struct {
 
 #define MAX_MOCK_ENTITIES 200
 
+// --- Mock IPC Data ---
+typedef struct {
+    char name[32];
+    char type[32]; // "Director", "Issuer", "Worker"
+    bool active;
+    Clay_Vector2 position; // Visual position for topology
+} MockIPCNode;
+
+typedef struct {
+    int fromNodeIndex;
+    int toNodeIndex;
+    int messagesPerSec;
+    int bandwidthBytesPerSec;
+    uint32_t bufferUsagePercent;
+} MockIPCChannel;
+
+#define MAX_MOCK_NODES 16
+#define MAX_MOCK_CHANNELS 32
+
+// --- Help Screen Data ---
+typedef struct {
+    char key[32];
+    char description[128];
+    char context[32]; // "Global", "Simulation", etc.
+} Keybinding;
+
+#define MAX_HELP_BINDINGS 32
+
 // --- State Struct ---
 
 /**
@@ -113,6 +144,7 @@ typedef struct {
     uint32_t activeSimTab;     // Active tab index for Simulation Screen
     uint32_t activePerfTab;    // Active tab index for Performance Screen
     uint32_t activeLogTab;     // Active tab index for Logs Screen
+    DataTableState logTableState; // Internal for some screen log views if needed?
 
     uint32_t logFileCount;
     char logFiles[16][64];     // Max 16 files, 64 chars each
@@ -129,6 +161,24 @@ typedef struct {
     bool isFilteringEntities;
     uint32_t filteredEntityCount;
     int filteredEntityIndices[MAX_MOCK_ENTITIES];
+
+    // IPC Screen
+    MockIPCNode mockIPCNodes[MAX_MOCK_NODES];
+    uint32_t mockIPCNodeCount;
+    MockIPCChannel mockIPCChannels[MAX_MOCK_CHANNELS];
+    uint32_t mockIPCChannelCount;
+    DataTableState ipcTableState;
+
+    // Help Screen
+    Keybinding helpBindings[MAX_HELP_BINDINGS];
+    uint32_t helpBindingCount;
+    DataTableState helpTableState;
+
+    // Director Control Screen
+    bool simIsRunning;
+    char currentScenario[64];
+    uint32_t activeWorkers;
+    uint32_t activeUsers;
 
     // Configuration State (Editor)
     char configFiles[16][64];    // Available config files (Tabs)

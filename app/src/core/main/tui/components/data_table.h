@@ -74,6 +74,16 @@ typedef struct {
 } DataTableState;
 
 /**
+ * @brief Handles keyboard and scroll input for a DataTable.
+ * 
+ * @param state The state to update.
+ * @param rowCount Total number of rows in the table.
+ * @param key The key code or scroll event code.
+ * @return true if the input was consumed by the table.
+ */
+bool tui_DataTableHandleInput(DataTableState *state, uint32_t rowCount, int key);
+
+/**
  * @brief Renders the Generic Data Table.
  * 
  * @param def Table definition (columns, adapter).

@@ -47,11 +47,84 @@ static void HandleRowClick(Clay_ElementId elementId, Clay_PointerData pointerDat
     }
 }
 
+static void OnRowHover(Clay_ElementId elementId, Clay_PointerData pointerData, void *userData) {
+    (void)elementId; (void)pointerData;
+    g_TableContext.state->hoveredRowIndex = (int)(intptr_t)userData;
+}
+
+bool tui_DataTableHandleInput(DataTableState *state, uint32_t rowCount, int key) {
+    if (key == ERR) return false;
+
+    // Vertical Navigation
+    if (key == KEY_DOWN) {
+        if (state->selectedRowIndex < (int)rowCount - 1) {
+            state->selectedRowIndex++;
+            // Keep in view
+            float selectionY = (float)state->selectedRowIndex * TUI_CH;
+            // Assuming approx view height of 20 lines for auto-scroll
+            if (selectionY + state->scrollY > 20 * TUI_CH) {
+                state->scrollY -= TUI_CH;
+            }
+            return true;
+        }
+        return false; // Boundary reached, allow bubbling
+    } 
+    if (key == KEY_UP) {
+        if (state->selectedRowIndex > 0) {
+            state->selectedRowIndex--;
+            if ((float)state->selectedRowIndex * TUI_CH < -state->scrollY) {
+                state->scrollY += TUI_CH;
+            }
+            return true;
+        }
+        return false; // Boundary reached, allow bubbling
+    }
+    if (key == KEY_PPAGE) { // Page Up
+        state->selectedRowIndex -= 20;
+        if (state->selectedRowIndex < 0) state->selectedRowIndex = 0;
+        state->scrollY = -(float)state->selectedRowIndex * TUI_CH;
+        if (state->scrollY > 0) state->scrollY = 0;
+        return true;
+    }
+    if (key == KEY_NPAGE) { // Page Down
+        state->selectedRowIndex += 20;
+        if (state->selectedRowIndex >= (int)rowCount) state->selectedRowIndex = (int)rowCount - 1;
+        float selectionY = (float)state->selectedRowIndex * TUI_CH;
+        state->scrollY = 20 * TUI_CH - selectionY;
+        if (state->scrollY > 0) state->scrollY = 0;
+        return true;
+    }
+
+    // Scroll Events (Shared with ncurses renderer)
+    if (key == CLAY_NCURSES_KEY_SCROLL_UP) {
+        state->scrollY += 2 * TUI_CH;
+        if (state->scrollY > 0) state->scrollY = 0;
+        return true;
+    }
+    if (key == CLAY_NCURSES_KEY_SCROLL_DOWN) {
+        state->scrollY -= 2 * TUI_CH;
+        return true;
+    }
+    if (key == CLAY_NCURSES_KEY_SCROLL_LEFT || key == KEY_SLEFT) {
+        state->scrollX += 2 * TUI_CW;
+        if (state->scrollX > 0) state->scrollX = 0;
+        return true;
+    }
+    if (key == CLAY_NCURSES_KEY_SCROLL_RIGHT || key == KEY_SRIGHT) {
+        state->scrollX -= 2 * TUI_CW;
+        return true;
+    }
+
+    return false;
+}
+
 void tui_RenderDataTable(const DataTableDef *def, DataTableState *state, void *userData) {
     // Setup context for callbacks
     g_TableContext.state = state;
     g_TableContext.def = def;
     g_TableContext.userAdapterData = userData;
+
+    state->hoveredRowIndex = -1; // Reset hover state for this frame
 
     uint32_t rowCount = def->adapter.GetCount(userData);
 
@@ -133,7 +206,9 @@ void tui_RenderDataTable(const DataTableDef *def, DataTableState *state, void *u
                          .backgroundColor = isSelected ? (Clay_Color){20, 60, 100, 255} : (r % 2 == 0 ? (Clay_Color){10,10,10,255} : (Clay_Color){0,0,0,255})}) {
                              
                         Clay_Ncurses_OnClick(HandleRowClick, (void*)(intptr_t)r);
-                        bool isHovered = Clay_Hovered();
+                        Clay_OnHover(OnRowHover, (void*)(intptr_t)r);
+                        
+                        bool isHovered = (state->hoveredRowIndex == r);
                         
                         // Render Cells
                         for (uint32_t c = 0; c < def->columnCount; c++) {

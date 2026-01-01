@@ -19,6 +19,9 @@
 #include "screens/screen_logs.h"
 #include "screens/screen_config.h"
 #include "screens/screen_entities.h"
+#include "screens/screen_ipc.h"
+#include "screens/screen_help.h"
+#include "screens/screen_director_ctrl.h"
 
 // --- Macros ---
 #define CTRL_KEY(k) ((k) & 0x1f)
@@ -155,6 +158,9 @@ static void tui_Initialize(void) {
     tui_InitLogsScreen();
     tui_InitConfigScreen();
     tui_InitEntities();
+    tui_InitIPCScreen();
+    tui_InitHelpScreen();
+    tui_InitDirectorCtrlScreen();
 }
 
 
@@ -191,7 +197,7 @@ static int tui_ProcessInput(void) {
                 g_tuiState.configScrollY -= 50.0f;
                 if (g_tuiState.configScrollY < 0) g_tuiState.configScrollY = 0;
             } else {
-                if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){0, -50}, 0.1f);
+                if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){0, -48}, 0.1f);
             }
         } else if (key == CLAY_NCURSES_KEY_SCROLL_DOWN) {
             if (g_tuiState.currentScreen == SCREEN_LOGS) {
@@ -201,7 +207,7 @@ static int tui_ProcessInput(void) {
             } else if (g_tuiState.currentScreen == SCREEN_CONFIG) {
                  g_tuiState.configScrollY += 50.0f;
             } else {
-                if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){0, 50}, 0.1f);
+                if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){0, 48}, 0.1f);
             }
         } else if (key == CLAY_NCURSES_KEY_SCROLL_LEFT) {
              if (g_tuiState.currentScreen == SCREEN_LOGS) {
@@ -292,6 +298,44 @@ static bool HandleConfigInput(int key);
 static void HandleKeyInput(int key) {
     if (key == ERR) return;
 
+    // --- High Priority Global Shortcuts (Ctrl-Modified) ---
+    
+    // Screen switching (F1 - F8)
+    if (key >= KEY_F(1) && key <= KEY_F(8)) {
+        int idx = key - KEY_F(1);
+        if (idx < SCREEN_COUNT) {
+            g_tuiState.currentScreen = (tuiScreen)idx;
+            return;
+        }
+    }
+
+    // Director Controls (Ctrl + W/E/U/Y)
+    if (key == CTRL_KEY('w') || key == CTRL_KEY('W')) {
+        if (g_tuiState.activeWorkers < 50) g_tuiState.activeWorkers++;
+        return;
+    }
+    if (key == CTRL_KEY('e') || key == CTRL_KEY('E')) {
+        if (g_tuiState.activeWorkers > 0) g_tuiState.activeWorkers--;
+        return;
+    }
+    if (key == CTRL_KEY('u') || key == CTRL_KEY('U')) {
+        if (g_tuiState.activeUsers < 200) g_tuiState.activeUsers++;
+        return;
+    }
+    if (key == CTRL_KEY('y') || key == CTRL_KEY('Y')) {
+        if (g_tuiState.activeUsers > 0) g_tuiState.activeUsers--;
+        return;
+    }
+
+    // Focus Filter (Ctrl + /) - usually matches Ctrl + _ (31) or can be literal in some environments
+    if (key == 31 || key == CTRL_KEY('/')) {
+        if (g_tuiState.currentScreen == SCREEN_ENTITIES) {
+            g_tuiState.isFilteringEntities = true;
+            return;
+        }
+    }
+
+    // --- Existing Handlers ---
     if (key == CTRL_KEY('s') || key == CTRL_KEY('S')) {
         if (g_tuiState.currentScreen == SCREEN_CONFIG) {
             tui_SaveCurrentConfig();
@@ -304,43 +348,23 @@ static void HandleKeyInput(int key) {
         // Fallthrough if not consumed (e.g. typing for bottom bar)
     }
 
-    // Entities Screen Override
+    // Standardize Screen Input Delegation
     if (g_tuiState.currentScreen == SCREEN_ENTITIES) {
-        if (g_tuiState.isFilteringEntities) {
-            tui_EntitiesHandleInput(key);
-            return;
-        }
-        
-        // Check for Boundary Switching
-        if (key == KEY_UP && g_tuiState.entitiesTableState.selectedRowIndex == 0) {
-             g_tuiState.currentScreen = (g_tuiState.currentScreen - 1 + SCREEN_COUNT) % SCREEN_COUNT;
-             return;
-        }
-        if (key == KEY_DOWN && g_tuiState.entitiesTableState.selectedRowIndex >= (int)g_tuiState.filteredEntityCount - 1) {
-             g_tuiState.currentScreen = (g_tuiState.currentScreen + 1) % SCREEN_COUNT;
-             return;
-        }
-
-        if (key == KEY_UP || key == KEY_DOWN || key == KEY_SLEFT || key == KEY_SRIGHT || key == CTRL_KEY('f') || key == KEY_PPAGE || key == KEY_NPAGE) {
-            tui_EntitiesHandleInput(key);
-            return;
-        }
-        // Left/Right fall through to Tab navigation below
+        if (tui_EntitiesHandleInput(key)) return;
+    } else if (g_tuiState.currentScreen == SCREEN_HELP) {
+        if (tui_HelpHandleInput(key)) return;
+    } else if (g_tuiState.currentScreen == SCREEN_NETWORK) {
+        if (tui_IPCHandleInput(key)) return;
     }
 
-    // Main Tab Navigation (Sidebar uses Up/Down usually, but User requested Line-by-Line for Entities)
-    // If we consume Up/Down for Entities, we can't switch screens via keyboard easily unless we add logic.
-    // For now, only consume if currentScreen == ENTITIES.
-
-    if (g_tuiState.currentScreen != SCREEN_ENTITIES) {
-        if (key == KEY_DOWN) {
-            g_tuiState.currentScreen = (g_tuiState.currentScreen + 1) % SCREEN_COUNT;
-            return;
-        }
-        if (key == KEY_UP) {
-            g_tuiState.currentScreen = (g_tuiState.currentScreen - 1 + SCREEN_COUNT) % SCREEN_COUNT;
-            return;
-        }
+    // Global Screen Switching (Triggers if key was not consumed by screen)
+    if (key == KEY_DOWN) {
+        g_tuiState.currentScreen = (g_tuiState.currentScreen + 1) % SCREEN_COUNT;
+        return;
+    }
+    if (key == KEY_UP) {
+        g_tuiState.currentScreen = (g_tuiState.currentScreen - 1 + SCREEN_COUNT) % SCREEN_COUNT;
+        return;
     }
 
     if (key == KEY_RIGHT) {
@@ -511,6 +535,8 @@ static void tui_Update(void) {
     g_tuiState.memUsage = 100 + (float)(rand() % 50);
     
     tui_UpdateEntities();
+    tui_UpdateIPCScreen();
+
 
     // Config Scroll Tracking ... 
     // ...
@@ -590,7 +616,7 @@ static void RenderErrorOverlay(void) {
 }
 // --- Sidebar ---
 static void tui_RenderSidebar(void) {
-    const char *screenNames[] = { "Simulation", "Performance", "Logs", "Config", "Entities" };
+    const char *screenNames[] = { "Simulation", "Performance", "Logs", "Config", "Entities", "Network", "Help", "Director" };
 
     CLAY(CLAY_ID("Sidebar"),
 
@@ -639,6 +665,12 @@ static void RenderContent(void) {
             tui_RenderConfigScreen();
         } else if (g_tuiState.currentScreen == SCREEN_ENTITIES) {
             tui_RenderEntitiesScreen();
+        } else if (g_tuiState.currentScreen == SCREEN_NETWORK) {
+            tui_RenderIPCScreen();
+        } else if (g_tuiState.currentScreen == SCREEN_HELP) {
+            tui_RenderHelpScreen();
+        } else if (g_tuiState.currentScreen == SCREEN_DIRECTOR_CTRL) {
+            tui_RenderDirectorCtrlScreen();
         }
     }
 }

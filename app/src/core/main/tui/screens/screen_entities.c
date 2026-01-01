@@ -186,20 +186,21 @@ void tui_RenderEntitiesScreen(void) {
     }
 }
 
-void tui_EntitiesHandleInput(int key) {
+bool tui_EntitiesHandleInput(int key) {
     // If Modal is Open, ESC closes it.
     if (g_tuiState.selectedEntityIndex != -1) {
         if (key == 27) { // ESC
             g_tuiState.selectedEntityIndex = -1;
+            return true;
         }
-        return; // Don't process table input if modal is open
+        return true; // Consume all while modal is open
     }
 
-    // If filtering, capture text
+    // Capture text for filtering
     if (g_tuiState.isFilteringEntities) {
-        if (key == 27 || key == '\n' || key == '\r') { // ESC or Enter
-            g_tuiState.isFilteringEntities = false;
-            return;
+        if (key == 27 || key == '\n' || key == '\r') {
+             g_tuiState.isFilteringEntities = false;
+             return true;
         }
         if (key == KEY_BACKSPACE || key == 127 || key == 8) {
             size_t len = strlen(g_tuiState.entitiesFilter);
@@ -207,9 +208,8 @@ void tui_EntitiesHandleInput(int key) {
                 g_tuiState.entitiesFilter[len - 1] = '\0';
                 tui_UpdateEntitiesFilter();
             }
-            return;
+            return true;
         }
-        // Simple printable char check
         if (key >= 32 && key <= 126) {
             size_t len = strlen(g_tuiState.entitiesFilter);
             if (len < 63) {
@@ -217,56 +217,11 @@ void tui_EntitiesHandleInput(int key) {
                 g_tuiState.entitiesFilter[len + 1] = '\0';
                 tui_UpdateEntitiesFilter();
             }
+            return true;
         }
-        return;
+        return true; 
     }
 
-    DataTableState *s = &g_tuiState.entitiesTableState;
-    uint32_t count = g_tuiState.filteredEntityCount; 
-
-    if (key == KEY_DOWN) {
-        if (s->selectedRowIndex < (int)count - 1) {
-            s->selectedRowIndex++;
-             // Keep view
-            float selectionY = (float)s->selectedRowIndex * TUI_CH;
-            float viewHeight = 20.0f * TUI_CH; 
-            if (selectionY + s->scrollY > viewHeight) {
-                s->scrollY -= TUI_CH;
-            }
-        }
-    } else if (key == KEY_UP) {
-        if (s->selectedRowIndex > 0) {
-            s->selectedRowIndex--;
-            if ((float)s->selectedRowIndex * TUI_CH < -s->scrollY) {
-                s->scrollY += TUI_CH;
-            }
-        }
-    } else if (key == KEY_PPAGE) { // Page Up
-        s->selectedRowIndex -= 20;
-        if (s->selectedRowIndex < 0) s->selectedRowIndex = 0;
-        // Snap scroll
-        s->scrollY = -(float)s->selectedRowIndex * TUI_CH; // Simplistic center
-         if (s->scrollY > 0) s->scrollY = 0;
-
-    } else if (key == KEY_NPAGE) { // Page Down
-        s->selectedRowIndex += 20;
-        if (s->selectedRowIndex >= (int)count) s->selectedRowIndex = (int)count - 1;
-        
-        // Snap scroll logic (keep in view)
-        float selectionY = (float)s->selectedRowIndex * TUI_CH;
-        float viewHeight = 20.0f * TUI_CH;
-        if (selectionY + s->scrollY > viewHeight) {
-             s->scrollY = viewHeight - selectionY;
-        } else if (selectionY < -s->scrollY) {
-             s->scrollY = -selectionY;
-        }
-
-    } else if (key == KEY_SLEFT) {
-         s->scrollX += 2 * TUI_CW; 
-         if (s->scrollX > 0) s->scrollX = 0;
-    } else if (key == KEY_SRIGHT) {
-         s->scrollX -= 2 * TUI_CW; 
-    } else if (key == CTRL_KEY('f') || key == CTRL_KEY('F')) {
-        g_tuiState.isFilteringEntities = !g_tuiState.isFilteringEntities;
-    }
+    // Delegate to DataTable (handles selection, scrolling, and boundary releasing)
+    return tui_DataTableHandleInput(&g_tuiState.entitiesTableState, g_tuiState.filteredEntityCount, key);
 }
