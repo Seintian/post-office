@@ -223,7 +223,7 @@ void tui_RenderConfigScreen(void) {
                        .backgroundColor = isActive ? (Clay_Color){80, 100, 160, 255} : (Clay_Color){30, 30, 30, 255}}) {
                        
                        Clay_Ncurses_OnClick(OnTabClick, (void*)(intptr_t)i);
-                       CLAY_TEXT(CLAY_STRING_DYN(g_tuiState.configFiles[i]), 
+                       CLAY_TEXT(CLAY_STRING_DYN(tui_ScratchFmt("%s", g_tuiState.configFiles[i])), 
                                  CLAY_TEXT_CONFIG({.textColor = isActive ? (Clay_Color){255, 255, 255, 255} : COLOR_TEXT_DIM, 
                                                    .fontId = isActive ? CLAY_NCURSES_FONT_BOLD : 0}));
                  }
@@ -245,7 +245,7 @@ void tui_RenderConfigScreen(void) {
               }
 
               if (g_tuiState.lastSavedMessage[0]) {
-                   CLAY_TEXT(CLAY_STRING_DYN(g_tuiState.lastSavedMessage), CLAY_TEXT_CONFIG({.textColor = {100, 255, 100, 255}}));
+                   CLAY_TEXT(CLAY_STRING_DYN(tui_ScratchFmt("%s", g_tuiState.lastSavedMessage)), CLAY_TEXT_CONFIG({.textColor = {100, 255, 100, 255}}));
               }
         }
 
@@ -278,7 +278,7 @@ void tui_RenderConfigScreen(void) {
                         uint32_t keyColWidth = g_tuiState.maxKeyLength * TUI_CW + 2 * TUI_CW; // Chars * Width + padding
                         CLAY(CLAY_ID_IDX("ConfigKeyPart", i), 
                              {.layout = {.sizing = {.width = CLAY_SIZING_FIXED((float)keyColWidth), .height = CLAY_SIZING_GROW()}}}) {
-                            CLAY_TEXT(CLAY_STRING_DYN(item->displayKey), CLAY_TEXT_CONFIG({.textColor = isSelected ? (Clay_Color){255,255,255,255} : COLOR_ACCENT}));
+                            CLAY_TEXT(CLAY_STRING_DYN(tui_ScratchFmt("%s", item->displayKey)), CLAY_TEXT_CONFIG({.textColor = isSelected ? (Clay_Color){255,255,255,255} : COLOR_ACCENT}));
                         }
 
                         // Value
@@ -292,11 +292,12 @@ void tui_RenderConfigScreen(void) {
                                        .backgroundColor = {0, 0, 0, 255}}) {
 
                                      // Blinking cursor visual if desired, for now just text
-                                     snprintf(g_tuiState.editInputDisplay, 260, "%s_", g_tuiState.editValueBuffer);
-                                     CLAY_TEXT(CLAY_STRING_DYN(g_tuiState.editInputDisplay), CLAY_TEXT_CONFIG({.textColor = {255, 255, 255, 255}}));
+                                     // We can use tui_ScratchFmt directly here instead of pre-formatting in editInputDisplay
+                                     // But reusing editInputDisplay is fine if we wrap it.
+                                     CLAY_TEXT(CLAY_STRING_DYN(tui_ScratchFmt("%s", g_tuiState.editInputDisplay)), CLAY_TEXT_CONFIG({.textColor = {255, 255, 255, 255}}));
                                 }
                             } else {
-                                CLAY_TEXT(CLAY_STRING_DYN(item->value), CLAY_TEXT_CONFIG({.textColor = {200, 200, 200, 255}}));
+                                CLAY_TEXT(CLAY_STRING_DYN(tui_ScratchFmt("%s", item->value)), CLAY_TEXT_CONFIG({.textColor = {200, 200, 200, 255}}));
                             }
                         }
                   }

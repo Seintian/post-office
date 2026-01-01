@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "utils/configs.h"
+#include "components/data_table.h" // Added for DataTableState
 
 /**
  * @brief Header for shared TUI state, constants, and helper macros.
@@ -18,6 +19,7 @@
  * input buffer, and system statistics.
  */
 
+// --- Constants ---
 // --- Constants ---
 #define TUI_CW 8   // Cell Width in pixels (approximate, for layout calculations)
 #define TUI_CH 16  // Cell Height in pixels
@@ -32,6 +34,7 @@
 #define CLAY_STRING_DYN(s) (Clay_String) { .length = (int32_t)strlen(s), .chars = (s) }
 
 #define INPUT_BUFFER_SIZE 256
+#define CTRL_KEY(k) ((k) & 0x1f)
 
 // --- Enums ---
 
@@ -43,6 +46,7 @@ typedef enum {
     SCREEN_PERFORMANCE, // Detailed Performance Metrics
     SCREEN_LOGS,        // System Logs
     SCREEN_CONFIG,      // Configuration Editor
+    SCREEN_ENTITIES,    // Entities Table
     SCREEN_COUNT
 } tuiScreen;
 
@@ -72,6 +76,29 @@ typedef struct {
     char value[256];
 } ConfigItem;
 
+// --- Mock Data Structures ---
+
+typedef enum {
+    ENTITY_TYPE_DIRECTOR,
+    ENTITY_TYPE_MANAGER, // Issuer, UserMgr
+    ENTITY_TYPE_WORKER,
+    ENTITY_TYPE_USER
+} EntityType;
+
+typedef struct {
+    uint32_t id;
+    EntityType type;
+    char name[32];
+    char state[32]; // "Idle", "Working", "Queue"
+    char location[32]; // "Pool", "Lobby", "Counter"
+    char currentTask[64];
+    float cpuUsage;
+    int memoryUsageMB;
+    int queueDepth;
+} MockEntity;
+
+#define MAX_MOCK_ENTITIES 200
+
 // --- State Struct ---
 
 /**
@@ -91,6 +118,17 @@ typedef struct {
     char logFiles[16][64];     // Max 16 files, 64 chars each
     Clay_Vector2 logScrollPosition;
     long logReadOffset;        // File byte offset for "Top of View"
+
+    // Entities Screen
+    MockEntity mockEntities[MAX_MOCK_ENTITIES];
+    uint32_t mockEntityCount;
+    DataTableState entitiesTableState;
+    int selectedEntityIndex;   // Index in mockEntities, -1 if none
+    uint32_t activeEntitiesTab; // 0=All/System, 1=Simulation
+    char entitiesFilter[64];
+    bool isFilteringEntities;
+    uint32_t filteredEntityCount;
+    int filteredEntityIndices[MAX_MOCK_ENTITIES];
 
     // Configuration State (Editor)
     char configFiles[16][64];    // Available config files (Tabs)
@@ -134,7 +172,18 @@ typedef struct {
 // --- ID Generation Helper ---
 // Simple index-based ID generation for dynamic lists (wrapper around Clay's IDI macros)
 // Usage: CLAY_ID_IDX("MyItem", index)
+// Usage: CLAY_ID_IDX2("MyItem", row, col)
 #define CLAY_ID_IDX(label, idx) CLAY_IDI(label, idx)
+#define CLAY_ID_IDX2(label, r, c) CLAY_IDI(label, (r) * 1000 + (c))
+
+// --- Helper Functions ---
+/**
+ * @brief Returns a pointer to a formatted string stored in a static ring buffer.
+ * Valid until the buffer wraps around (typically safe for a single frame of UI).
+ */
+char* tui_ScratchFmt(const char* fmt, ...);
+char* tui_ScratchAlloc(size_t size);
+void tui_ResetScratch(void);
 
 /**
  * @brief Singleton instance of the TUI state.

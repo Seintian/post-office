@@ -18,6 +18,7 @@
 #include "screens/screen_performance.h"
 #include "screens/screen_logs.h"
 #include "screens/screen_config.h"
+#include "screens/screen_entities.h"
 
 // --- Macros ---
 #define CTRL_KEY(k) ((k) & 0x1f)
@@ -43,6 +44,9 @@ static int tui_OnCrash(void);
 // --- Layouts ---
 static void RenderContent(void);
 static void RenderErrorOverlay(void);
+extern void tui_RenderEntitiesScreen(void); // Prototype
+extern void tui_InitEntities(void); // Prototype
+extern void tui_UpdateEntities(void); // Prototype
 
 // --- Global State ---
 /**
@@ -61,6 +65,49 @@ tuiState g_tuiState = {
     .showError = false,
     .errorMessage = {0}
 };
+
+static bool g_hasRendered = false;
+
+// --- Helpers ---
+// --- Helpers ---
+// Scratch Buffer Implementation: Linear Allocator reset per frame
+#define SCRATCH_BUF_SIZE (256 * 1024) // 256KB should be plenty for one frame
+static char g_scratchBuffer[SCRATCH_BUF_SIZE];
+static size_t g_scratchOffset = 0;
+
+void tui_ResetScratch(void) {
+    g_scratchOffset = 0;
+}
+
+char* tui_ScratchFmt(const char* fmt, ...) {
+    if (g_scratchOffset >= SCRATCH_BUF_SIZE - 256) {
+        // Fallback to start if overflow (unsafe but crash-preventing)
+        g_scratchOffset = 0; 
+    }
+    
+    char* ptr = &g_scratchBuffer[g_scratchOffset];
+    
+    va_list args;
+    va_start(args, fmt);
+    int wrote = vsnprintf(ptr, 256, fmt, args);
+    va_end(args);
+    
+    if (wrote < 0) wrote = 0;
+    if (wrote >= 256) wrote = 255;
+    
+    g_scratchOffset += (size_t)(wrote + 1);
+    
+    return ptr;
+}
+
+char* tui_ScratchAlloc(size_t size) {
+    if (g_scratchOffset + size > SCRATCH_BUF_SIZE) {
+        g_scratchOffset = 0; // Unsafe reset/wrap
+    }
+    char* ptr = &g_scratchBuffer[g_scratchOffset];
+    g_scratchOffset += size;
+    return ptr;
+}
 
 // --- Core Lifecycle ---
 
@@ -96,10 +143,6 @@ int app_tui_run_simulation(void) {
     return app_tui_run_demo(); // Same loop for now
 }
 
-/**
- * @brief Initializes Clay and the Ncurses renderer.
- * Sets up memory arena and raw mode.
- */
 static void tui_Initialize(void) {
     uint64_t totalMemorySize = 16 * 1024 * 1024; // 16 MB
     Clay_Arena arena = Clay_CreateArenaWithCapacityAndMemory(totalMemorySize, malloc(totalMemorySize));
@@ -111,6 +154,7 @@ static void tui_Initialize(void) {
 
     tui_InitLogsScreen();
     tui_InitConfigScreen();
+    tui_InitEntities();
 }
 
 
@@ -147,7 +191,7 @@ static int tui_ProcessInput(void) {
                 g_tuiState.configScrollY -= 50.0f;
                 if (g_tuiState.configScrollY < 0) g_tuiState.configScrollY = 0;
             } else {
-                Clay_UpdateScrollContainers(true, (Clay_Vector2){0, -50}, 0.1f);
+                if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){0, -50}, 0.1f);
             }
         } else if (key == CLAY_NCURSES_KEY_SCROLL_DOWN) {
             if (g_tuiState.currentScreen == SCREEN_LOGS) {
@@ -157,7 +201,7 @@ static int tui_ProcessInput(void) {
             } else if (g_tuiState.currentScreen == SCREEN_CONFIG) {
                  g_tuiState.configScrollY += 50.0f;
             } else {
-                Clay_UpdateScrollContainers(true, (Clay_Vector2){0, 50}, 0.1f);
+                if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){0, 50}, 0.1f);
             }
         } else if (key == CLAY_NCURSES_KEY_SCROLL_LEFT) {
              if (g_tuiState.currentScreen == SCREEN_LOGS) {
@@ -165,13 +209,13 @@ static int tui_ProcessInput(void) {
                 g_tuiState.logScrollPosition.x += 50;
                 if (g_tuiState.logScrollPosition.x > 0) g_tuiState.logScrollPosition.x = 0;
             } else {
-                Clay_UpdateScrollContainers(true, (Clay_Vector2){-50, 0}, 0.1f);
+               if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){-50, 0}, 0.1f);
             }
         } else if (key == CLAY_NCURSES_KEY_SCROLL_RIGHT) {
              if (g_tuiState.currentScreen == SCREEN_LOGS) {
                 g_tuiState.logScrollPosition.x -= 50;
             } else {
-                Clay_UpdateScrollContainers(true, (Clay_Vector2){50, 0}, 0.1f);
+               if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){50, 0}, 0.1f);
             }
 
         } else if (key == CTRL_KEY('q') || key == CTRL_KEY('Q')) {
@@ -260,15 +304,45 @@ static void HandleKeyInput(int key) {
         // Fallthrough if not consumed (e.g. typing for bottom bar)
     }
 
-    // Main Tab Navigation
-    if (key == KEY_DOWN) {
-        g_tuiState.currentScreen = (g_tuiState.currentScreen + 1) % SCREEN_COUNT;
-        return;
+    // Entities Screen Override
+    if (g_tuiState.currentScreen == SCREEN_ENTITIES) {
+        if (g_tuiState.isFilteringEntities) {
+            tui_EntitiesHandleInput(key);
+            return;
+        }
+        
+        // Check for Boundary Switching
+        if (key == KEY_UP && g_tuiState.entitiesTableState.selectedRowIndex == 0) {
+             g_tuiState.currentScreen = (g_tuiState.currentScreen - 1 + SCREEN_COUNT) % SCREEN_COUNT;
+             return;
+        }
+        if (key == KEY_DOWN && g_tuiState.entitiesTableState.selectedRowIndex >= (int)g_tuiState.filteredEntityCount - 1) {
+             g_tuiState.currentScreen = (g_tuiState.currentScreen + 1) % SCREEN_COUNT;
+             return;
+        }
+
+        if (key == KEY_UP || key == KEY_DOWN || key == KEY_SLEFT || key == KEY_SRIGHT || key == CTRL_KEY('f') || key == KEY_PPAGE || key == KEY_NPAGE) {
+            tui_EntitiesHandleInput(key);
+            return;
+        }
+        // Left/Right fall through to Tab navigation below
     }
-    if (key == KEY_UP) {
-        g_tuiState.currentScreen = (g_tuiState.currentScreen - 1 + SCREEN_COUNT) % SCREEN_COUNT;
-        return;
+
+    // Main Tab Navigation (Sidebar uses Up/Down usually, but User requested Line-by-Line for Entities)
+    // If we consume Up/Down for Entities, we can't switch screens via keyboard easily unless we add logic.
+    // For now, only consume if currentScreen == ENTITIES.
+
+    if (g_tuiState.currentScreen != SCREEN_ENTITIES) {
+        if (key == KEY_DOWN) {
+            g_tuiState.currentScreen = (g_tuiState.currentScreen + 1) % SCREEN_COUNT;
+            return;
+        }
+        if (key == KEY_UP) {
+            g_tuiState.currentScreen = (g_tuiState.currentScreen - 1 + SCREEN_COUNT) % SCREEN_COUNT;
+            return;
+        }
     }
+
     if (key == KEY_RIGHT) {
         if (g_tuiState.currentScreen == SCREEN_SIMULATION) {
             g_tuiState.activeSimTab = (g_tuiState.activeSimTab + 1) % TAB_SIM_COUNT;
@@ -278,6 +352,9 @@ static void HandleKeyInput(int key) {
             g_tuiState.activeLogTab = (g_tuiState.activeLogTab + 1) % g_tuiState.logFileCount;
             g_tuiState.logScrollPosition = (Clay_Vector2){0,0};
             g_tuiState.logReadOffset = -1; // Reset to tail
+        } else if (g_tuiState.currentScreen == SCREEN_ENTITIES) {
+            g_tuiState.activeEntitiesTab = (g_tuiState.activeEntitiesTab + 1) % 2; // 2 Tabs
+            tui_UpdateEntitiesFilter();
         }
         return;
     }
@@ -290,6 +367,9 @@ static void HandleKeyInput(int key) {
             g_tuiState.activeLogTab = (g_tuiState.activeLogTab - 1 + g_tuiState.logFileCount) % g_tuiState.logFileCount;
             g_tuiState.logScrollPosition = (Clay_Vector2){0,0};
             g_tuiState.logReadOffset = -1; // Reset to tail
+        } else if (g_tuiState.currentScreen == SCREEN_ENTITIES) {
+            g_tuiState.activeEntitiesTab = (g_tuiState.activeEntitiesTab - 1 + 2) % 2;
+            tui_UpdateEntitiesFilter();
         }
         return;
     }
@@ -362,10 +442,51 @@ static bool HandleConfigInput(int key) {
         }
     } else {
         if (key == KEY_UP) {
-            if (g_tuiState.selectedConfigItemIndex > 0) g_tuiState.selectedConfigItemIndex--;
+            if (g_tuiState.selectedConfigItemIndex > 0) {
+                g_tuiState.selectedConfigItemIndex--;
+                // Check Autoscroll Up (approx)
+                if ((float)g_tuiState.selectedConfigItemIndex * 2 * TUI_CH < g_tuiState.configScrollY) {
+                    g_tuiState.configScrollY -= 2 * TUI_CH;
+                }
+            } else {
+                // Top Boundary -> Previous Screen
+                 g_tuiState.currentScreen = (g_tuiState.currentScreen - 1 + SCREEN_COUNT) % SCREEN_COUNT;
+            }
             return true;
         } else if (key == KEY_DOWN) {
-            if (g_tuiState.selectedConfigItemIndex < g_tuiState.configDisplayCount - 1) g_tuiState.selectedConfigItemIndex++;
+            if (g_tuiState.selectedConfigItemIndex < g_tuiState.configDisplayCount - 1) {
+                g_tuiState.selectedConfigItemIndex++;
+                // Check Autoscroll Down (approx view height 20 lines)
+                float selectionY = (float)g_tuiState.selectedConfigItemIndex * 2 * TUI_CH;
+                if (selectionY - g_tuiState.configScrollY > 20 * 2 * TUI_CH) {
+                     g_tuiState.configScrollY += 2 * TUI_CH;
+                }
+            } else {
+                // Bottom Boundary -> Next Screen
+                 g_tuiState.currentScreen = (g_tuiState.currentScreen + 1) % SCREEN_COUNT;
+            }
+            return true;
+        } else if (key == KEY_PPAGE) { // Page Up
+            if (g_tuiState.selectedConfigItemIndex >= 20) {
+                g_tuiState.selectedConfigItemIndex -= 20;
+            } else {
+                g_tuiState.selectedConfigItemIndex = 0;
+            }
+            // Sync Scroll
+            float selectionY = (float)g_tuiState.selectedConfigItemIndex * 2 * TUI_CH;
+            if (selectionY < g_tuiState.configScrollY) g_tuiState.configScrollY = selectionY;
+            return true;
+        } else if (key == KEY_NPAGE) { // Page Down
+            if (g_tuiState.selectedConfigItemIndex + 20 < g_tuiState.configDisplayCount) {
+                g_tuiState.selectedConfigItemIndex += 20;
+            } else {
+                g_tuiState.selectedConfigItemIndex = g_tuiState.configDisplayCount - 1;
+            }
+            // Sync Scroll
+            float selectionY = (float)g_tuiState.selectedConfigItemIndex * 2 * TUI_CH;
+            if (selectionY > g_tuiState.configScrollY + 20 * 2 * TUI_CH) {
+                g_tuiState.configScrollY = selectionY - 20 * 2 * TUI_CH;
+            }
             return true;
         } else if (key == KEY_LEFT) {
             tui_ConfigPrevTab();
@@ -383,39 +504,16 @@ static bool HandleConfigInput(int key) {
 
 // --- Updates & Rendering ---
 
-/**
- * @brief Updates application state (stats, logic) before rendering.
- */
 static void tui_Update(void) {
     // Mock Stats Update (Replace with real data later)
     g_tuiState.fps = 30.0f; 
     g_tuiState.cpuUsage = (float)(rand() % 1000) / 10.0f;
     g_tuiState.memUsage = 100 + (float)(rand() % 50);
+    
+    tui_UpdateEntities();
 
-    // Config Scroll Tracking (Auto-scroll to keep selection in view ONLY on change)
-    if (g_tuiState.currentScreen == SCREEN_CONFIG) {
-        if (g_tuiState.selectedConfigItemIndex != g_tuiState.lastSelectedConfigItemIndex) {
-            g_tuiState.lastSelectedConfigItemIndex = g_tuiState.selectedConfigItemIndex;
-
-            Clay_Dimensions dims = Clay_Ncurses_GetLayoutDimensions();
-
-            // Item Height: 2 * TUI_CH (ConfigItemRow height) + 0 gap
-            float itemHeight = 2.0f * TUI_CH;
-
-            // View Height: Total - Headers/Footers
-            // TopBar: ~3, Tabs: 3, Toolbar: 2, BottomBar: ~3, Padding: 1? => ~12
-            float viewHeight = dims.height - (12.0f * TUI_CH); 
-            if (viewHeight < itemHeight) viewHeight = itemHeight;
-
-            float targetY = (float)g_tuiState.selectedConfigItemIndex * itemHeight;
-
-            if (targetY < g_tuiState.configScrollY) {
-                g_tuiState.configScrollY = targetY;
-            } else if (targetY + itemHeight > g_tuiState.configScrollY + viewHeight) {
-                g_tuiState.configScrollY = targetY + itemHeight - viewHeight;
-            }
-        }
-    }
+    // Config Scroll Tracking ... 
+    // ...
 }
 
 /**
@@ -424,6 +522,7 @@ static void tui_Update(void) {
  * Builds the Clay layout tree and dispatches render commands to Ncurses.
  */
 static void tui_Render(void) {
+    tui_ResetScratch(); // Reset string allocator for new frame
     Clay_SetLayoutDimensions(Clay_Ncurses_GetLayoutDimensions());
     Clay_BeginLayout();
 
@@ -449,11 +548,49 @@ static void tui_Render(void) {
 
     Clay_RenderCommandArray commands = Clay_EndLayout();
     Clay_Ncurses_Render(commands);
+    g_hasRendered = true;
 }
 
 // --- Sidebar ---
+static void OnSidebarClick(Clay_ElementId elementId, Clay_PointerData pointerData, void *userData) {
+    (void)elementId;
+    if (pointerData.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
+        // Switch Screen
+        // userData contains the index cast to void*
+        uint32_t screenIdx = (uint32_t)(intptr_t)userData;
+        if (screenIdx < SCREEN_COUNT) {
+            g_tuiState.currentScreen = (tuiScreen)screenIdx;
+        }
+    }
+}
+
+static void RenderErrorOverlay(void) {
+    if (!g_tuiState.showError) return;
+
+    // A simple centered modal for errors
+    CLAY(CLAY_ID("ErrorModal"), 
+        {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_GROW()},
+                    .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                    .padding = {10 * TUI_CW, 10 * TUI_CW, 5 * TUI_CH, 5 * TUI_CH}}}) {
+        
+        CLAY(CLAY_ID("ErrorBox"),
+            {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_FIT()},
+                        .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                        .padding = {2 * TUI_CW, 2 * TUI_CW, 1 * TUI_CH, 1 * TUI_CH}},
+             .backgroundColor = {100, 0, 0, 255},
+             .border = {.width = {2,2,2,2,0}, .color = {255, 255, 255, 255}}}) {
+            
+            CLAY_TEXT(CLAY_STRING("ERROR"), CLAY_TEXT_CONFIG({.textColor = {255, 255, 255, 255}, .fontId = CLAY_NCURSES_FONT_BOLD}));
+            
+            CLAY(CLAY_ID("ErrorSpacer"), {.layout = {.sizing = {.height = CLAY_SIZING_FIXED(1 * TUI_CH)}}});
+            
+            CLAY_TEXT(CLAY_STRING_DYN(g_tuiState.errorMessage), CLAY_TEXT_CONFIG({.textColor = {255, 255, 255, 255}}));
+        }
+    }
+}
+// --- Sidebar ---
 static void tui_RenderSidebar(void) {
-    const char *screenNames[] = { "Simulation", "Performance", "Logs", "Config" };
+    const char *screenNames[] = { "Simulation", "Performance", "Logs", "Config", "Entities" };
 
     CLAY(CLAY_ID("Sidebar"),
 
@@ -483,25 +620,10 @@ static void tui_RenderSidebar(void) {
 
     }
 }
+// ...
 
-static void OnSidebarClick(Clay_ElementId elementId, Clay_PointerData pointerData, void *userData) {
-    (void)elementId;
-    if (pointerData.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
-        int index = (int)(intptr_t)userData;
-        if (index >= 0 && index < SCREEN_COUNT) {
-            g_tuiState.currentScreen = (tuiScreen)index;
-        }
-    }
-}
+// ...
 
-
-
-
-// --- Layout Definitions ---
-
-/**
- * @brief Renders the main content area based on the selected screen.
- */
 static void RenderContent(void) {
     CLAY(CLAY_ID("ContentBody"),
         {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_GROW()},
@@ -515,20 +637,9 @@ static void RenderContent(void) {
             tui_RenderLogsScreen();
         } else if (g_tuiState.currentScreen == SCREEN_CONFIG) {
             tui_RenderConfigScreen();
+        } else if (g_tuiState.currentScreen == SCREEN_ENTITIES) {
+            tui_RenderEntitiesScreen();
         }
     }
 }
 
-/**
- * @brief Renders an error overlay if `g_tuiState.showError` is true.
- */
-static void RenderErrorOverlay(void) {
-    if (!g_tuiState.showError) return;
-
-    CLAY(CLAY_ID("ErrorOverlay"),
-        {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_FIXED(3 * TUI_CH)},
-                    .padding = {1 * TUI_CW, 1 * TUI_CW, 1 * TUI_CH, 1 * TUI_CH}},
-         .backgroundColor = COLOR_ERROR}) {
-        CLAY_TEXT(CLAY_STRING_DYN(g_tuiState.errorMessage), CLAY_TEXT_CONFIG({.textColor = {0, 0, 0, 255}}));
-    }
-}

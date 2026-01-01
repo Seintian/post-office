@@ -50,6 +50,9 @@ void tui_RenderBottomBar(void) {
         if (g_tuiState.currentScreen == SCREEN_LOGS) {
             CLAY_TEXT(CLAY_STRING("[PgUp/PgDn] Start/End  [LEFT/RIGHT] Tab  [Scroll] Move  [Shift+Scroll/Arrows] Pan"), 
                       CLAY_TEXT_CONFIG({.textColor = COLOR_TEXT_DIM}));
+        } else if (g_tuiState.currentScreen == SCREEN_ENTITIES) {
+            CLAY_TEXT(CLAY_STRING("[UP/DOWN] Row  [L/R] Tab  [Shift+L/R] Scroll  [Enter] Details  [Ctrl+f] Filter"), 
+                      CLAY_TEXT_CONFIG({.textColor = COLOR_TEXT_DIM}));
         } else {
 
             CLAY_TEXT(CLAY_STRING("[UP/DOWN] Screen  [LEFT/RIGHT] Tab  [Ctrl+q] Quit"), 
