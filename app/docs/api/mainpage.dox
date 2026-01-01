@@ -203,6 +203,7 @@
  *  | Statistics field reference | statistics_format.md |
  *  | Usage & CLI / menu | usage_instructions.md |
  *  | Module API compendium | modules.dox |
+ *  | TUI Architecture & Refactor | tui_architecture.md |
  *  | Performance tuning knobs | tuning_guide.md |
  *  | Integrated example | integration_scenario |
  *

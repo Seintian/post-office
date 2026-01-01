@@ -223,5 +223,5 @@ bool tui_EntitiesHandleInput(int key) {
     }
 
     // Delegate to DataTable (handles selection, scrolling, and boundary releasing)
-    return tui_DataTableHandleInput(&g_tuiState.entitiesTableState, g_tuiState.filteredEntityCount, key);
+    return tui_DataTableHandleInput(&g_tuiState.entitiesTableState, &g_ActiveTableDef, NULL, key);
 }

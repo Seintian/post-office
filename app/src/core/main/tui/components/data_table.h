@@ -81,7 +81,7 @@ typedef struct {
  * @param key The key code or scroll event code.
  * @return true if the input was consumed by the table.
  */
-bool tui_DataTableHandleInput(DataTableState *state, uint32_t rowCount, int key);
+bool tui_DataTableHandleInput(DataTableState *state, const DataTableDef *def, void *userData, int key);
 
 /**
  * @brief Renders the Generic Data Table.

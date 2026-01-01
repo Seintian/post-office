@@ -4,10 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// --- DataTableAdapter Implementation ---
-
-// --- DataTableAdapter Implementation ---
-
 static uint32_t Entities_GetCount(void *userData) {
     (void)userData;
     // Always use the filtered count. If no filter, it equals total.
@@ -20,11 +16,11 @@ static void Entities_GetCellData(void *userData, int row, uint32_t colId, char *
         snprintf(outBuffer, bufSize, "ERR");
         return;
     }
-    
+
     // Map view row to real entity index
     int realIndex = g_tuiState.filteredEntityIndices[row];
     MockEntity *e = &g_tuiState.mockEntities[realIndex];
-    
+
     switch (colId) {
         case 0: // ID
             snprintf(outBuffer, bufSize, "%u", e->id);
@@ -60,9 +56,7 @@ static void Entities_GetCellData(void *userData, int row, uint32_t colId, char *
 
 static void Entities_OnSort(void *userData, uint32_t colId, bool ascending) {
     (void)userData;
-    // Sorting should sort the FILTERED indices based on the values they point to.
-    // For simplicity in this mock, we'll Bubble Sort the filteredEntityIndices array.
-    
+
     uint32_t count = g_tuiState.filteredEntityCount;
     for (uint32_t i = 0; i < count - 1; i++) {
         for (uint32_t j = 0; j < count - i - 1; j++) {
@@ -70,7 +64,7 @@ static void Entities_OnSort(void *userData, uint32_t colId, bool ascending) {
             int idxB = g_tuiState.filteredEntityIndices[j + 1];
             MockEntity *a = &g_tuiState.mockEntities[idxA];
             MockEntity *b = &g_tuiState.mockEntities[idxB];
-            
+
             bool swap = false;
             int cmp = 0;
             switch(colId) {
@@ -82,13 +76,13 @@ static void Entities_OnSort(void *userData, uint32_t colId, bool ascending) {
                 case 5: cmp = (a->queueDepth - b->queueDepth); break;
                 case 6: cmp = (a->cpuUsage > b->cpuUsage) ? 1 : (a->cpuUsage < b->cpuUsage) ? -1 : 0; break;
             }
-            
+
             if (ascending) {
                 if (cmp > 0) swap = true;
             } else {
                 if (cmp < 0) swap = true;
             }
-            
+
             if (swap) {
                 g_tuiState.filteredEntityIndices[j] = idxB;
                 g_tuiState.filteredEntityIndices[j + 1] = idxA;
@@ -112,21 +106,17 @@ const DataTableAdapter g_EntitiesAdapter = {
     .OnRowSelect = Entities_OnRowSelect
 };
 
-// --- Logic ---
-
 void tui_UpdateEntitiesFilter(void) {
     g_tuiState.filteredEntityCount = 0;
     const char *filter = g_tuiState.entitiesFilter;
     bool hasFilter = (strlen(filter) > 0);
-    
-    // Tab 0: System (Director, Managers)
-    // Tab 1: Simulation (Workers, Users)
+
     uint32_t activeTab = g_tuiState.activeEntitiesTab;
 
     for (uint32_t i = 0; i < g_tuiState.mockEntityCount; i++) {
         MockEntity *e = &g_tuiState.mockEntities[i];
         bool match = true;
-        
+
         // 1. Tab Filtering
         if (activeTab == 0) { // System
             if (e->type != ENTITY_TYPE_DIRECTOR && e->type != ENTITY_TYPE_MANAGER) match = false;
@@ -137,14 +127,15 @@ void tui_UpdateEntitiesFilter(void) {
         // 2. String Filtering
         if (match && hasFilter) {
             if (strstr(e->name, filter) == NULL) {
-                 match = false;
+                match = false;
             }
         }
-        
+
         if (match) {
             g_tuiState.filteredEntityIndices[g_tuiState.filteredEntityCount++] = (int)i;
         }
     }
+
     // Check bounds
     if (g_tuiState.entitiesTableState.selectedRowIndex >= (int)g_tuiState.filteredEntityCount) {
         if (g_tuiState.filteredEntityCount > 0)
@@ -154,9 +145,20 @@ void tui_UpdateEntitiesFilter(void) {
     }
 }
 
+#include "../core/tui_registry.h"
+
+static void cmd_focus_filter(tui_context_t* ctx, void* user_data) {
+    (void)ctx; (void)user_data;
+    g_tuiState.isFilteringEntities = true;
+}
+
 void tui_InitEntities(void) {
     g_tuiState.mockEntityCount = 0;
-    
+
+    tui_registry_register_command("entities.filter.focus", "Focus Filter", cmd_focus_filter, NULL);
+    tui_registry_register_binding(CTRL_KEY('f'), false, TUI_BINDING_context_entities, "entities.filter.focus"); 
+    tui_registry_register_binding(CTRL_KEY('/'), false, TUI_BINDING_context_entities, "entities.filter.focus");
+
     // Director
     MockEntity *e = &g_tuiState.mockEntities[g_tuiState.mockEntityCount++];
     e->id = 1;
@@ -166,7 +168,7 @@ void tui_InitEntities(void) {
     strcpy(e->location, "HQ");
     e->cpuUsage = 0.5f;
     e->queueDepth = 0;
-    
+
     // Managers
     e = &g_tuiState.mockEntities[g_tuiState.mockEntityCount++];
     e->id = 2;
@@ -202,7 +204,7 @@ void tui_InitEntities(void) {
         e->cpuUsage = ((float)(rand() % 50)) / 10.0f;
         e->queueDepth = (rand() % 5);
     }
-    
+
     // Users
     for (int i = 0; i < 50; i++) {
         e = &g_tuiState.mockEntities[g_tuiState.mockEntityCount++];
@@ -220,11 +222,8 @@ void tui_InitEntities(void) {
         e->queueDepth = 0;
         e->memoryUsageMB = 1;
     }
-    
-    // Init Indices
+
     tui_UpdateEntitiesFilter();
-    
-    // Defaults
     g_tuiState.selectedEntityIndex = -1;
     g_tuiState.entitiesTableState = (DataTableState){0};
 }
@@ -234,7 +233,7 @@ void tui_UpdateEntities(void) {
     if (g_tuiState.mockEntityCount > 0) {
         int idx = rand() % (int)g_tuiState.mockEntityCount;
         MockEntity *e = &g_tuiState.mockEntities[idx];
-        
+
         if (e->type == ENTITY_TYPE_WORKER) {
             e->cpuUsage += ((float)(rand() % 10) - 5.0f) / 10.0f;
             if (e->cpuUsage < 0) e->cpuUsage = 0.1f;

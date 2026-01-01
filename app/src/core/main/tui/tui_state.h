@@ -9,7 +9,7 @@
 #include <string.h>
 
 #include "utils/configs.h"
-#include "components/data_table.h" // Added for DataTableState
+#include "components/data_table.h"
 
 /**
  * @brief Header for shared TUI state, constants, and helper macros.
@@ -19,7 +19,6 @@
  * input buffer, and system statistics.
  */
 
-// --- Constants ---
 // --- Constants ---
 #define TUI_CW 8   // Cell Width in pixels (approximate, for layout calculations)
 #define TUI_CH 16  // Cell Height in pixels
@@ -49,7 +48,7 @@ typedef enum {
     SCREEN_ENTITIES,    // Entities Table
     SCREEN_NETWORK,     // Network / IPC Topology
     SCREEN_HELP,        // Help & Shortcuts
-    SCREEN_DIRECTOR_CTRL, // Manual Director Controls
+    SCREEN_DIRECTOR,      // Manual Director Controls
     SCREEN_COUNT
 } tuiScreen;
 
@@ -128,7 +127,7 @@ typedef struct {
     char context[32]; // "Global", "Simulation", etc.
 } Keybinding;
 
-#define MAX_HELP_BINDINGS 32
+#define MAX_HELP_BINDINGS 128
 
 // --- State Struct ---
 
@@ -227,6 +226,7 @@ typedef struct {
 #define CLAY_ID_IDX2(label, r, c) CLAY_IDI(label, (r) * 1000 + (c))
 
 // --- Helper Functions ---
+
 /**
  * @brief Returns a pointer to a formatted string stored in a static ring buffer.
  * Valid until the buffer wraps around (typically safe for a single frame of UI).

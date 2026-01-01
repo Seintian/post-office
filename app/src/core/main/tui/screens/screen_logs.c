@@ -11,16 +11,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-void tui_InitLogsScreen(void) {
+#include "../core/tui_registry.h"
+
+static void tui_RefreshLogs(void) {
     g_tuiState.logFileCount = 0;
-    g_tuiState.activeLogTab = 0;
 
     DIR *d;
     struct dirent *dir;
-    d = opendir("logs"); // Assuming logs/ is in the CWD
+    d = opendir("logs"); 
     if (d) {
         while ((dir = readdir(d)) != NULL) {
-            // Check for .log extension
             size_t len = strlen(dir->d_name);
             if (len > 4 && strcmp(dir->d_name + len - 4, ".log") == 0) {
                 if (g_tuiState.logFileCount < 16) {
@@ -32,10 +32,9 @@ void tui_InitLogsScreen(void) {
         }
         closedir(d);
     }
-    
-    // Simple sort for stability
+
+    // Simple sort
     if (g_tuiState.logFileCount > 0) {
-        // Bubble sort for simplicity on small array
         for (uint32_t i = 0; i < g_tuiState.logFileCount - 1; i++) {
             for (uint32_t j = 0; j < g_tuiState.logFileCount - i - 1; j++) {
                 if (strcmp(g_tuiState.logFiles[j], g_tuiState.logFiles[j + 1]) > 0) {
@@ -47,6 +46,22 @@ void tui_InitLogsScreen(void) {
             }
         }
     }
+}
+
+static void cmd_logs_refresh(tui_context_t* ctx, void* user_data) {
+    (void)ctx; (void)user_data;
+    tui_RefreshLogs();
+}
+
+void tui_InitLogsScreen(void) {
+    g_tuiState.logFileCount = 0;
+    g_tuiState.activeLogTab = 0;
+
+    tui_RefreshLogs();
+
+    // Register Refresh Command
+    tui_registry_register_command("logs.refresh", "Refresh Log Files", cmd_logs_refresh, NULL);
+    tui_registry_register_binding(CTRL_KEY('r'), false, TUI_BINDING_context_logs, "logs.refresh");
 }
 
 void OnLogTabClick(Clay_ElementId elementId, Clay_PointerData pointerData, void *userData) {
@@ -68,16 +83,16 @@ void tui_RenderLogsScreen(void) {
                      .childGap = 2 * TUI_CW,
                      .layoutDirection = CLAY_LEFT_TO_RIGHT,
                      .padding = {0, 0, 0, 0}}}) {
-        
+
         for (uint32_t i = 0; i < g_tuiState.logFileCount; i++) {
 
             bool isActive = (i == g_tuiState.activeLogTab);
-            
+
             CLAY(CLAY_ID_IDX("LogTab", i), 
                 {.layout = {.padding = {2 * TUI_CW, 2 * TUI_CW, 1 * TUI_CH, 1 * TUI_CH}},
                  .border = {.width = {1 * TUI_CW, 1 * TUI_CW, 1 * TUI_CH, 1 * TUI_CH, 0}, 
                             .color = isActive ? COLOR_ACCENT : (Clay_Color){100, 100, 100, 255}}}) {
-                
+
                 Clay_Ncurses_OnClick(OnLogTabClick, (void*)(intptr_t)i);
                 bool isHovered = Clay_Hovered();
 
@@ -85,10 +100,8 @@ void tui_RenderLogsScreen(void) {
                     CLAY_TEXT_CONFIG({.textColor = (isActive || isHovered) ? COLOR_ACCENT : (Clay_Color){120, 120, 120, 255},
                                       .fontId = isActive ? CLAY_NCURSES_FONT_BOLD : 0}));
             }
-
         }
     }
-
 
     // Render Content Area
     CLAY(CLAY_ID("LogsContent"), 
@@ -100,7 +113,7 @@ void tui_RenderLogsScreen(void) {
         if (g_tuiState.logFileCount > 0) {
             tui_RenderLogTailView(g_tuiState.logFiles[g_tuiState.activeLogTab]);
         } else {
-             CLAY_TEXT(CLAY_STRING("No logs found in logs/ directory."), CLAY_TEXT_CONFIG({.textColor = COLOR_ERROR}));
+            CLAY_TEXT(CLAY_STRING("No logs found in logs/ directory."), CLAY_TEXT_CONFIG({.textColor = COLOR_ERROR}));
         }
     }
 }

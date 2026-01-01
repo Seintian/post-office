@@ -221,7 +221,7 @@ void tui_RenderConfigScreen(void) {
                       {.layout = {.sizing = {.width = CLAY_SIZING_FIT(), .height = CLAY_SIZING_GROW()},
                                   .padding = {1 * TUI_CW, 1 * TUI_CW, 0, 0}},
                        .backgroundColor = isActive ? (Clay_Color){80, 100, 160, 255} : (Clay_Color){30, 30, 30, 255}}) {
-                       
+
                        Clay_Ncurses_OnClick(OnTabClick, (void*)(intptr_t)i);
                        CLAY_TEXT(CLAY_STRING_DYN(tui_ScratchFmt("%s", g_tuiState.configFiles[i])), 
                                  CLAY_TEXT_CONFIG({.textColor = isActive ? (Clay_Color){255, 255, 255, 255} : COLOR_TEXT_DIM, 
@@ -291,10 +291,9 @@ void tui_RenderConfigScreen(void) {
                                       {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_GROW()}},
                                        .backgroundColor = {0, 0, 0, 255}}) {
 
-                                     // Blinking cursor visual if desired, for now just text
-                                     // We can use tui_ScratchFmt directly here instead of pre-formatting in editInputDisplay
-                                     // But reusing editInputDisplay is fine if we wrap it.
-                                     CLAY_TEXT(CLAY_STRING_DYN(tui_ScratchFmt("%s", g_tuiState.editInputDisplay)), CLAY_TEXT_CONFIG({.textColor = {255, 255, 255, 255}}));
+                                     // Render actual value with cursor
+                                     char *display = tui_ScratchFmt("> %s_", g_tuiState.editValueBuffer);
+                                     CLAY_TEXT(CLAY_STRING_DYN(display), CLAY_TEXT_CONFIG({.textColor = {255, 255, 255, 255}}));
                                 }
                             } else {
                                 CLAY_TEXT(CLAY_STRING_DYN(tui_ScratchFmt("%s", item->value)), CLAY_TEXT_CONFIG({.textColor = {200, 200, 200, 255}}));

@@ -1,5 +1,6 @@
 #include "screen_help.h"
 #include "../tui_state.h"
+#include "../core/tui_registry.h"
 #include "../components/data_table.h"
 #include <clay/clay.h>
 #include <renderer/clay_ncurses_renderer.h>
@@ -25,44 +26,87 @@ static void InitHelpTableDef(void) {
     g_HelpInitialized = true;
 }
 
+static const char* _context_to_str(tui_binding_context_t ctx) {
+    switch (ctx) {
+        case TUI_BINDING_context_global: return "Global";
+        case TUI_BINDING_context_simulation: return "Simulation";
+        case TUI_BINDING_context_config: return "Config";
+        case TUI_BINDING_context_logs: return "Logs";
+        case TUI_BINDING_context_editor: return "Editor";
+        case TUI_BINDING_context_entities: return "Entities";
+        case TUI_BINDING_CONTEXT_COUNT:
+        default: return "Unknown";
+    }
+}
+
+static void _format_key(int key, bool ctrl, char* buf, size_t size) {
+    // If explicitly marked as CTRL modifier in registry
+    if (ctrl) {
+        if (key >= 'a' && key <= 'z') key -= 32; // Toupper
+        snprintf(buf, size, "Ctrl + %c", key);
+        return;
+    }
+
+    // Handle Control Codes (1-26) embedded in keycode
+    if (key >= 1 && key <= 26) {
+        // Exceptions for standard keys that share codes
+        if (key == 10) { snprintf(buf, size, "Enter"); return; } // Ctrl+J / Enter
+        if (key == 9)  { snprintf(buf, size, "Tab"); return; }   // Ctrl+I / Tab
+        if (key == 27) { snprintf(buf, size, "Esc"); return; }   // Esc (27)
+
+        // Otherwise, render as Ctrl + Letter
+        snprintf(buf, size, "Ctrl + %c", 'A' + key - 1);
+        return;
+    }
+
+    // Function Keys
+    if (key >= KEY_F(1) && key <= KEY_F(12)) {
+        snprintf(buf, size, "F%d", key - KEY_F(0));
+        return;
+    }
+
+    // Special Keys
+    if (key == 27) { snprintf(buf, size, "Esc"); return; }
+    if (key == 127 || key == KEY_BACKSPACE) { snprintf(buf, size, "Backspace"); return; }
+
+    // Printable
+    if (key >= 32 && key <= 126) {
+        snprintf(buf, size, "%c", key);
+    } else {
+        snprintf(buf, size, "[%d]", key); // Fallback for debug
+    }
+}
+
 void tui_InitHelpScreen(void) {
     g_tuiState.helpBindingCount = 0;
-    Keybinding *kb = g_tuiState.helpBindings;
-    uint32_t i = 0;
 
-    // --- Global Navigation ---
-    snprintf(kb[i].key, 32, "F1 - F8");
-    snprintf(kb[i].description, 128, "Directly switch to screen by index");
-    snprintf(kb[i++].context, 32, "Global");
+    // Fetch from Registry
+    uint32_t count = 0;
+    const tui_keybinding_t* bindings = tui_registry_get_bindings(&count);
 
-    snprintf(kb[i].key, 32, "Ctrl + /");
-    snprintf(kb[i].description, 128, "Focus filter field");
-    snprintf(kb[i++].context, 32, "Entities");
+    for (uint32_t j = 0; j < count; j++) {
+        if (g_tuiState.helpBindingCount >= 128) break; // Hard limit in tuiState
 
-    // --- Simulation & Director ---
-    snprintf(kb[i].key, 32, "Ctrl+W / Ctrl+E");
-    snprintf(kb[i].description, 128, "Increase / Decrease worker threads");
-    snprintf(kb[i++].context, 32, "Director Ctrl");
+        const tui_keybinding_t* b = &bindings[j];
+        Keybinding *kb = &g_tuiState.helpBindings[g_tuiState.helpBindingCount];
 
-    snprintf(kb[i].key, 32, "Ctrl+U / Ctrl+Y");
-    snprintf(kb[i].description, 128, "Increase / Decrease concurrent users");
-    snprintf(kb[i++].context, 32, "Director Ctrl");
+        // Key
+        _format_key(b->key_code, b->ctrl_modifier, kb->key, sizeof(kb->key));
 
-    // --- Configuration Editor ---
-    snprintf(kb[i].key, 32, "Enter");
-    snprintf(kb[i].description, 128, "Enter edit mode for selected field");
-    snprintf(kb[i++].context, 32, "Config");
+        // Description
+        const char* desc = tui_registry_get_command_desc(b->command_id);
+        if (desc) {
+            snprintf(kb->description, sizeof(kb->description), "%s", desc);
+        } else {
+            snprintf(kb->description, sizeof(kb->description), "%s", b->command_id);
+        }
 
-    snprintf(kb[i].key, 32, "Esc");
-    snprintf(kb[i].description, 128, "Cancel editing / Back");
-    snprintf(kb[i++].context, 32, "Config");
+        // Context
+        snprintf(kb->context, sizeof(kb->context), "%s", _context_to_str(b->context));
 
-    snprintf(kb[i].key, 32, "Ctrl + S");
-    snprintf(kb[i].description, 128, "Save configuration changes to disk");
-    snprintf(kb[i++].context, 32, "Config");
+        g_tuiState.helpBindingCount++;
+    }
 
-
-    g_tuiState.helpBindingCount = i;
     g_tuiState.helpTableState = (DataTableState){0, 0, 0, 0, true, -1, -1};
 }
 
@@ -118,5 +162,6 @@ void tui_RenderHelpScreen(void) {
 }
 
 bool tui_HelpHandleInput(int key) {
-    return tui_DataTableHandleInput(&g_tuiState.helpTableState, g_tuiState.helpBindingCount, key);
+    if (!g_HelpInitialized) InitHelpTableDef();
+    return tui_DataTableHandleInput(&g_tuiState.helpTableState, &g_ActiveHelpTableDef, NULL, key);
 }

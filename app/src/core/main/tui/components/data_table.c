@@ -8,8 +8,6 @@
 // Row:    TableRow_<RowIndex>
 // Cell:   TableCell_<RowIndex>_<ColID>
 
-
-
 // Global context for callbacks (acceptable for single-threaded TUI)
 static struct {
     DataTableState *state;
@@ -21,7 +19,7 @@ static void HandleHeaderClick(Clay_ElementId elementId, Clay_PointerData pointer
     (void)elementId;
     if (pointerData.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME) {
         uint32_t colId = (uint32_t)(intptr_t)userData;
-        
+
         if (g_TableContext.state->sortColumnId == colId) {
             g_TableContext.state->sortAscending = !g_TableContext.state->sortAscending;
         } else {
@@ -47,13 +45,24 @@ static void HandleRowClick(Clay_ElementId elementId, Clay_PointerData pointerDat
     }
 }
 
-static void OnRowHover(Clay_ElementId elementId, Clay_PointerData pointerData, void *userData) {
-    (void)elementId; (void)pointerData;
-    g_TableContext.state->hoveredRowIndex = (int)(intptr_t)userData;
-}
-
-bool tui_DataTableHandleInput(DataTableState *state, uint32_t rowCount, int key) {
+bool tui_DataTableHandleInput(DataTableState *state, const DataTableDef *def, void *userData, int key) {
     if (key == ERR) return false;
+
+    // Get row count via adapter if possible
+    uint32_t rowCount = 0;
+    if (def && def->adapter.GetCount) {
+        rowCount = def->adapter.GetCount(userData);
+    }
+
+    // Selection (Enter)
+    if (key == '\n' || key == KEY_ENTER) {
+        if (state->selectedRowIndex >= 0 && state->selectedRowIndex < (int)rowCount) {
+            if (def->adapter.OnRowSelect) {
+                def->adapter.OnRowSelect(userData, state->selectedRowIndex);
+            }
+            return true;
+        }
+    }
 
     // Vertical Navigation
     if (key == KEY_DOWN) {
@@ -124,7 +133,7 @@ void tui_RenderDataTable(const DataTableDef *def, DataTableState *state, void *u
     g_TableContext.def = def;
     g_TableContext.userAdapterData = userData;
 
-    state->hoveredRowIndex = -1; // Reset hover state for this frame
+
 
     uint32_t rowCount = def->adapter.GetCount(userData);
 
@@ -135,18 +144,20 @@ void tui_RenderDataTable(const DataTableDef *def, DataTableState *state, void *u
     }
     state->contentWidth = totalWidth;
 
+    int newHoverIndex = -1;
+
     CLAY(CLAY_ID("DataTable"),
         {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_GROW()},
                     .layoutDirection = CLAY_TOP_TO_BOTTOM,
                     .padding = {TUI_CW, TUI_CW, TUI_CH, TUI_CH}}, // Account for borders
          .backgroundColor = {0,0,0,255},
          .border = {.width = {1,1,1,1,0}, .color = {60,60,60,255}}}) {
-        
+
         // --- Header Row ---
         // Header needs to scroll horizontally with the body, but stay fixed vertically.
         // To achieve this in Clay (TUI), we can apply a negative child gap or just use 'childOffset'.
         // We'll wrap the header items in a container that has the horizontal offset.
-        
+
         CLAY(CLAY_ID("TableHeaderClip"), 
              {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_FIXED(2 * TUI_CH)}},
               .backgroundColor = {30, 30, 30, 255},
@@ -160,22 +171,22 @@ void tui_RenderDataTable(const DataTableDef *def, DataTableState *state, void *u
 
                 for (uint32_t i = 0; i < def->columnCount; i++) {
                     const DataTableColumn *col = &def->columns[i];
-                    
+
                     CLAY(CLAY_ID_IDX("HeaderItem", col->id),
                         {.layout = {.sizing = {.width = CLAY_SIZING_FIXED(col->width * TUI_CW), .height = CLAY_SIZING_GROW()},
                                     .padding = {1 * TUI_CW, 1 * TUI_CW, 0, 0}}}) {
-                        
+
                         if (col->sortable) {
-                                Clay_Ncurses_OnClick(HandleHeaderClick, (void*)(intptr_t)col->id);
+                            Clay_Ncurses_OnClick(HandleHeaderClick, (void*)(intptr_t)col->id);
                         }
-                        
+
                         bool isSorted = (state->sortColumnId == col->id);
-                        
+
                         // Display Label
                         CLAY_TEXT(CLAY_STRING_DYN((char*)col->label), 
                             CLAY_TEXT_CONFIG({.textColor = isSorted ? COLOR_ACCENT : (Clay_Color){200,200,200,255},
                                               .fontId = CLAY_NCURSES_FONT_BOLD, .fontSize = 16}));
-                        
+
                         // Display Sort Arrow
                         if (isSorted) {
                             CLAY_TEXT(state->sortAscending ? CLAY_STRING(" ^") : CLAY_STRING(" v"),
@@ -192,42 +203,47 @@ void tui_RenderDataTable(const DataTableDef *def, DataTableState *state, void *u
                          .layoutDirection = CLAY_TOP_TO_BOTTOM},
               .clip = {.horizontal = true, .vertical = true, 
                        .childOffset = {.x = state->scrollX, .y = state->scrollY }}}) {
-              
+
             CLAY(CLAY_ID("TableBodyContent"),
                  {.layout = {.sizing = {.width = CLAY_SIZING_FIXED(totalWidth), .height = CLAY_SIZING_GROW()}, // Height grows to fit rows
                              .layoutDirection = CLAY_TOP_TO_BOTTOM}}) {
 
                 for (int r = 0; r < (int)rowCount; r++) {
                     bool isSelected = (r == state->selectedRowIndex);
-                    
+
                     CLAY(CLAY_ID_IDX("TableRow", (uint32_t)r),
                         {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_FIXED(1 * TUI_CH)}, // Width matches container (totalWidth)
                                     .layoutDirection = CLAY_LEFT_TO_RIGHT},
                          .backgroundColor = isSelected ? (Clay_Color){20, 60, 100, 255} : (r % 2 == 0 ? (Clay_Color){10,10,10,255} : (Clay_Color){0,0,0,255})}) {
-                             
+
                         Clay_Ncurses_OnClick(HandleRowClick, (void*)(intptr_t)r);
-                        Clay_OnHover(OnRowHover, (void*)(intptr_t)r);
-                        
+
+                        // Check Hover (Last one wins logic)
+                        if (Clay_Hovered()) {
+                            newHoverIndex = r;
+                        }
+
+                        // Use persisted hover state from previous frame/end of loop
                         bool isHovered = (state->hoveredRowIndex == r);
-                        
+
                         // Render Cells
                         for (uint32_t c = 0; c < def->columnCount; c++) {
                             const DataTableColumn *col = &def->columns[c];
                             char *cellData = tui_ScratchAlloc(256); // Allocate full buffer
                             if (def->adapter.GetCellData) { 
-                                    def->adapter.GetCellData(userData, r, col->id, cellData, 256);
+                                def->adapter.GetCellData(userData, r, col->id, cellData, 256);
                             } else {
-                                    cellData[0] = '\0';
+                                cellData[0] = '\0';
                             }
-                            
+
                             CLAY(CLAY_ID_IDX2("Cell", (uint32_t)r, c),
-                                    {.layout = {.sizing = {.width = CLAY_SIZING_FIXED(col->width * TUI_CW), .height = CLAY_SIZING_GROW()},
-                                                .padding = {1 * TUI_CW, 0, 0, 0}}}) {
-                                    
-                                    CLAY_TEXT(CLAY_STRING_DYN(cellData), 
-                                    CLAY_TEXT_CONFIG({.textColor = isSelected ? (Clay_Color){255,255,255,255} : 
-                                                                    (isHovered ? COLOR_ACCENT : (Clay_Color){180,180,180,255}),
-                                                      .fontSize = 16}));
+                                {.layout = {.sizing = {.width = CLAY_SIZING_FIXED(col->width * TUI_CW), .height = CLAY_SIZING_GROW()},
+                                            .padding = {1 * TUI_CW, 0, 0, 0}}}) {
+
+                                CLAY_TEXT(CLAY_STRING_DYN(cellData), 
+                                CLAY_TEXT_CONFIG({.textColor = isSelected ? (Clay_Color){255,255,255,255} : 
+                                                                (isHovered ? COLOR_ACCENT : (Clay_Color){180,180,180,255}),
+                                                    .fontSize = 16}));
                             }
                         }
                     }
@@ -235,4 +251,7 @@ void tui_RenderDataTable(const DataTableDef *def, DataTableState *state, void *u
             }
         }
     }
+    
+    // Update state for next frame
+    state->hoveredRowIndex = newHoverIndex;
 }

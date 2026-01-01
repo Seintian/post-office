@@ -11,6 +11,8 @@
 #include <signal.h>
 
 #include "app_tui.h"
+#include "tui/core/tui_context.h"
+#include "tui/core/tui_registry.h"
 #include "tui_state.h"
 #include "components/topbar.h"
 #include "components/bottombar.h"
@@ -68,6 +70,8 @@ tuiState g_tuiState = {
     .showError = false,
     .errorMessage = {0}
 };
+
+tui_context_t* g_ctx = NULL;
 
 static bool g_hasRendered = false;
 
@@ -146,14 +150,48 @@ int app_tui_run_simulation(void) {
     return app_tui_run_demo(); // Same loop for now
 }
 
+static void cmd_quit(tui_context_t* ctx, void* user_data) {
+    (void)ctx; (void)user_data;
+    tui_OnQuit();
+}
+
+static void cmd_nav(tui_context_t* ctx, void* user_data) {
+    (void)ctx;
+    // legacy sync
+    g_tuiState.currentScreen = (int)(intptr_t)user_data;
+    if (g_ctx) g_ctx->current_screen = (tui_screen_t)(intptr_t)user_data;
+}
+
 static void tui_Initialize(void) {
-    uint64_t totalMemorySize = 16 * 1024 * 1024; // 16 MB
-    Clay_Arena arena = Clay_CreateArenaWithCapacityAndMemory(totalMemorySize, malloc(totalMemorySize));
-    Clay_Initialize(arena, (Clay_Dimensions){0, 0}, (Clay_ErrorHandler){0});
+    size_t totalMemorySize = 16 * 1024 * 1024; // 16 MB
+    g_ctx = tui_context_create(totalMemorySize);
+    
+    Clay_Initialize(g_ctx->arena, (Clay_Dimensions){0, 0}, (Clay_ErrorHandler){0});
     Clay_SetMeasureTextFunction(Clay_Ncurses_MeasureText, NULL);
 
     Clay_Ncurses_Initialize();
     Clay_Ncurses_SetRawMode(true); // capture all keys
+
+    // Register Globals
+    tui_registry_register_command("sys.quit", "Quit Application", cmd_quit, NULL);
+    tui_registry_register_binding(CTRL_KEY('q'), false, TUI_BINDING_context_global, "sys.quit");
+
+    // Register Navigation
+    struct { int key; const char* id; const char* desc; tui_screen_t screen; } navs[] = {
+        { KEY_F(1), "nav.dashboard", "Go to Dashboard", TUI_SCREEN_SIMULATION },
+        { KEY_F(2), "nav.performance", "Go to Performance", TUI_SCREEN_PERFORMANCE },
+        { KEY_F(3), "nav.logs", "Go to Logs", TUI_SCREEN_LOGS },
+        { KEY_F(4), "nav.config", "Go to Config", TUI_SCREEN_CONFIG },
+        { KEY_F(5), "nav.entities", "Go to Entities", TUI_SCREEN_ENTITIES },
+        { KEY_F(6), "nav.ipc", "Go to IPC Inspector", TUI_SCREEN_NETWORK }, 
+        { KEY_F(7), "nav.help", "Go to Help", TUI_SCREEN_HELP },
+        { KEY_F(8), "nav.director", "Go to Director Ctrl", TUI_SCREEN_DIRECTOR },
+    };
+
+    for (int i = 0; i < 8; i++) {
+        tui_registry_register_command(navs[i].id, navs[i].desc, cmd_nav, (void*)(intptr_t)navs[i].screen);
+        tui_registry_register_binding(navs[i].key, false, TUI_BINDING_context_global, navs[i].id);
+    }
 
     tui_InitLogsScreen();
     tui_InitConfigScreen();
@@ -169,6 +207,10 @@ static void tui_Initialize(void) {
  */
 static void tui_Terminate(void) {
     Clay_Ncurses_Terminate();
+    if (g_ctx) {
+        tui_context_destroy(g_ctx);
+        g_ctx = NULL;
+    }
 }
 
 // --- Input & Signal Handling ---
@@ -186,6 +228,25 @@ static int tui_ProcessInput(void) {
     while (true) {
         int key = Clay_Ncurses_ProcessInputStandard();
         if (key == -1 || key == ERR) break; // No more input
+
+        // 0. Registry / Keybindings
+        tui_binding_context_t active_ctx = TUI_BINDING_context_global;
+        switch (g_tuiState.currentScreen) {
+            case TUI_SCREEN_SIMULATION: active_ctx = TUI_BINDING_context_simulation; break;
+            case TUI_SCREEN_CONFIG: active_ctx = TUI_BINDING_context_config; break;
+            case TUI_SCREEN_LOGS: active_ctx = TUI_BINDING_context_logs; break;
+            case TUI_SCREEN_ENTITIES: active_ctx = TUI_BINDING_context_entities; break; 
+            case TUI_SCREEN_PERFORMANCE: 
+            case TUI_SCREEN_NETWORK:
+            case TUI_SCREEN_HELP:
+            case TUI_SCREEN_DIRECTOR: 
+            case TUI_SCREEN_COUNT:
+                active_ctx = TUI_BINDING_context_global; 
+                break; 
+            default: break;
+        }
+
+        if (tui_registry_process_input(g_ctx, key, active_ctx)) continue;
 
         // Check for Signal Keys first
         if (key == CLAY_NCURSES_KEY_SCROLL_UP) {
@@ -205,23 +266,23 @@ static int tui_ProcessInput(void) {
                 g_tuiState.logReadOffset += 256;
                 // Clamping to filesize happens in render view as we don't know filesize here easily
             } else if (g_tuiState.currentScreen == SCREEN_CONFIG) {
-                 g_tuiState.configScrollY += 50.0f;
+                g_tuiState.configScrollY += 50.0f;
             } else {
                 if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){0, 48}, 0.1f);
             }
         } else if (key == CLAY_NCURSES_KEY_SCROLL_LEFT) {
-             if (g_tuiState.currentScreen == SCREEN_LOGS) {
+            if (g_tuiState.currentScreen == SCREEN_LOGS) {
                 // Horizontal is visual shift
                 g_tuiState.logScrollPosition.x += 50;
                 if (g_tuiState.logScrollPosition.x > 0) g_tuiState.logScrollPosition.x = 0;
             } else {
-               if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){-50, 0}, 0.1f);
+                if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){-50, 0}, 0.1f);
             }
         } else if (key == CLAY_NCURSES_KEY_SCROLL_RIGHT) {
-             if (g_tuiState.currentScreen == SCREEN_LOGS) {
+            if (g_tuiState.currentScreen == SCREEN_LOGS) {
                 g_tuiState.logScrollPosition.x -= 50;
             } else {
-               if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){50, 0}, 0.1f);
+                if (g_hasRendered) Clay_UpdateScrollContainers(true, (Clay_Vector2){50, 0}, 0.1f);
             }
 
         } else if (key == CTRL_KEY('q') || key == CTRL_KEY('Q')) {
@@ -299,7 +360,7 @@ static void HandleKeyInput(int key) {
     if (key == ERR) return;
 
     // --- High Priority Global Shortcuts (Ctrl-Modified) ---
-    
+
     // Screen switching (F1 - F8)
     if (key >= KEY_F(1) && key <= KEY_F(8)) {
         int idx = key - KEY_F(1);
@@ -474,7 +535,7 @@ static bool HandleConfigInput(int key) {
                 }
             } else {
                 // Top Boundary -> Previous Screen
-                 g_tuiState.currentScreen = (g_tuiState.currentScreen - 1 + SCREEN_COUNT) % SCREEN_COUNT;
+                g_tuiState.currentScreen = (g_tuiState.currentScreen - 1 + SCREEN_COUNT) % SCREEN_COUNT;
             }
             return true;
         } else if (key == KEY_DOWN) {
@@ -487,7 +548,7 @@ static bool HandleConfigInput(int key) {
                 }
             } else {
                 // Bottom Boundary -> Next Screen
-                 g_tuiState.currentScreen = (g_tuiState.currentScreen + 1) % SCREEN_COUNT;
+                g_tuiState.currentScreen = (g_tuiState.currentScreen + 1) % SCREEN_COUNT;
             }
             return true;
         } else if (key == KEY_PPAGE) { // Page Up
@@ -533,13 +594,9 @@ static void tui_Update(void) {
     g_tuiState.fps = 30.0f; 
     g_tuiState.cpuUsage = (float)(rand() % 1000) / 10.0f;
     g_tuiState.memUsage = 100 + (float)(rand() % 50);
-    
+
     tui_UpdateEntities();
     tui_UpdateIPCScreen();
-
-
-    // Config Scroll Tracking ... 
-    // ...
 }
 
 /**
@@ -598,18 +655,18 @@ static void RenderErrorOverlay(void) {
         {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_GROW()},
                     .layoutDirection = CLAY_TOP_TO_BOTTOM,
                     .padding = {10 * TUI_CW, 10 * TUI_CW, 5 * TUI_CH, 5 * TUI_CH}}}) {
-        
+
         CLAY(CLAY_ID("ErrorBox"),
             {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_FIT()},
                         .layoutDirection = CLAY_TOP_TO_BOTTOM,
                         .padding = {2 * TUI_CW, 2 * TUI_CW, 1 * TUI_CH, 1 * TUI_CH}},
              .backgroundColor = {100, 0, 0, 255},
              .border = {.width = {2,2,2,2,0}, .color = {255, 255, 255, 255}}}) {
-            
+
             CLAY_TEXT(CLAY_STRING("ERROR"), CLAY_TEXT_CONFIG({.textColor = {255, 255, 255, 255}, .fontId = CLAY_NCURSES_FONT_BOLD}));
-            
+
             CLAY(CLAY_ID("ErrorSpacer"), {.layout = {.sizing = {.height = CLAY_SIZING_FIXED(1 * TUI_CH)}}});
-            
+
             CLAY_TEXT(CLAY_STRING_DYN(g_tuiState.errorMessage), CLAY_TEXT_CONFIG({.textColor = {255, 255, 255, 255}}));
         }
     }
@@ -619,7 +676,6 @@ static void tui_RenderSidebar(void) {
     const char *screenNames[] = { "Simulation", "Performance", "Logs", "Config", "Entities", "Network", "Help", "Director" };
 
     CLAY(CLAY_ID("Sidebar"),
-
         {.layout = {.sizing = {.width = CLAY_SIZING_FIXED(20 * TUI_CW), .height = CLAY_SIZING_GROW()},
                     .padding = {1 * TUI_CW, 1 * TUI_CW, 1 * TUI_CH, 1 * TUI_CH},
                     .childGap = 1 * TUI_CH,
@@ -646,9 +702,6 @@ static void tui_RenderSidebar(void) {
 
     }
 }
-// ...
-
-// ...
 
 static void RenderContent(void) {
     CLAY(CLAY_ID("ContentBody"),
@@ -669,7 +722,7 @@ static void RenderContent(void) {
             tui_RenderIPCScreen();
         } else if (g_tuiState.currentScreen == SCREEN_HELP) {
             tui_RenderHelpScreen();
-        } else if (g_tuiState.currentScreen == SCREEN_DIRECTOR_CTRL) {
+        } else if (g_tuiState.currentScreen == SCREEN_DIRECTOR) {
             tui_RenderDirectorCtrlScreen();
         }
     }

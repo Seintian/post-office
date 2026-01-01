@@ -26,13 +26,13 @@ static void OnControlClick(Clay_ElementId elementId, Clay_PointerData pointerDat
 }
 
 static void RenderButton(const char *label, int action, Clay_Color bgColor) {
-    CLAY(CLAY_ID_IDX("Btn", action), 
-        {.layout = {.padding = {2 * TUI_CW, 2 * TUI_CW, 1 * TUI_CH, 1 * TUI_CH}},
+    CLAY(CLAY_ID_IDX("Btn", (uint32_t)action), 
+        {.layout = {.padding = {2 * TUI_CW, 2 * TUI_CW, 0, 0}},
          .backgroundColor = bgColor}) {
-        
+
         Clay_Ncurses_OnClick(OnControlClick, (void*)(intptr_t)action);
         bool isHovered = Clay_Hovered();
-        
+
         CLAY_TEXT(CLAY_STRING_DYN((char*)label), 
             CLAY_TEXT_CONFIG({.textColor = isHovered ? (Clay_Color){255, 255, 255, 255} : (Clay_Color){200, 200, 200, 255}}));
     }
@@ -54,10 +54,10 @@ void tui_RenderDirectorCtrlScreen(void) {
                         .childGap = 0.5 * TUI_CH,
                         .padding = {1 * TUI_CW, 1 * TUI_CW, 1 * TUI_CH, 1 * TUI_CH}},
              .border = {.width = {1, 1, 1, 1, 0}, .color = {100, 100, 100, 255}}}) {
-            
+
             CLAY_TEXT(CLAY_STRING_DYN(tui_ScratchFmt("State: %s", g_tuiState.simIsRunning ? "RUNNING" : "PAUSED")), 
                 CLAY_TEXT_CONFIG({.textColor = g_tuiState.simIsRunning ? (Clay_Color){100, 255, 100, 255} : COLOR_ACCENT}));
-            
+
             CLAY_TEXT(CLAY_STRING_DYN(tui_ScratchFmt("Scenario: %s", g_tuiState.currentScenario)), CLAY_TEXT_CONFIG({.textColor = {200, 200, 200, 255}}));
             CLAY_TEXT(CLAY_STRING_DYN(tui_ScratchFmt("Active Workers: %u", g_tuiState.activeWorkers)), CLAY_TEXT_CONFIG({.textColor = {200, 200, 200, 255}}));
             CLAY_TEXT(CLAY_STRING_DYN(tui_ScratchFmt("Active Users: %u", g_tuiState.activeUsers)), CLAY_TEXT_CONFIG({.textColor = {200, 200, 200, 255}}));
@@ -68,7 +68,7 @@ void tui_RenderDirectorCtrlScreen(void) {
             {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_FIT()},
                         .layoutDirection = CLAY_LEFT_TO_RIGHT,
                         .childGap = 2 * TUI_CW}}) {
-            
+
             RenderButton(g_tuiState.simIsRunning ? "Pause" : "Resume", 0, (Clay_Color){50, 50, 150, 255});
         }
 
@@ -81,7 +81,7 @@ void tui_RenderDirectorCtrlScreen(void) {
             {.layout = {.sizing = {.width = CLAY_SIZING_GROW(), .height = CLAY_SIZING_FIT()},
                         .layoutDirection = CLAY_TOP_TO_BOTTOM,
                         .childGap = 1 * TUI_CH}}) {
-            
+
             CLAY(CLAY_ID("WorkerRow"), {.layout = {.layoutDirection = CLAY_LEFT_TO_RIGHT, .childGap = 2 * TUI_CW, .sizing = {.width = CLAY_SIZING_GROW()}}}) {
                 CLAY(CLAY_ID("WLabel"), {.layout = {.sizing = {.width = CLAY_SIZING_FIXED(10 * TUI_CW)}}}) {
                     CLAY_TEXT(CLAY_STRING("Workers:"), CLAY_TEXT_CONFIG({.textColor = {255, 255, 255, 255}}));

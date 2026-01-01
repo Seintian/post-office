@@ -103,5 +103,6 @@ void tui_RenderIPCScreen(void) {
 }
 
 bool tui_IPCHandleInput(int key) {
-    return tui_DataTableHandleInput(&g_tuiState.ipcTableState, g_tuiState.mockIPCChannelCount, key);
+    if (!g_IPCInitialized) InitIPCTableDef();
+    return tui_DataTableHandleInput(&g_tuiState.ipcTableState, &g_ActiveIPCTableDef, NULL, key);
 }
