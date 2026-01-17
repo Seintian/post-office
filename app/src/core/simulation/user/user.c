@@ -7,14 +7,15 @@
 
 #define _POSIX_C_SOURCE 200809L
 
+#include <errno.h>
+#include <string.h>
+
 #include "runtime/user_loop.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <postoffice/sort/sort.h>
-
-#include "../ipc/simulation_ipc.h"
 
 /**
  * @brief Parses command line arguments.
@@ -26,7 +27,9 @@ static void parse_cli_args(int argc, char** argv, int* user_id, int* service_typ
         long val;
         switch (opt) {
             case 'l':
-                setenv("PO_LOG_LEVEL", optarg, 1);
+                if (setenv("PO_LOG_LEVEL", optarg, 1) != 0) {
+                    fprintf(stderr, "Warning: Failed to set PO_LOG_LEVEL: %s\n", strerror(errno));
+                }
                 break;
             case 'i': 
                 val = strtol(optarg, &endptr, 10);
@@ -49,7 +52,7 @@ int main(int argc, char** argv) {
     po_sort_init();
 
     if (user_id == -1 || service_type == -1) {
-        fprintf(stderr, "Usage: %s -i <id> -s <type>\n", argv[0]);
+        fprintf(stderr, "Usage: %s [-l <log_level>] -i <id> -s <type>\n", argv[0]);
         return 1;
     }
 
