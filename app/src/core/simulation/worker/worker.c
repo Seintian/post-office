@@ -1,25 +1,25 @@
 /**
  * @file worker.c
  * @brief Worker Process Entry Point.
- * 
+ *
  * This program acts as a launcher for worker threads. It parses configuration
  * and spawns the required number of worker threads to service user requests.
  */
 
 #define _POSIX_C_SOURCE 200809L
 
-#include "runtime/worker_loop.h"
-#include "../ipc/simulation_protocol.h"
-
-#include <postoffice/log/logger.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <pthread.h>
 #include <getopt.h>
 #include <postoffice/concurrency/threadpool.h>
 #include <postoffice/concurrency/waitgroup.h>
+#include <postoffice/log/logger.h>
 #include <postoffice/sort/sort.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#include "../ipc/simulation_protocol.h"
+#include "runtime/worker_loop.h"
 
 typedef struct {
     int worker_id;
@@ -32,8 +32,9 @@ typedef struct {
 /**
  * @brief Thread entry point for an individual worker.
  */
-static void execution_task_wrapper(void* arg) {
-    worker_thread_context_t* ctx = (worker_thread_context_t*)arg;
+static void execution_task_wrapper(void *arg) {
+    worker_thread_context_t *ctx = (worker_thread_context_t *)arg;
+    LOG_DEBUG("Thread started for Worker %d", ctx->worker_id);
     run_worker_service_loop(ctx->worker_id, ctx->service_type, ctx->shm, ctx->sync_ctx);
     waitgroup_t *wg = ctx->wg;
     free(ctx);
@@ -43,33 +44,38 @@ static void execution_task_wrapper(void* arg) {
 /**
  * @brief Parses command line arguments for the worker process.
  */
-static void parse_cli_args(int argc, char** argv, int* worker_id, int* service_type, int* n_workers) {
+static void parse_cli_args(int argc, char **argv, int *worker_id, int *service_type,
+                           int *n_workers) {
     int opt;
     while ((opt = getopt(argc, argv, "l:i:s:w:")) != -1) {
         char *endptr;
         long val;
         switch (opt) {
-            case 'l':
-                setenv("PO_LOG_LEVEL", optarg, 1);
-                break;
-            case 'i': 
-                val = strtol(optarg, &endptr, 10);
-                if (*endptr == '\0' && val >= 0) *worker_id = (int)val;
-                break;
-            case 's': 
-                val = strtol(optarg, &endptr, 10);
-                if (*endptr == '\0' && val >= 0) *service_type = (int)val;
-                break;
-            case 'w':
-                val = strtol(optarg, &endptr, 10);
-                if (*endptr == '\0' && val > 0) *n_workers = (int)val;
-                break;
-            default: break;
+        case 'l':
+            setenv("PO_LOG_LEVEL", optarg, 1);
+            break;
+        case 'i':
+            val = strtol(optarg, &endptr, 10);
+            if (*endptr == '\0' && val >= 0)
+                *worker_id = (int)val;
+            break;
+        case 's':
+            val = strtol(optarg, &endptr, 10);
+            if (*endptr == '\0' && val >= 0)
+                *service_type = (int)val;
+            break;
+        case 'w':
+            val = strtol(optarg, &endptr, 10);
+            if (*endptr == '\0' && val > 0)
+                *n_workers = (int)val;
+            break;
+        default:
+            break;
         }
     }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     int worker_id = -1;
     int service_type = -1;
     int n_workers = 0;
@@ -108,20 +114,20 @@ int main(int argc, char** argv) {
         LOG_INFO("Launching %d worker threads...", n_workers);
 
         for (int i = 0; i < n_workers; i++) {
-            worker_thread_context_t* ctx = malloc(sizeof(worker_thread_context_t));
+            worker_thread_context_t *ctx = malloc(sizeof(worker_thread_context_t));
             ctx->worker_id = i;
             ctx->service_type = i % SIM_MAX_SERVICE_TYPES; // Round-robin assignment
             ctx->shm = shm;
             ctx->sync_ctx = &sync_ctx; // Pass reference
             ctx->wg = wg;
-            
+
             wg_add(wg, 1);
             tp_submit(tp, execution_task_wrapper, ctx);
         }
 
         // Wait for completion
         wg_wait(wg);
-        
+
         wg_destroy(wg);
         atomic_fetch_sub(&shm->stats.active_threads, 1);
         atomic_fetch_sub(&shm->stats.connected_threads, (uint32_t)n_workers + 1);
@@ -132,7 +138,7 @@ int main(int argc, char** argv) {
         // Single-process Mode (Legacy/Debug)
         // Create dummy sync context for single-process fallback
         worker_sync_t sync_ctx;
-        pthread_barrier_init(&sync_ctx.barrier, NULL, 1); 
+        pthread_barrier_init(&sync_ctx.barrier, NULL, 1);
         sync_ctx.current_day = 0;
         sync_ctx.shutdown_signal = 0;
 

@@ -94,7 +94,7 @@ EXPLODE_INI_PATH       = $(CONFIG_DIR)/explode.ini
 
 # *** Compiler flags *** #
 
-INCLUDES_I = -I$(INCLUDE_DIR) -I$(POSTOFFICE_INCLUDE_DIR) -I$(THIRDPARTY_INCLUDE_DIR)
+INCLUDES_I = -I$(INCLUDE_DIR) -I$(POSTOFFICE_INCLUDE_DIR) -isystem $(THIRDPARTY_INCLUDE_DIR)
 LIBS_I     = -Ilibs -I$(RING0_DIR)/postoffice -I$(RING1_DIR)/postoffice -I$(RING2_DIR)/postoffice -I$(RING3_DIR)/postoffice -I$(RING4_DIR)/postoffice -I$(THIRDPARTY_LIBS_DIR)
 CORE_I     = -I$(CORE_SRC_DIR)/main -I$(CORE_SRC_DIR)/simulation
 SRC_I      = -I$(SRC_DIR)
@@ -357,6 +357,14 @@ explode:
 	@echo "> Makefile: Running simulation with EXPLODE configuration..."
 	@$(MAKE) start CONFIG="$(EXPLODE_INI_PATH)"
 
+# Separate CFLAGS for post_office_main (relaxed warnings for Clay compatibility)
+MAIN_CFLAGS = $(UTILITY_FLAGS) $(OPT_FLAGS) $(SECURITY_FLAGS)
+ifeq ($(DEV),true)
+	MAIN_CFLAGS += $(DEBUGGING_FLAGS) $(SANITIZERS_FLAGS)
+else
+	MAIN_CFLAGS += $(PRODUCTION_FLAGS)
+endif
+
 # Compile all executables
 all: $(ALL_TARGETS)
 
@@ -474,7 +482,7 @@ help:
 
 # Create executables
 $(MAIN_EXEC): $(MAIN_OBJS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
+	$(CC) $(MAIN_CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(DIRECTOR_EXEC): $(DIRECTOR_OBJS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
