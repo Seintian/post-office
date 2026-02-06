@@ -168,7 +168,7 @@ void apply_configuration_to_shared_memory(director_config_t *cfg, sim_shm_t *shm
     shm->params.n_workers = cfg->worker_count;
     shm->params.is_headless = cfg->is_headless ? 1 : 0;
 
-    // Barrier synchronization: 1 Worker Process + Users Manager + Ticket Issuer
+    // Barrier synchronization: 1 Worker Process + Users Manager + Work Broker
     // We treat the Worker Process as a single participant representing all threads.
     atomic_store(&shm->sync.required_count, 1 + 2);
 

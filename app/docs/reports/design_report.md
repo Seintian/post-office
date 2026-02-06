@@ -29,17 +29,18 @@ The central orchestrator process that:
 
 - Initializes and manages all IPC resources
 - Creates and coordinates child processes
-- Controls the workflow of the simulation
-- Maintains the global state and statistics
+- Implements **Dynamic Load Balancing** via worker reassignment
+- Controls the workflow of the simulation and maintains global state
 - Handles cleanup of resources on termination
 
-#### Ticket Issuer
+#### Work Broker
 
-Manages ticket allocation for the various post office services:
+Replaces the legacy Ticket Issuer to provide intelligent distribution:
 
-- Maintains a queue for service requests
-- Issues tickets to users based on availability
-- Synchronizes with the director process
+- Manages **Priority Queues** for all post office services
+- Distinguishes between **VIP** and standard service requests
+- Interacts with workers to distribute tasks based on priority
+- Synchronizes ticket sequences across the fleet
 
 #### Worker
 
@@ -54,10 +55,10 @@ Specialized processes that:
 
 Processes that:
 
-- Request services from the ticket issuer
-- Wait for service to be available
-- Have configurable service probability parameters
-- Can make multiple service requests
+- Request services from the work broker
+- Support for **Tiered Service Levels** (10% chance to be a VIP)
+- Wait for service completion or office closure
+- Configurable service probability and multi-request support
 
 #### Users Manager
 
@@ -139,7 +140,12 @@ All of these values are printed via `log_info()`. (CSV export is planned for fut
     - Provides key-value storage and retrieval
     - Supports various operations like insertion, removal and lookup
 
-2. **`prime`**
+2. **`priority_queue`**
+    - Indexed Min-Heap implementation for task scheduling
+    - Supports $O(\log N)$ insertion and arbitrary removal
+    - Uses a hashtable to track internal element positions for efficiency
+
+3. **`prime`**
     - Simple library for prime number operations
     - Used in hashing algorithms
     - Provides functions to check if a number is prime and find the next prime
@@ -192,28 +198,11 @@ Used for request handling between users, ticket issuer, and workers. Legacy expl
 
 ### Initialization Process
 
-1. The Director process:
-    - Loads configuration from INI files
-    - Initializes IPC resources
-    - Creates child processes (Ticket Issuer, Workers, Users)
-    - Synchronizes with all processes before starting simulation
-
-2. Each child process:
-    - Connects to IPC resources created by the Director
-    - Decrements the process synchronization semaphore
-    - Waits for Director to signal the start of simulation
-
-### Simulation Flow
-
-1. Director synchronizes all processes:
-    - Assigns worker seats to services
-    - Sets available services in shared memory
-    - Starts a timer for the day's duration
-
-2. Ticket Issuer:
-    - Receives service requests from users
-    - Checks service availability
-    - Issues tickets for available services
+1. The Director process initializes configurations, sets up IPC, and spawns the **Work Broker**, Workers, and Users.
+2. Users generate requests, designating them as **VIP** or standard based on simulated luck.
+3. The **Work Broker** accepts requests and enqueues them into service-specific **Priority Queues**.
+4. Workers request work items; the Broker pops the highest priority task (VIPs first, then FIFO).
+5. The Director monitors queue depths in shared memory, performing **Worker Reassignment** if the imbalance exceeds thresholds.
 
 3. Workers:
     - Wait for service requests
@@ -280,10 +269,10 @@ The system is initialized in each process via the `init_logger` macro, which con
     - Allows all processes to react to state changes
     - Uses pthread rwlock for safe concurrent access
 
-5. **Message Queues for Service Requests**:
-    - Natural fit for queue-based systems like ticket issuing
-    - Provides built-in synchronization
-    - Allows priority-based processing
+5. **Message Queues and Priority Queues**:
+    - Combines socket-based messaging for coordination with internal priority heaps for scheduling
+    - Provides structured, priority-aware task distribution
+    - Allows for $O(\log N)$ scaling as the number of requests grows
 
 6. **Configuration via INI Files**:
     - Simple, human-readable format

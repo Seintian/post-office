@@ -7,8 +7,9 @@ This document maps the current `director/` submodules to the official project sp
 The Director process orchestrates the whole simulation:
 
 - Initializes configuration & shared resources.
-- Spawns the other processes (ticket issuer, operators, users).
+- Spawns the other processes (work broker, operators, users).
 - Drives the simulation clock across days.
+- Orchestrates **Dynamic Load Balancing** via threshold monitoring.
 - Collects & publishes statistics (daily + cumulative + per service).
 - Determines termination (timeout / explode threshold).
 - (Complete version) Handles dynamic user injection, multi‑request users, CSV export, live control bridge.
@@ -41,7 +42,7 @@ utils/         # Low-level lock / queue / id primitives (atomic_queue.*, spinloc
 |--------------|-----------------------|-------------------------|--------------------------|
 | 5.1 Director | Start processes, create resources, stats print per day | `director.c`, `process/`, `runtime/`, `state/`, `telemetry/` | + `ctrl_bridge/` (live control) |
 | 5.1 Stats    | Maintain totals & daily metrics | `telemetry/` | + CSV exporter (planned; not yet implemented) |
-| 5.2 Ticket Issuer | Provide tickets to users | (Implemented outside here; director coordinates via `process/` + shared queues definitions in `state/`) | Same |
+| 5.2 Work Broker | Provide prioritized tickets to users | (Implemented outside here; director coordinates via `process/` + priority data flow) | Same |
 | 5.3 Sportelli | Daily assignment & resources | `state/` (sportello structs), `schedule/` (assignment task) | Same |
 | 5.4 Operator | Operator process lifecycle, pauses, reassignment | External operator process code; coordination via `state/` & events; director gating via `runtime/` | Same + advanced telemetry |
 | 5.5 User     | Users choose service, queue & wait | External user process code; queue + counters in `state/` | Multi‑request logic tracked in `state/` |
@@ -63,7 +64,7 @@ static void director_run_loop(...);
 static void director_shutdown(...);
 ```
 
-Invokes: `config/` → `state/` init → `process/` spawn sequence → wait for child ready barrier → enters `runtime/` loop. On termination prints final stats and root cause.
+Invokes: `config/` → `state/` init → `process/` spawn sequence → wait for child ready barrier → enters `runtime/` loop. On termination prints final stats and root cause. Coordinates closely with the **Work Broker** for task distribution.
 
 ### 3.2 `config/`
 
@@ -110,7 +111,7 @@ bool runtime_step_day(struct sim_context*); // returns false when termination re
 enum sim_termination_cause runtime_check_termination(...);
 ```
 
-Calculates simulated minute progression via sleep / nanosleep scaled by configuration OR triggers events to children via IPC (NOT busy waiting). End-of-day triggers stats snapshot & resource reassignment.
+Calculates simulated minute progression via sleep / nanosleep scaled by configuration OR triggers events to children via IPC (NOT busy waiting). End-of-day triggers stats snapshot & resource reassignment. Periodically invokes the **Load Balancer** to reassign idle workers to overloaded queues.
 
 ### 3.5 `schedule/`
 

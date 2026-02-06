@@ -59,19 +59,14 @@ Configuration files are located in `app/config/`:
 
 You can specify a configuration file via the `CONFIG` environment variable or when prompted by `make start`.
 
-## Project Structure
-
-The codebase is organized into "rings" of increasing abstraction:
-
-```text
 ├── app
 │   ├── config/              # Runtime configurations
-│   ├── docs/                # Additional documentation
-│   ├── include/             # Public headers
+│   ├── docs/                # Reports and technical guides
+│   ├── include/             # Public headers (Priority Queue, Net, Perf)
 │   │
 │   ├── libs/                # Libraries arranged by stability/dependency rings
 │   │   ├── ring0/           # Fundamental: random, vector, thirdparty (inih, lmdb, etc.)
-│   │   ├── ring1/           # Core Utils: hashtable, sysinfo, concurrency
+│   │   ├── ring1/           # Core Utils: hashtable, priority_queue, sysinfo
 │   │   ├── ring2/           # Instrumentation: metrics, log, perf core
 │   │   ├── ring3/           # Storage/Crash: storage, backtrace, zerocopy
 │   │   └── ring4/           # Application-Level: net, tui
@@ -79,15 +74,22 @@ The codebase is organized into "rings" of increasing abstraction:
 │   ├── src/                 # Application Source
 │   │   ├── core/
 │   │   │   ├── main/        # Entry point
-│   │   │   └── simulation/  # Simulation processes (director, worker, user, etc.)
+│   │   │   └── simulation/  # Simulation (director, worker, work_broker, etc.)
 │   │   └── utils/           # App-specific utilities
 │   │
 │   ├── tests/               # Unit and integration tests
 │   └── Makefile             # Main build script
 │
-├── ARCHITECTURE.md          # Architectural documentation
-└── README.md                # This file
+├── ARCHITECTURE.md          # Multi-process orchestration map
+└── README.md                # Overview and quick start
 ```
+
+## Advanced Features
+
+- **Dynamic Load Balancing**: Real-time worker reassignment based on queue imbalance.
+- **Tiered Quality of Service**: Priority-based scheduling for VIP users.
+- **Work Broker Ecosystem**: Multi-threaded distribution layer replacing static issuance.
+- **Indexed Min-Heaps**: Specialized data structures for efficient task management.
 
 ## Network Protocol
 

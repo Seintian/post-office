@@ -29,18 +29,18 @@ Design principles:
 
 | Process | Responsibility | Key Interactions |
 |---------|----------------|------------------|
-| Director | Global coordinator: spawns others, monitors liveness, orchestrates shutdown | users_manager, workers, ticket_issuer, dashboard |
-| Worker | Executes assigned tasks / workloads derived from tickets | ticket_issuer (indirect), shared config / logging |
-| User | Simulates client/request generator; produces load | ticket_issuer (requests), metrics, logging |
+| Director | Global coordinator: spawns others, monitors liveness, orchestrates load balancing and shutdown | users_manager, workers, work_broker, dashboard |
+| Worker | Executes assigned tasks / workloads derived from tickets | work_broker (indirect), shared config / logging |
+| User | Simulates client/request generator; produces load | work_broker (requests), metrics, logging |
 | Users Manager | Supervises dynamic user processes, aggregates telemetry | director (reports), users (lifecycle) |
-| Ticket Issuer | Allocates unique ticket IDs / sequencing, ensures monotonicity | users, workers, logging |
+| Work Broker | Orchestrates priority-aware ticket distribution and worker assignments | users, workers, logging |
 | Main / Dashboard | Aggregated UI / TUI controller displaying system state | metrics, storage (optional), perf counters |
 
 Lifecycle summary:
 
 1. Director initializes core subsystems (logging, configs, metrics/perf, storage).
-2. Spawns ticket issuer, users manager (which spawns users), and workers.
-3. Steady-state: users request tickets; workers consume tasks; metrics sampled; optional snapshots taken.
+2. Spawns work broker, users manager (which spawns users), and workers.
+3. Steady-state: users request tickets; broker prioritizes VIPs; workers consume tasks; load balancer reassigns workers; metrics sampled.
 4. Shutdown: director signals children (graceful), drains outstanding tasks, finalizes storage & perf flush.
 
 Shutdown guarantees: best-effort flush of logstore & metrics; late user/worker exits do not block but are logged.
@@ -61,6 +61,7 @@ The codebase is organized into strict abstraction layers ("rings") to manage dep
 ### Ring 1: Core Utilities
 *Dependencies: Ring 0*
 - **Hashtable/Hashset**: Generic containers.
+- **Priority Queue**: Indexed Min-Heap for $O(\log N)$ task scheduling.
 - **Sysinfo**: System capability probes.
 - **Concurrency**: Atomics and threading primitives.
 
@@ -94,7 +95,7 @@ The codebase is organized into strict abstraction layers ("rings") to manage dep
 | workers (N)      |        | Ring 3: Storage, Crash  |        | epoll, filesys  |
 | users (M)        |        | Ring 2: Metrics, Log    |        |                 |
 | users_manager    |        | Ring 1: Core Utils      |        | LMDB env files  |
-| ticket_issuer    |        | Ring 0: Foundations     |        |                 |
+| work_broker      |        | Ring 0: Foundations     |        |                 |
 | dashboard/main   |        +-------------------------+        +-----------------+
 +------------------+
 ```
@@ -105,10 +106,10 @@ The codebase is organized into strict abstraction layers ("rings") to manage dep
 
 ### Ticket Lifecycle
 
-1. User requests a ticket (ID allocation via ticket issuer).
-2. Ticket distributed to a worker or queued.
-3. Worker processes workload associated with the ticket (optional logging / metrics increments).
-4. Result or acknowledgment surfaced to dashboard or ignored based on simulation mode.
+1. User requests a ticket via the **Work Broker** (including VIP priority flags).
+2. Broker enqueues the request in a **Priority Queue** (Min-Heap).
+3. Broker distributes tickets to workers based on priority and arrival time.
+4. Worker processes workload; results surfaced to dashboard or metrics.
 
 ### Storage Path
 
@@ -154,8 +155,10 @@ Error semantics: operations return -1 + errno; transient (`EAGAIN`/`EINTR`) hand
 
 | Aspect | Mechanism | Rationale |
 |--------|-----------|-----------|
+| Load Balancing | Threshold-based worker reassignment | Dynamic adaptation to bursty traffic. |
+| Prioritization | Indexed Min-Heap (Priority Queue) | Tiered service levels (VIP) with fast arbitrary removal. |
 | Counters/Timers | perf primitives (counters, histograms, timers) | Low overhead, composable. |
-| Metrics Facade | macros compile out when disabled | Zero-cost in release builds lacking instrumentation. |
+| Metrics Facade | macros compile out when disabled | Zero cost in release builds lacking instrumentation. |
 | Batching | ring buffer + batcher combine writes | Reduced syscall / lock frequency. |
 | Zero-copy | pre-allocated buffers (zerocopy.c) | Minimize allocations & copies. |
 | Sysinfo | one-shot environment probe | Capacity planning & tuning hints. |
@@ -207,7 +210,7 @@ INI-based configuration (inih) wrapped by `configs.h`.
 | Alternate persistence | Implement new backend parallel to `db_lmdb.*`; expose adapter in storage init. |
 | Additional metrics | Add perf counters + macro wrappers; ensure compile-out branch consistent. |
 | New protocol messages | Extend protocol enum + framing logic; bump version if wire incompatibility. |
-| Pluggable schedulers | Introduce strategy struct consumed by worker execution loop. |
+| Pluggable schedulers | Introduce strategy struct consumed by work broker execution loop. |
 
 ---
 
@@ -277,10 +280,12 @@ Suggested future enhancements:
 | Term | Meaning |
 |------|---------|
 | Ticket | Unique ID representing a unit of simulated work. |
+| Work Broker | Multi-threaded coordinator for prioritized ticket distribution. |
 | Logstore | Append-only file storing serialized entries (payloads or events). |
 | Index | In-memory+LMDB mapping from key → (offset,length) into logstore. |
 | Perf primitives | Low-level counters/timers/histograms capturing runtime metrics. |
 | Ring buffer | Lock-minimized single/multi-producer buffer used for batching. |
+| Priority Queue | Indexed Min-Heap supporting prioritized scheduling and $O(\log N)$ removal. |
 
 ---
 ---

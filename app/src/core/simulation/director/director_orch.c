@@ -1,7 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "director_orch.h"
 
-#include <errno.h>
 #include <postoffice/log/logger.h>
 #include <postoffice/vector/vector.h>
 #include <signal.h>
