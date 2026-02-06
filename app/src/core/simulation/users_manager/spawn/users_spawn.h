@@ -9,8 +9,8 @@
 #define MAX_USER_CAPACITY 2000
 
 typedef struct {
-    volatile atomic_bool is_occupied;
-    volatile atomic_bool should_continue_running;
+    atomic_bool is_occupied;
+    atomic_bool should_continue_running;
     int worker_idx;
 } user_slot_t;
 

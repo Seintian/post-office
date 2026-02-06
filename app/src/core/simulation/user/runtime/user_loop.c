@@ -25,7 +25,6 @@
 #include "ipc/sim_client.h"
 #include "ipc/simulation_ipc.h"
 #include "ipc/simulation_protocol.h"
-#include "utils/configs.h"
 
 // --- Initialization ---
 
@@ -92,7 +91,11 @@ static bool obtain_ticket(sim_shm_t *shm, int service_type, volatile atomic_bool
 
     // Timeout
     struct timeval tv = {.tv_usec = 500000};
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+        LOG_ERROR("Failed to set SO_RCVTIMEO on socket: %s", strerror(errno));
+        po_socket_close(fd);
+        return false;
+    }
 
     msg_ticket_req_t req = {.requester_pid = getpid(),
                             .requester_tid = (pid_t)syscall(SYS_gettid),

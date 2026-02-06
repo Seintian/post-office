@@ -25,7 +25,10 @@ void teardown_user_runtime(sim_shm_t *shm);
  * @param user_id The unique ID of the user.
  * @param service_type The service this user is seeking.
  * @param shm Pointer to shared memory.
- * @param should_continue_flag Optional atomic flag to control loop execution from external threads.
+ * @param should_continue_flag Atomic flag to control loop execution. May be NULL (loop runs unconditionally).
+ *                             If non-NULL, flag is checked at loop boundaries and before blocking I/O operations.
+ *                             Caller must ensure the flag is properly synchronized (atomic operations) when updating
+ *                             from external threads; the flag is treated as a request to terminate gracefully.
  * @return 0 on success, non-zero on termination/error.
  */
 int run_user_simulation_loop(int user_id, int service_type, sim_shm_t *shm,
