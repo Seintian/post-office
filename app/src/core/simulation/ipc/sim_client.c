@@ -134,7 +134,7 @@ void sim_client_setup_signals(void (*handler)(int, siginfo_t *, void *)) {
         exit(1);
     }
 
-    if (sigutil_handle(SIGPIPE, SIG_IGN, 0) != 0) {
-        LOG_WARN("Failed to ignore SIGPIPE");
+    if (sigutil_block(SIGPIPE) != 0) {
+        LOG_WARN("Failed to block SIGPIPE");
     }
 }

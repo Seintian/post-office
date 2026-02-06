@@ -31,6 +31,7 @@ extern TEST_GROUP_RUNNER(SIGNALS);
 extern TEST_GROUP_RUNNER(THREADPOOL);
 extern TEST_GROUP_RUNNER(SAMPLER);
 extern TEST_GROUP_RUNNER(SORT);
+extern TEST_GROUP_RUNNER(PRIORITY_QUEUE);
 
 static void RunAllTests(void) {
     RUN_TEST_GROUP(ARGV);
@@ -62,6 +63,7 @@ static void RunAllTests(void) {
     RUN_TEST_GROUP(THREADPOOL);
     RUN_TEST_GROUP(SAMPLER);
     RUN_TEST_GROUP(SORT);
+    RUN_TEST_GROUP(PRIORITY_QUEUE);
 }
 
 int main(int argc, const char *argv[]) {
