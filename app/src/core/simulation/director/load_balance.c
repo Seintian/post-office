@@ -72,63 +72,85 @@ static int find_idle_worker_for_service(sim_shm_t *shm, int service_type, uint32
     return -1;
 }
 
-int load_balance_check(sim_shm_t *shm, load_balance_stats_t *stats) {
+/**
+ * @brief Analysis result structure.
+ */
+typedef struct {
+    int overloaded_queue_idx;
+    uint32_t overloaded_count;
+    int underloaded_queue_idx;
+    uint32_t underloaded_count;
+    uint32_t ratio;
+    bool should_rebalance;
+} lb_analysis_t;
+
+/**
+ * @brief Analyze the current state of queues to determine if rebalancing is needed.
+ * This function is pure (no side effects on the system state).
+ */
+static lb_analysis_t load_balance_analyze(sim_shm_t *shm) {
+    lb_analysis_t result = {-1, 0, -1, 0, 0, false};
+
     if (!g_config.enabled || !shm) {
-        return 0;
+        return result;
     }
 
-    if (stats) {
-        stats->checks_performed++;
-    }
-
-    uint32_t max_count = 0;
-    uint32_t min_count = 0;
-    int overloaded = find_overloaded_queue(shm, &max_count);
-    int underloaded = find_underloaded_queue(shm, &min_count);
+    result.overloaded_queue_idx = find_overloaded_queue(shm, &result.overloaded_count);
+    result.underloaded_queue_idx = find_underloaded_queue(shm, &result.underloaded_count);
 
     /* Sanity checks */
-    if (overloaded < 0 || underloaded < 0 || overloaded == underloaded) {
-        return 0;
+    if (result.overloaded_queue_idx < 0 || result.underloaded_queue_idx < 0 ||
+        result.overloaded_queue_idx == result.underloaded_queue_idx) {
+        return result;
     }
 
     /* Ignore if max queue is below minimum depth threshold */
-    if (max_count < g_config.min_queue_depth) {
-        return 0;
+    if (result.overloaded_count < g_config.min_queue_depth) {
+        return result;
     }
 
-    /* Check imbalance ratio: threshold of 200 means max >= 2x min */
-    /* Avoid divide-by-zero: treat min=0 as significant imbalance if max >= min_depth */
-    uint32_t ratio;
-    if (min_count == 0) {
-        ratio = (max_count >= g_config.min_queue_depth) ? 1000 : 0;
+    /* Check imbalance ratio */
+    if (result.underloaded_count == 0) {
+        result.ratio = (result.overloaded_count >= g_config.min_queue_depth) ? 1000 : 0;
     } else {
-        ratio = (max_count * 100) / min_count;
+        result.ratio = (result.overloaded_count * 100) / result.underloaded_count;
     }
 
-    if (ratio < g_config.imbalance_threshold) {
-        return 0; /* No significant imbalance */
+    if (result.ratio >= g_config.imbalance_threshold) {
+        result.should_rebalance = true;
     }
 
-    LOG_DEBUG("Load imbalance detected: queue[%d]=%u vs queue[%d]=%u (ratio=%u%%)", overloaded,
-              max_count, underloaded, min_count, ratio);
+    return result;
+}
+
+/**
+ * @brief Apply rebalancing based on analysis result.
+ * This function performs the side effects (worker reassignment).
+ */
+static int load_balance_apply(sim_shm_t *shm, const lb_analysis_t *analysis,
+                              load_balance_stats_t *stats) {
+    LOG_DEBUG("Load imbalance detected: queue[%d]=%u vs queue[%d]=%u (ratio=%u%%)",
+              analysis->overloaded_queue_idx, analysis->overloaded_count,
+              analysis->underloaded_queue_idx, analysis->underloaded_count, analysis->ratio);
 
     /* Find an idle worker on the underloaded queue to reassign */
     uint32_t n_workers = shm->params.n_workers;
-    int worker_idx = find_idle_worker_for_service(shm, underloaded, n_workers);
+    int worker_idx = find_idle_worker_for_service(shm, analysis->underloaded_queue_idx, n_workers);
 
     if (worker_idx < 0) {
-        LOG_TRACE("No idle workers on queue[%d] to reassign", underloaded);
+        LOG_TRACE("No idle workers on queue[%d] to reassign", analysis->underloaded_queue_idx);
         return 0;
     }
 
     /* Perform reassignment */
     LOG_INFO("Load balance: reassigning worker %d from queue %d to queue %d", worker_idx,
-             underloaded, overloaded);
+             analysis->underloaded_queue_idx, analysis->overloaded_queue_idx);
 
-    atomic_store(&shm->workers[worker_idx].service_type, overloaded);
+    atomic_store(&shm->workers[worker_idx].service_type, analysis->overloaded_queue_idx);
     atomic_store(&shm->workers[worker_idx].reassignment_pending, 1);
 
     /* Wake workers on the overloaded queue */
+    int overloaded = analysis->overloaded_queue_idx;
     pthread_mutex_lock(&shm->queues[overloaded].mutex);
     pthread_cond_broadcast(&shm->queues[overloaded].cond_added);
     pthread_mutex_unlock(&shm->queues[overloaded].mutex);
@@ -139,6 +161,20 @@ int load_balance_check(sim_shm_t *shm, load_balance_stats_t *stats) {
     }
 
     return 1;
+}
+
+int load_balance_check(sim_shm_t *shm, load_balance_stats_t *stats) {
+    if (stats) {
+        stats->checks_performed++;
+    }
+
+    lb_analysis_t analysis = load_balance_analyze(shm);
+
+    if (analysis.should_rebalance) {
+        return load_balance_apply(shm, &analysis, stats);
+    }
+
+    return 0;
 }
 
 void load_balance_log_stats(const load_balance_stats_t *stats) {

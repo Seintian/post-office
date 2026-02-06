@@ -14,19 +14,9 @@
 #include "ipc/simulation_ipc.h"
 #include "ipc/simulation_protocol.h"
 
-// --- Broker Item Structure ---
-typedef struct {
-    uint32_t ticket_number;
-    int is_vip;
-    pid_t requester_pid;
-    struct timespec arrival_time;
-} broker_item_t;
+/* broker_item_t is defined in broker_core.h */
 
-// --- External Globals (defined in work_broker.c) ---
-extern po_priority_queue_t *g_queues[SIM_MAX_SERVICE_TYPES];
-extern pthread_mutex_t g_queue_mutexes[SIM_MAX_SERVICE_TYPES];
-
-void broker_handler_process_request(int client_fd, sim_shm_t *shm) {
+void broker_handler_process_request(int client_fd, broker_ctx_t *ctx) {
     LOG_DEBUG("Broker: Handler invoked for client_fd=%d", client_fd);
 
     po_socket_set_blocking(client_fd);
@@ -56,7 +46,7 @@ void broker_handler_process_request(int client_fd, sim_shm_t *shm) {
         }
 
         // 1. Issue Ticket
-        uint32_t ticket = atomic_fetch_add(&shm->ticket_seq, 1);
+        uint32_t ticket = atomic_fetch_add(&ctx->shm->ticket_seq, 1);
 
         // 2. Add to Priority Queue
         broker_item_t *item = malloc(sizeof(broker_item_t));
@@ -66,15 +56,15 @@ void broker_handler_process_request(int client_fd, sim_shm_t *shm) {
             item->requester_pid = req.requester_pid;
             clock_gettime(CLOCK_MONOTONIC, &item->arrival_time);
 
-            pthread_mutex_lock(&g_queue_mutexes[req.service_type]);
-            if (po_priority_queue_push(g_queues[req.service_type], item) != 0) {
+            pthread_mutex_lock(&ctx->queue_mutexes[req.service_type]);
+            if (po_priority_queue_push(ctx->queues[req.service_type], item) != 0) {
                 LOG_ERROR("Broker: Failed to push to queue %d", req.service_type);
                 free(item);
             } else {
                 LOG_DEBUG("Broker: Enqueued Ticket %u (VIP=%d) for Service %d", ticket, req.is_vip,
                           req.service_type);
             }
-            pthread_mutex_unlock(&g_queue_mutexes[req.service_type]);
+            pthread_mutex_unlock(&ctx->queue_mutexes[req.service_type]);
         }
 
         // 3. Send Ack
@@ -93,9 +83,9 @@ void broker_handler_process_request(int client_fd, sim_shm_t *shm) {
         }
 
         // 1. Pop from Priority Queue
-        pthread_mutex_lock(&g_queue_mutexes[req.service_type]);
-        broker_item_t *item = po_priority_queue_pop(g_queues[req.service_type]);
-        pthread_mutex_unlock(&g_queue_mutexes[req.service_type]);
+        pthread_mutex_lock(&ctx->queue_mutexes[req.service_type]);
+        broker_item_t *item = po_priority_queue_pop(ctx->queues[req.service_type]);
+        pthread_mutex_unlock(&ctx->queue_mutexes[req.service_type]);
 
         msg_work_item_t resp = {0};
         if (item) {
