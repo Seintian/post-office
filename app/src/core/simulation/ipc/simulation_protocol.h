@@ -55,10 +55,11 @@ typedef enum {
  * Aligned to cache line to avoid false sharing.
  */
 typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) worker_status_s {
-    atomic_int state;           // worker_state_t
-    atomic_uint current_ticket; // Ticket # being served
-    atomic_int service_type;    // Current service type
-    atomic_int pid;             // Worker PID (atomic access)
+    atomic_int state;                // worker_state_t
+    atomic_uint current_ticket;      // Ticket # being served
+    atomic_int service_type;         // Current service type
+    atomic_int pid;                  // Worker PID (atomic access)
+    atomic_int reassignment_pending; // 1 = worker should check for new assignment
 } worker_status_t;
 // Compile-time check to ensure no false sharing (size must be multiple of cache line)
 _Static_assert(sizeof(worker_status_t) % PO_CACHE_LINE_MAX == 0, "worker_status_t size mismatch");

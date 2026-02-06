@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include "director_orch.h"
+#include "load_balance.h"
 
 void synchronize_simulation_barrier(sim_shm_t *shm, int day, volatile sig_atomic_t *running_flag) {
     if (!*running_flag)
@@ -59,7 +60,8 @@ void synchronize_simulation_barrier(sim_shm_t *shm, int day, volatile sig_atomic
     LOG_DEBUG("Day %d Synchronized.", day);
 }
 
-void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *running_flag,
+void execute_simulation_clock_loop(sim_shm_t *shm, const director_config_t *cfg,
+                                   volatile sig_atomic_t *running_flag,
                                    volatile sig_atomic_t *sigchld_flag, int expected_users) {
     if (expected_users > 0) {
         LOG_INFO("Waiting for %d users to connect...", expected_users);
@@ -72,6 +74,16 @@ void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *runnin
         LOG_INFO("All expected users connected (%u/%d). Starting.",
                  atomic_load(&shm->stats.connected_users), expected_users);
     }
+
+    /* Initialize load balancing */
+    load_balance_config_t lb_cfg = {
+        .enabled = cfg ? cfg->lb_enabled : false,
+        .check_interval = cfg ? cfg->lb_check_interval : 5,
+        .imbalance_threshold = cfg ? cfg->lb_imbalance_threshold : 200,
+        .min_queue_depth = cfg ? cfg->lb_min_queue_depth : 3,
+    };
+    load_balance_init(&lb_cfg);
+    load_balance_stats_t lb_stats = {0};
 
     int day = 1;
     int hour = 0;
@@ -129,6 +141,12 @@ void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *runnin
             }
         }
 
+        /* Load Balance Check (during office hours) */
+        if (lb_cfg.enabled && hour >= 8 && hour < 17) {
+            if (lb_cfg.check_interval == 0 || (minute % (int)lb_cfg.check_interval == 0)) {
+                load_balance_check(shm, &lb_stats);
+            }
+        }
         // Advance
         minute++;
         if (minute >= 60) {
@@ -157,5 +175,6 @@ void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *runnin
             }
         }
     }
+    load_balance_log_stats(&lb_stats);
     atomic_store(&shm->time_control.sim_active, false);
 }

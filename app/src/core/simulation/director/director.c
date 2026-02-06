@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
     spawn_simulation_subsystems(&cfg);
 
     // 7. Clock Loop
-    execute_simulation_clock_loop(shm, &g_running, &g_sigchld_received, cfg.initial_users);
+    execute_simulation_clock_loop(shm, &cfg, &g_running, &g_sigchld_received, cfg.initial_users);
 
     // 8. Shutdown
     LOG_INFO("Director shutting down...");

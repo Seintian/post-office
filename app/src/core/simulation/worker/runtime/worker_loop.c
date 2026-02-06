@@ -152,6 +152,17 @@ int run_worker_service_loop(int worker_id, int service_type, sim_shm_t *shm,
                  service_type);
 
         while (!g_shutdown && !atomic_load(&shm->sync.barrier_active)) {
+            /* Check for load balance reassignment */
+            if (atomic_load(&shm->workers[worker_id].reassignment_pending)) {
+                int new_service_type = atomic_load(&shm->workers[worker_id].service_type);
+                atomic_store(&shm->workers[worker_id].reassignment_pending, 0);
+                if (new_service_type != service_type) {
+                    LOG_INFO("Worker %d reassigned from service %d to %d", worker_id, service_type,
+                             new_service_type);
+                    service_type = new_service_type;
+                }
+            }
+
             uint32_t ticket = retrieve_next_ticket_broker(service_type, shm);
             if (ticket > 0) {
                 LOG_DEBUG("Worker %d acquiring ticket...", worker_id);

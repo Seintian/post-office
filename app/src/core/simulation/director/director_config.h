@@ -1,8 +1,9 @@
 #ifndef DIRECTOR_CONFIG_H
 #define DIRECTOR_CONFIG_H
 
-#include <stdint.h>
 #include <postoffice/sysinfo/sysinfo.h>
+#include <stdint.h>
+
 #include "ipc/simulation_ipc.h"
 
 // Parsed Config State
@@ -17,6 +18,12 @@ typedef struct {
     int manager_pool_size;
     int initial_users;
     int batch_users;
+
+    // Load Balancing
+    bool lb_enabled;
+    uint32_t lb_check_interval;      // Check frequency (sim minutes)
+    uint32_t lb_imbalance_threshold; // Trigger ratio (e.g., 200 = 2x)
+    uint32_t lb_min_queue_depth;     // Ignore near-empty queues
 } director_config_t;
 
 void initialize_configuration_defaults(director_config_t *cfg);
