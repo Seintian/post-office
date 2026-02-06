@@ -2,6 +2,7 @@
 #define PO_SIMULATION_PROTOCOL_H
 
 #include <postoffice/perf/cache.h> // For PO_CACHE_LINE_MAX
+#include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -67,14 +68,14 @@ _Static_assert(sizeof(worker_status_t) % PO_CACHE_LINE_MAX == 0, "worker_status_
  * Aligned to cache line.
  */
 typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) queue_status_s {
-    atomic_uint waiting_count; // Users currently in queue
-    atomic_uint total_served;  // Cumulative users served
+    atomic_uint waiting_count;        // Users currently in queue
+    atomic_uint total_served;         // Cumulative users served
     atomic_uint last_finished_ticket; // Most recently completed ticket
 
     // Synchronization for this queue
     pthread_mutex_t mutex;
-    pthread_cond_t cond_added;   // For workers to wait for tickets
-    pthread_cond_t cond_served;  // For users to wait for completion
+    pthread_cond_t cond_added;  // For workers to wait for tickets
+    pthread_cond_t cond_served; // For users to wait for completion
 
     // Ticket Queue for User->Worker handoff
     atomic_uint head;
@@ -95,7 +96,7 @@ typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) global_stats_s {
     atomic_uint total_tickets_issued;
     atomic_uint total_services_completed;
     atomic_uint total_users_spawned;
-    atomic_uint connected_users; // Users currently attached to SHM
+    atomic_uint connected_users;   // Users currently attached to SHM
     atomic_uint connected_threads; // Total threads in the entire simulation
     atomic_uint active_threads;    // Threads currently executing a task
 } global_stats_t;
@@ -133,11 +134,6 @@ typedef struct __attribute__((aligned(PO_CACHE_LINE_MAX))) sim_time_s {
     pthread_cond_t cond_tick;
 } sim_time_t;
 _Static_assert(sizeof(sim_time_t) % PO_CACHE_LINE_MAX == 0, "sim_time_t size mismatch");
-
-/**
- * @brief Main Shared Memory Structure.
- */
-#include <pthread.h>
 
 /**
  * @brief Main Shared Memory Structure.
@@ -194,6 +190,10 @@ typedef enum {
     MSG_TYPE_TICKET_RESP = 0x11,
     MSG_TYPE_CTRL_CMD = 0x20,
     MSG_TYPE_CTRL_RESP = 0x21,
+    MSG_TYPE_JOIN_QUEUE = 0x30,
+    MSG_TYPE_JOIN_ACK = 0x31,
+    MSG_TYPE_GET_WORK = 0x40,
+    MSG_TYPE_WORK_ITEM = 0x41,
     MSG_TYPE_ERR = 0xFF
 } msg_type_t;
 
@@ -213,5 +213,38 @@ typedef struct msg_ticket_resp_s {
     uint32_t ticket_number;
     service_type_t assigned_service;
 } msg_ticket_resp_t;
+
+/**
+ * @brief Request: User joining the queue (Broker Model)
+ */
+typedef struct msg_join_queue_s {
+    pid_t requester_pid;
+    service_type_t service_type;
+    int is_vip; // 1 = VIP, 0 = Normal
+} msg_join_queue_t;
+
+/**
+ * @brief Response: User joined queue, here is your ticket
+ */
+typedef struct msg_join_ack_s {
+    uint32_t ticket_number;
+    uint32_t estimated_wait_ms; // Optional hint
+} msg_join_ack_t;
+
+/**
+ * @brief Request: Worker asking for a task
+ */
+typedef struct msg_get_work_s {
+    pid_t worker_pid;
+    service_type_t service_type;
+} msg_get_work_t;
+
+/**
+ * @brief Response: Work item (Ticket) for worker
+ */
+typedef struct msg_work_item_s {
+    uint32_t ticket_number;
+    int is_vip; // For worker stats
+} msg_work_item_t;
 
 #endif // PO_SIMULATION_PROTOCOL_H

@@ -10,6 +10,7 @@
 #include <postoffice/log/logger.h>
 #include <postoffice/metrics/metrics.h>
 #include <postoffice/net/net.h>
+#include <postoffice/net/socket.h>
 #include <postoffice/random/random.h>
 #include <postoffice/sysinfo/sysinfo.h>
 #include <pthread.h>
@@ -17,6 +18,7 @@
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <utils/signals.h>
 
@@ -66,56 +68,47 @@ void teardown_worker_runtime(sim_shm_t *shm) {
     po_logger_shutdown();
 }
 
-static uint32_t retrieve_next_ticket(int service, sim_shm_t *shm) {
-    queue_status_t *q = &shm->queues[service];
+static uint32_t retrieve_next_ticket_broker(int service, sim_shm_t *shm) {
+    if (!atomic_load(&shm->time_control.sim_active))
+        return 0;
 
-    pthread_mutex_lock(&q->mutex);
-    while (!g_shutdown) {
-        if (!atomic_load(&shm->time_control.sim_active)) {
-            // If sim paused/ended?
-            // Actually barrier usage handles daily pause.
-            // But if day ended, we should break?
-        }
+    // Connect to Broker
+    // Note: In optimal design, we might keep connection open.
+    // Here we reconnect for simplicity as per current Net API usage in User.
+    // Broker handles short-lived connections fine.
+    volatile atomic_bool dummy_cont = 1;
+    int fd = sim_client_connect_issuer(&dummy_cont, shm);
+    if (fd < 0)
+        return 0;
 
-        // Check head
-        unsigned int head = atomic_load(&q->head);
-        unsigned int tail = atomic_load(&q->tail);
+    struct timeval tv = {.tv_usec = 500000};
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-        if (head != tail) {
-            // Check hours first
-            int d, h, m;
-            sim_client_read_time(shm, &d, &h, &m);
-            if (h >= 17) {
-                // Office closed, do not pick up new tickets.
-                pthread_mutex_unlock(&q->mutex);
-                return 0;
-            }
+    msg_get_work_t req = {.worker_pid = getpid(), .service_type = (service_type_t)service};
 
-            // Something in queue
-            unsigned int idx = head % 128;
-            uint32_t ticket = atomic_load(&q->tickets[idx]);
-            if (ticket != 0) {
-                atomic_store(&q->tickets[idx], 0);
-                atomic_fetch_add(&q->head, 1);
-                atomic_fetch_sub(&q->waiting_count, 1);
-                pthread_mutex_unlock(&q->mutex);
-                return ticket - 1; // Decode 1-based
-            }
-        }
-
-        // Wait
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        ts.tv_sec += 1;
-        pthread_cond_timedwait(&q->cond_added, &q->mutex, &ts);
-
-        // Check barrier sync from client logic indirectly or loop break
-        if (atomic_load(&shm->sync.barrier_active)) {
-            pthread_mutex_unlock(&q->mutex);
-            return 0; // Special case to yield to barrier
-        }
+    if (net_send_message(fd, MSG_TYPE_GET_WORK, PO_FLAG_NONE, (uint8_t *)&req, sizeof(req)) != 0) {
+        po_socket_close(fd);
+        return 0;
     }
-    pthread_mutex_unlock(&q->mutex);
+
+    po_header_t h;
+    zcp_buffer_t *p = NULL;
+    int ret = net_recv_message_blocking(fd, &h, &p);
+    po_socket_close(fd);
+
+    if (ret != 0 || !p || h.msg_type != MSG_TYPE_WORK_ITEM) {
+        if (p)
+            net_zcp_release_rx(p);
+        return 0;
+    }
+
+    msg_work_item_t resp;
+    memcpy(&resp, p, sizeof(resp));
+    net_zcp_release_rx(p);
+
+    if (resp.ticket_number > 0) {
+        return resp.ticket_number;
+    }
     return 0;
 }
 
@@ -159,7 +152,7 @@ int run_worker_service_loop(int worker_id, int service_type, sim_shm_t *shm,
                  service_type);
 
         while (!g_shutdown && !atomic_load(&shm->sync.barrier_active)) {
-            uint32_t ticket = retrieve_next_ticket(service_type, shm);
+            uint32_t ticket = retrieve_next_ticket_broker(service_type, shm);
             if (ticket > 0) {
                 LOG_DEBUG("Worker %d acquiring ticket...", worker_id);
                 worker_job_simulate(worker_id, service_type, ticket, shm);

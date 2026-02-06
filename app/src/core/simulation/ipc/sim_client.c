@@ -59,6 +59,7 @@ int sim_client_connect_issuer(volatile atomic_bool *should_continue, sim_shm_t *
         int d = 0, h = 0, m = 0;
         if (shm)
             sim_client_read_time(shm, &d, &h, &m);
+
         LOG_ERROR("[Day %d %02d:%02d] Failed to connect to %s after retries (errno=%d: %s)", d, h,
                   m, sock_path, errno, strerror(errno));
     }
@@ -121,9 +122,6 @@ void sim_client_wait_barrier(sim_shm_t *shm, int *last_synced_day,
             return; // Synced!
         }
 
-        // No new day yet, or barrier not relevant.
-        // Wait a bit to avoid busy spin.
-        // We can wait on condition variables if we expect a wake-up.
         usleep(5000); // 5ms poll
     }
 }
@@ -134,5 +132,9 @@ void sim_client_setup_signals(void (*handler)(int, siginfo_t *, void *)) {
     if (sigutil_setup(handler, SIGUTIL_HANDLE_TERMINATING_ONLY, 0) != 0) {
         LOG_FATAL("Failed to setup signals");
         exit(1);
+    }
+
+    if (sigutil_handle(SIGPIPE, SIG_IGN, 0) != 0) {
+        LOG_WARN("Failed to ignore SIGPIPE");
     }
 }

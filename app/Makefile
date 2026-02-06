@@ -55,6 +55,7 @@ HASHTABLE_DIR          = $(RING1_DIR)/postoffice/hashtable
 HASHSET_DIR            = $(RING1_DIR)/postoffice/hashset
 SYSINFO_DIR            = $(RING1_DIR)/postoffice/sysinfo
 CONCURRENCY_DIR        = $(RING1_DIR)/postoffice/concurrency
+PRIORITY_QUEUE_DIR     = $(RING1_DIR)/postoffice/priority_queue
 
 # Ring 2
 METRICS_DIR            = $(RING2_DIR)/postoffice/metrics
@@ -82,7 +83,7 @@ MAIN_DIR               = $(CORE_SRC_DIR)/main
 MAIN_SIM_DIR           = $(MAIN_DIR)/simulation
 SIMULATION_DIR         = $(CORE_SRC_DIR)/simulation
 DIRECTOR_DIR           = $(SIMULATION_DIR)/director
-TICKET_ISSUER_DIR      = $(SIMULATION_DIR)/ticket_issuer
+WORK_BROKER_DIR        = $(SIMULATION_DIR)/work_broker
 USERS_MANAGER_DIR      = $(SIMULATION_DIR)/users_manager
 WORKER_DIR             = $(SIMULATION_DIR)/worker
 USER_DIR               = $(SIMULATION_DIR)/user
@@ -151,12 +152,12 @@ PROFILER = # strace -e trace=all -o strace.log
 # Process Types
 # 1. main: Entry point
 # 2. director: Process that manages the entire simulation
-# 3. ticket_issuer: Process that manages the ticket issuing system
+# 3. work_broker: Process that manages the queue system (replacing ticket_issuer)
 # 4. users_manager: Process that manages the users processes
 # 5. worker: Process that invests the worker's role
 # 6. user: Process that invests the user's role
 PROJECT_PREFIX 	= post_office_
-PROCESSES 		= main director ticket_issuer users_manager worker user
+PROCESSES 		= main director work_broker users_manager worker user
 PROCESSES 	   := $(addprefix $(PROJECT_PREFIX), $(PROCESSES))
 
 # Prompt the configuration file to run the simulation with, if not set when make was called
@@ -178,7 +179,7 @@ DIRECTOR_ARGS = --config "$(CONFIG)" --loglevel "$(LOG_LEVEL)" --headless
 DIRECTOR_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)director
 
 # Executables for simulation processes
-TICKET_ISSUER_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)ticket_issuer
+WORK_BROKER_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)work_broker
 WORKER_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)worker
 USERS_MANAGER_EXEC = $(BIN_DIR)/$(PROJECT_PREFIX)users_manager
 
@@ -211,6 +212,7 @@ SYSINFO_SRC     = $(wildcard $(SYSINFO_DIR)/*.c)
 BACKTRACE_SRC   = $(wildcard $(BACKTRACE_DIR)/*.c)
 VECTOR_SRC      = $(wildcard $(VECTOR_DIR)/*.c)
 CONCURRENCY_SRC = $(wildcard $(CONCURRENCY_DIR)/*.c)
+PRIORITY_QUEUE_SRC = $(wildcard $(PRIORITY_QUEUE_DIR)/*.c)
 
 ## Third-party Libraries
 INIH_SRC        = $(wildcard $(INIH_DIR)/*.c)
@@ -222,7 +224,7 @@ UNITY_SRC       = $(wildcard $(UNITY_DIR)/*.c)
 # Source Files for each process
 MAIN_APP_SRC          = $(shell find $(MAIN_DIR) -name '*.c')
 DIRECTOR_APP_SRC      = $(shell find $(DIRECTOR_DIR) -name '*.c')
-TICKET_ISSUER_APP_SRC = $(shell find $(TICKET_ISSUER_DIR) -name '*.c')
+WORK_BROKER_APP_SRC   = $(shell find $(WORK_BROKER_DIR) -name '*.c')
 USERS_MANAGER_APP_SRC = $(shell find $(USERS_MANAGER_DIR) -name '*.c')
 WORKER_APP_SRC        = $(shell find $(WORKER_DIR) -name '*.c')
 USER_APP_SRC          = $(shell find $(USER_DIR) -name '*.c')
@@ -230,7 +232,7 @@ SIM_IPC_SRC           = $(wildcard $(SIM_IPC_DIR)/*.c)
 TEST_SRC              = $(shell find $(TESTS_DIR) -name '*.c') \
 						$(filter-out $(MAIN_DIR)/main.c,$(MAIN_APP_SRC)) \
 						$(filter-out $(DIRECTOR_DIR)/director.c,$(DIRECTOR_APP_SRC)) \
-						$(filter-out $(TICKET_ISSUER_DIR)/ticket_issuer.c,$(TICKET_ISSUER_APP_SRC)) \
+						$(filter-out $(WORK_BROKER_DIR)/work_broker.c,$(WORK_BROKER_APP_SRC)) \
 						$(filter-out $(USERS_MANAGER_DIR)/users_manager.c,$(USERS_MANAGER_APP_SRC)) \
 						$(filter-out $(WORKER_DIR)/worker.c,$(WORKER_APP_SRC)) \
 						$(filter-out $(USER_DIR)/user.c,$(USER_APP_SRC)) \
@@ -259,6 +261,7 @@ SYSINFO_OBJS        = $(patsubst $(SYSINFO_DIR)/%.c,$(BUILD_DIR)/sysinfo/%.o,$(S
 BACKTRACE_OBJS      = $(patsubst $(BACKTRACE_DIR)/%.c,$(BUILD_DIR)/backtrace/%.o,$(BACKTRACE_SRC))
 VECTOR_OBJS         = $(patsubst $(VECTOR_DIR)/%.c,$(BUILD_DIR)/vector/%.o,$(VECTOR_SRC))
 CONCURRENCY_OBJS    = $(patsubst $(CONCURRENCY_DIR)/%.c,$(BUILD_DIR)/concurrency/%.o,$(CONCURRENCY_SRC))
+PRIORITY_QUEUE_OBJS = $(patsubst $(PRIORITY_QUEUE_DIR)/%.c,$(BUILD_DIR)/priority_queue/%.o,$(PRIORITY_QUEUE_SRC))
 
 ## Third-party Libraries
 INIH_OBJS           = $(patsubst $(INIH_DIR)/%.c,$(BUILD_DIR)/inih/%.o,$(INIH_SRC))
@@ -272,12 +275,13 @@ DEFAULTS_OBJS       = $(INIH_OBJS) $(UTILS_OBJS) $(RANDOM_OBJS) $(HASHTABLE_OBJS
                       $(PRIME_OBJS) $(LOG_C_OBJS) $(METRICS_OBJS) $(SORT_OBJS) \
 					  $(NET_OBJS) $(PERF_OBJS) $(STORAGE_OBJS) $(RENDERER_OBJS) \
 					  $(LMDB_OBJS) $(HASHSET_OBJS) $(LOG_OBJS) $(SYSINFO_OBJS) \
-					  $(BACKTRACE_OBJS) $(VECTOR_OBJS) $(CONCURRENCY_OBJS)
+					  $(BACKTRACE_OBJS) $(VECTOR_OBJS) $(CONCURRENCY_OBJS) \
+					  $(PRIORITY_QUEUE_OBJS)
 
 # Application-specific objects
 MAIN_APP_OBJS 			= $(patsubst $(MAIN_DIR)/%.c,$(BUILD_DIR)/main/%.o,$(MAIN_APP_SRC))
 DIRECTOR_APP_OBJS 		= $(patsubst $(DIRECTOR_DIR)/%.c,$(BUILD_DIR)/director/%.o,$(DIRECTOR_APP_SRC))
-TICKET_ISSUER_APP_OBJS 	= $(patsubst $(TICKET_ISSUER_DIR)/%.c,$(BUILD_DIR)/ticket_issuer/%.o,$(TICKET_ISSUER_APP_SRC))
+WORK_BROKER_APP_OBJS 	= $(patsubst $(WORK_BROKER_DIR)/%.c,$(BUILD_DIR)/work_broker/%.o,$(WORK_BROKER_APP_SRC))
 USERS_MANAGER_APP_OBJS 	= $(patsubst $(USERS_MANAGER_DIR)/%.c,$(BUILD_DIR)/users_manager/%.o,$(USERS_MANAGER_APP_SRC))
 WORKER_APP_OBJS 		= $(patsubst $(WORKER_DIR)/%.c,$(BUILD_DIR)/worker/%.o,$(WORKER_APP_SRC))
 USER_APP_OBJS 			= $(patsubst $(USER_DIR)/%.c,$(BUILD_DIR)/user/%.o,$(USER_APP_SRC))
@@ -288,7 +292,7 @@ TEST_OBJS               = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests/%.o,$(T
 # Full dependency list for each final executable
 MAIN_OBJS           = $(MAIN_APP_OBJS) $(DEFAULTS_OBJS) $(LIBFORT_OBJS)
 DIRECTOR_OBJS 		= $(DIRECTOR_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
-TICKET_ISSUER_OBJS 	= $(TICKET_ISSUER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
+WORK_BROKER_OBJS 	= $(WORK_BROKER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS) $(PRIORITY_QUEUE_OBJS)
 USERS_MANAGER_OBJS 	= $(USERS_MANAGER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(LMDB_OBJS)
 WORKER_OBJS 		= $(WORKER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS)
 USER_OBJS 			= $(USER_APP_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS)
@@ -296,12 +300,12 @@ USER_LIB_OBJS       = $(filter-out $(BUILD_DIR)/user/user.o, $(USER_APP_OBJS))
 
 # Application objects (except entrypoints) to link into tests
 APP_ALL_OBJS        = $(MAIN_APP_OBJS) $(DIRECTOR_APP_OBJS) \
-                      $(TICKET_ISSUER_APP_OBJS) $(USERS_MANAGER_APP_OBJS) $(WORKER_APP_OBJS) $(USER_APP_OBJS)
-APP_ENTRYPOINT_OBJS = $(BUILD_DIR)/main/main.o $(BUILD_DIR)/director/director.o $(BUILD_DIR)/ticket_issuer/ticket_issuer.o \
+                      $(WORK_BROKER_APP_OBJS) $(USERS_MANAGER_APP_OBJS) $(WORKER_APP_OBJS) $(USER_APP_OBJS)
+APP_ENTRYPOINT_OBJS = $(BUILD_DIR)/main/main.o $(BUILD_DIR)/director/director.o $(BUILD_DIR)/work_broker/work_broker.o \
                       $(BUILD_DIR)/users_manager/users_manager.o $(BUILD_DIR)/worker/worker.o $(BUILD_DIR)/user/user.o
 APP_COMMON_OBJS     = $(filter-out $(APP_ENTRYPOINT_OBJS),$(APP_ALL_OBJS))
 
-TEST_MAIN_OBJS 		= $(TEST_OBJS) $(APP_COMMON_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(UNITY_OBJS)
+TEST_MAIN_OBJS 		= $(TEST_OBJS) $(APP_COMMON_OBJS) $(SIM_IPC_OBJS) $(DEFAULTS_OBJS) $(UNITY_OBJS) $(PRIORITY_QUEUE_OBJS)
 
 # *** Targets *** #
 
@@ -487,7 +491,7 @@ $(MAIN_EXEC): $(MAIN_OBJS) | $(BIN_DIR)
 $(DIRECTOR_EXEC): $(DIRECTOR_OBJS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
-$(TICKET_ISSUER_EXEC): $(TICKET_ISSUER_OBJS) | $(BIN_DIR)
+$(WORK_BROKER_EXEC): $(WORK_BROKER_OBJS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) $(ALL_I) -o $@ $^ $(LDFLAGS)
 
 $(USERS_MANAGER_EXEC): $(USERS_MANAGER_OBJS) $(USER_LIB_OBJS) | $(BIN_DIR)
@@ -522,8 +526,8 @@ $(BUILD_DIR)/director/%.o: $(DIRECTOR_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
-# Rule for ticket_issuer application objects
-$(BUILD_DIR)/ticket_issuer/%.o: $(TICKET_ISSUER_DIR)/%.c
+# Rule for work_broker application objects
+$(BUILD_DIR)/work_broker/%.o: $(WORK_BROKER_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(INCLUDES_I) $(CORE_I) $(SRC_I) -c $< -o $@
 
@@ -620,6 +624,10 @@ $(BUILD_DIR)/vector/%.o: $(VECTOR_DIR)/%.c
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 
 $(BUILD_DIR)/concurrency/%.o: $(CONCURRENCY_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
+
+$(BUILD_DIR)/priority_queue/%.o: $(PRIORITY_QUEUE_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) -MMD -MP $(CFLAGS) $(ALL_I) -c $< -o $@
 

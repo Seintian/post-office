@@ -32,16 +32,12 @@ static void launch_process(const char *bin, char *const argv[]) {
 }
 
 void spawn_simulation_subsystems(const director_config_t *cfg) {
-    // A. Ticket Issuer
+    // A. Work Broker
     char pool_str[16];
     snprintf(pool_str, sizeof(pool_str), "%d", cfg->issuer_pool_size);
-    char *args_ti[] = {"bin/post_office_ticket_issuer",
-                       "-l",
-                       (char *)cfg->log_level,
-                       "--pool-size",
-                       pool_str,
-                       NULL};
-    launch_process("bin/post_office_ticket_issuer", args_ti);
+    char *args_wb[] = {
+        "bin/post_office_work_broker", "-l", (char *)cfg->log_level, "--pool-size", pool_str, NULL};
+    launch_process("bin/post_office_work_broker", args_wb);
 
     // B. Workers
     char workers_str[16];

@@ -7,7 +7,6 @@
 
 #include "user_loop.h"
 
-#include <errno.h>
 #include <postoffice/log/logger.h>
 #include <postoffice/metrics/metrics.h>
 #include <postoffice/net/net.h>
@@ -81,27 +80,20 @@ void teardown_user_runtime(sim_shm_t *shm) {
     po_logger_shutdown();
 }
 
-static bool obtain_ticket(sim_shm_t *shm, int service_type, volatile atomic_bool *should_continue,
-                          uint32_t *ticket_out) {
+static bool join_queue_broker(sim_shm_t *shm, int service_type, int is_vip,
+                              volatile atomic_bool *should_continue, uint32_t *ticket_out) {
     int fd = sim_client_connect_issuer(should_continue, shm);
-    if (fd < 0) {
-        LOG_WARN("User failed to connect to Ticket Issuer");
+    if (fd < 0)
         return false;
-    }
 
     // Timeout
     struct timeval tv = {.tv_usec = 500000};
-    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
-        LOG_ERROR("Failed to set SO_RCVTIMEO on socket: %s", strerror(errno));
-        po_socket_close(fd);
-        return false;
-    }
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-    msg_ticket_req_t req = {.requester_pid = getpid(),
-                            .requester_tid = (pid_t)syscall(SYS_gettid),
-                            .service_type = (service_type_t)service_type};
+    msg_join_queue_t req = {
+        .requester_pid = getpid(), .service_type = (service_type_t)service_type, .is_vip = is_vip};
 
-    if (net_send_message(fd, MSG_TYPE_TICKET_REQ, PO_FLAG_NONE, (uint8_t *)&req, sizeof(req)) !=
+    if (net_send_message(fd, MSG_TYPE_JOIN_QUEUE, PO_FLAG_NONE, (uint8_t *)&req, sizeof(req)) !=
         0) {
         po_socket_close(fd);
         return false;
@@ -109,19 +101,17 @@ static bool obtain_ticket(sim_shm_t *shm, int service_type, volatile atomic_bool
 
     po_header_t h;
     zcp_buffer_t *p = NULL;
-    int ret = net_recv_message_blocking(fd, &h, &p); // Blocking until timeout
+    int ret = net_recv_message_blocking(fd, &h, &p);
     po_socket_close(fd);
 
-    if (ret != 0 || !p || h.msg_type != MSG_TYPE_TICKET_RESP) {
+    if (ret != 0 || !p || h.msg_type != MSG_TYPE_JOIN_ACK) {
         if (p)
             net_zcp_release_rx(p);
-        LOG_WARN("User failed to receive valid Ticket Response (ret=%d, type=0x%02X)", ret,
-                 h.msg_type);
         return false;
     }
 
-    msg_ticket_resp_t resp;
-    memcpy(&resp, p, sizeof(resp)); // Safe cast if data is at start
+    msg_join_ack_t resp;
+    memcpy(&resp, p, sizeof(resp));
     net_zcp_release_rx(p);
 
     *ticket_out = resp.ticket_number;
@@ -155,23 +145,7 @@ static void wait_for_office(int user_id, sim_shm_t *shm, volatile atomic_bool *s
     pthread_mutex_unlock(&shm->time_control.mutex);
 }
 
-static unsigned int join_queue(int user_id, int service, uint32_t ticket, sim_shm_t *shm) {
-    queue_status_t *q = &shm->queues[service];
-    LOG_DEBUG("User %d joining queue %d [Ticket #%u]", user_id, service, ticket);
-    atomic_fetch_add(&q->waiting_count, 1);
-
-    unsigned int tail = atomic_fetch_add(&q->tail, 1);
-    unsigned int idx = tail % 128; // Small ring buffer
-    while (atomic_load(&q->tickets[idx]) != 0)
-        usleep(100);
-
-    atomic_store(&q->tickets[idx], ticket + 1);
-
-    pthread_mutex_lock(&q->mutex);
-    pthread_cond_signal(&q->cond_added);
-    pthread_mutex_unlock(&q->mutex);
-    return idx;
-}
+// join_queue removed (Broker handles it)
 
 static bool wait_service(int user_id, uint32_t ticket, int service, unsigned int q_idx,
                          sim_shm_t *shm, volatile atomic_bool *should_continue) {
@@ -256,34 +230,23 @@ int run_user_simulation_loop(int user_id, int service_type, sim_shm_t *shm,
         sim_client_read_time(shm, &d, &hr, &mn);
         LOG_INFO("User %d Entering Office (Hour: %d)", user_id, hr);
 
-        // 2. Obtain Ticket
+        // 2. Join Queue (Broker)
         uint32_t t = 0;
-        LOG_DEBUG("User %d attempting to obtain ticket", user_id);
+        int is_vip = (po_rand_u32() % 100) < 10; // 10% VIP chance
 
-        // NOTE: obtain_ticket could fail if we are disconnected or issuer is busy
-        // Also if we are at 16:59, we might get a ticket and then get kicked out.
-        if (!obtain_ticket(shm, service_type, should_continue_flag, &t)) {
-            LOG_WARN("User %d failed to obtain ticket, retrying/skipping", user_id);
+        LOG_DEBUG("User %d joining queue (VIP=%d)", user_id, is_vip);
+
+        if (!join_queue_broker(shm, service_type, is_vip, should_continue_flag, &t)) {
+            LOG_WARN("User %d failed to join queue, retrying", user_id);
             usleep(100000);
             continue;
         }
 
-        LOG_INFO("User %d obtained ticket #%u (Service Type: %d)", user_id, t, service_type);
+        LOG_INFO("User %d Joined Queue %d [Ticket #%u] (VIP=%d)", user_id, service_type, t, is_vip);
 
-        // 3. Join Queue
-        unsigned int q_idx = join_queue(user_id, service_type, t, shm);
-        LOG_DEBUG("User %d Joined Queue %d [Ticket #%u] at idx %u", user_id, service_type, t,
-                  q_idx);
-
-        // 4. Wait Service
-        if (wait_service(user_id, t, service_type, q_idx, shm, should_continue_flag)) {
+        if (wait_service(user_id, t, service_type, 0, shm, should_continue_flag)) {
             LOG_INFO("User %d Service Complete [Ticket #%u]", user_id, t);
         } else {
-            sim_client_read_time(shm, &d, &h, &m);
-            if (h >= 17) {
-                LOG_INFO("User %d leaving office (Closing Time). Task finished.", user_id);
-                return 0; // EXIT THE SIMULATION THREAD
-            }
             LOG_ERROR("User %d Service Interrupted/Failed [Ticket #%u]", user_id, t);
         }
     }

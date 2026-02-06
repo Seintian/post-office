@@ -4,11 +4,12 @@
  */
 
 #include "vector/vector.h"
-#include "sort/sort.h"
 
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "sort/sort.h"
 
 // Default initial capacity if not specified
 #define VECTOR_DEFAULT_CAPACITY 16
@@ -233,6 +234,15 @@ int po_vector_iter_has_next(const po_vector_iter_t *iter) {
 
 int po_vector_is_empty(const po_vector_t *vec) {
     return vec->size == 0;
+}
+
+int po_vector_set(po_vector_t *vec, size_t index, void *element) {
+    if (index >= vec->size) {
+        errno = EINVAL;
+        return -1;
+    }
+    vec->data[index] = element;
+    return 0;
 }
 
 void po_vector_sort(po_vector_t *vec, int (*compare)(const void *, const void *)) {

@@ -119,6 +119,16 @@ void *po_vector_at(const po_vector_t *restrict vec, size_t index) __nonnull((1))
 int po_vector_insert(po_vector_t *restrict vec, size_t index, void *element) __nonnull((1));
 
 /**
+ * @brief Replace the element at the specified index.
+ * @param[in] vec Vector handle.
+ * @param[in] index Position to set.
+ * @param[in] element New element.
+ * @return 0 on success, -1 if index is out of bounds.
+ * @note Thread-safe: No.
+ */
+int po_vector_set(po_vector_t *vec, size_t index, void *element) __nonnull((1));
+
+/**
  * @brief Remove the element at the specified position.
  * @param[in] vec Vector handle (must not be NULL).
  * @param[in] index Position of element to remove.
@@ -129,15 +139,15 @@ void *po_vector_remove(po_vector_t *restrict vec, size_t index) __nonnull((1));
 
 // Information
 
-/** 
+/**
  * @brief Get the number of elements in the vector.
  * @param[in] vec Vector handle.
  * @note Thread-safe: Yes (Read-only).
  */
 size_t po_vector_size(const po_vector_t *vec) __nonnull((1));
 
-/** 
- * @brief Get the current capacity of the vector. 
+/**
+ * @brief Get the current capacity of the vector.
  * @param[in] vec Vector handle.
  * @note Thread-safe: Yes (Read-only).
  */
