@@ -1,13 +1,17 @@
 #define _POSIX_C_SOURCE 200809L
 #include "director_time.h"
+
 #include <postoffice/log/logger.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
-#include <pthread.h>
+
+#include "director_orch.h"
 
 void synchronize_simulation_barrier(sim_shm_t *shm, int day, volatile sig_atomic_t *running_flag) {
-    if (!*running_flag) return;
+    if (!*running_flag)
+        return;
 
     pthread_mutex_lock(&shm->sync.mutex);
 
@@ -17,7 +21,7 @@ void synchronize_simulation_barrier(sim_shm_t *shm, int day, volatile sig_atomic
     atomic_store(&shm->sync.barrier_active, 1);
 
     // Wake workers
-    for (int i=0; i<SIM_MAX_SERVICE_TYPES; i++) {
+    for (int i = 0; i < SIM_MAX_SERVICE_TYPES; i++) {
         pthread_mutex_lock(&shm->queues[i].mutex);
         pthread_cond_broadcast(&shm->queues[i].cond_added);
         pthread_mutex_unlock(&shm->queues[i].mutex);
@@ -29,16 +33,21 @@ void synchronize_simulation_barrier(sim_shm_t *shm, int day, volatile sig_atomic
     // uint32_t pop = atomic_load(&shm->stats.connected_users); // 0 at this point of day
     uint32_t idle = (total > active) ? (total - active) : 0;
 
-    LOG_DEBUG("Synchronizing Day %d (%u External Processes | Threads: %u active, %u idle [%u total])...", 
-              day, ext_req, active, idle, total);
+    LOG_DEBUG(
+        "Synchronizing Day %d (%u External Processes | Threads: %u active, %u idle [%u total])...",
+        day, ext_req, active, idle, total);
 
     struct timespec ts;
     while (*running_flag) {
-        if (atomic_load(&shm->sync.ready_count) >= ext_req) break;
+        if (atomic_load(&shm->sync.ready_count) >= ext_req)
+            break;
 
         clock_gettime(CLOCK_MONOTONIC, &ts);
-        ts.tv_nsec += 100000000; 
-        if(ts.tv_nsec >= 1000000000) { ts.tv_sec++; ts.tv_nsec -= 1000000000; }
+        ts.tv_nsec += 100000000;
+        if (ts.tv_nsec >= 1000000000) {
+            ts.tv_sec++;
+            ts.tv_nsec -= 1000000000;
+        }
 
         pthread_cond_timedwait(&shm->sync.cond_workers_ready, &shm->sync.mutex, &ts);
     }
@@ -50,20 +59,22 @@ void synchronize_simulation_barrier(sim_shm_t *shm, int day, volatile sig_atomic
     LOG_DEBUG("Day %d Synchronized.", day);
 }
 
-void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *running_flag, int expected_users) {
+void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *running_flag,
+                                   volatile sig_atomic_t *sigchld_flag, int expected_users) {
     if (expected_users > 0) {
         LOG_INFO("Waiting for %d users to connect...", expected_users);
         while (*running_flag) {
             unsigned int current = atomic_load(&shm->stats.connected_users);
-            if (current >= (unsigned int)expected_users) break;
+            if (current >= (unsigned int)expected_users)
+                break;
             usleep(10000); // 10ms poll
         }
-        LOG_INFO("All expected users connected (%u/%d). Starting.", 
-        atomic_load(&shm->stats.connected_users), expected_users);
+        LOG_INFO("All expected users connected (%u/%d). Starting.",
+                 atomic_load(&shm->stats.connected_users), expected_users);
     }
 
     int day = 1;
-    int hour = 0; 
+    int hour = 0;
     int minute = 0;
 
     atomic_store(&shm->time_control.sim_active, true);
@@ -71,19 +82,31 @@ void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *runnin
     synchronize_simulation_barrier(shm, day, running_flag);
     LOG_INFO("Simulation Clock Started.");
 
-    while(*running_flag) {
+    while (*running_flag) {
         // Update SHM
         pthread_mutex_lock(&shm->time_control.mutex);
         uint64_t packed = ((uint64_t)day << 16) | ((uint64_t)hour << 8) | (uint64_t)minute;
         atomic_store(&shm->time_control.packed_time, packed);
+        atomic_store(&shm->time_control.packed_time, packed);
         pthread_cond_broadcast(&shm->time_control.cond_tick);
         pthread_mutex_unlock(&shm->time_control.mutex);
+
+        // Crash Check
+        if (sigchld_flag && *sigchld_flag) {
+            *sigchld_flag = 0;
+            if (director_orch_check_crashes()) {
+                LOG_ERROR("Crash detected in subsystem. Aborting simulation.");
+                *running_flag = 0;
+                break;
+            }
+        }
 
         LOG_TRACE("Tick: Day %d %02d:%02d", day, hour, minute);
 
         // Wait
         uint64_t sleep = shm->params.tick_nanos / 1000;
-        if (sleep > 0) usleep((useconds_t)sleep);
+        if (sleep > 0)
+            usleep((useconds_t)sleep);
 
         // Check for Opening Time (08:00)
         if (hour == 8 && minute == 0) {
@@ -93,7 +116,7 @@ void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *runnin
         // Check for Closing Time (17:00)
         if (hour == 17 && minute == 0) {
             LOG_INFO("Office Closing (17:00) - Interrupting all active work/queues.");
-            for (int i=0; i<SIM_MAX_SERVICE_TYPES; i++) {
+            for (int i = 0; i < SIM_MAX_SERVICE_TYPES; i++) {
                 // Determine how many waiting
                 unsigned int waiting = atomic_load(&shm->queues[i].waiting_count);
                 if (waiting > 0) {
@@ -109,10 +132,13 @@ void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *runnin
         // Advance
         minute++;
         if (minute >= 60) {
-            minute = 0; hour++;
-            if(hour >= 24) {
-                hour=0; day++;
-                if (shm->params.sim_duration_days > 0 && (uint32_t)day > shm->params.sim_duration_days) {
+            minute = 0;
+            hour++;
+            if (hour >= 24) {
+                hour = 0;
+                day++;
+                if (shm->params.sim_duration_days > 0 &&
+                    (uint32_t)day > shm->params.sim_duration_days) {
                     LOG_INFO("Duration %d days reached.", shm->params.sim_duration_days);
                     break;
                 }
@@ -122,10 +148,10 @@ void execute_simulation_clock_loop(sim_shm_t *shm, volatile sig_atomic_t *runnin
 
         // Explode Check
         if (shm->params.explode_threshold > 0) {
-            uint32_t total=0;
-            for(int i=0; i<SIM_MAX_SERVICE_TYPES; i++) 
+            uint32_t total = 0;
+            for (int i = 0; i < SIM_MAX_SERVICE_TYPES; i++)
                 total += atomic_load(&shm->queues[i].waiting_count);
-            if(total > shm->params.explode_threshold) {
+            if (total > shm->params.explode_threshold) {
                 LOG_FATAL("MELTDOWN: Queue Overflow.");
                 break;
             }

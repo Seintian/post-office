@@ -40,7 +40,7 @@ void worker_job_simulate(int worker_id, int service_type, uint32_t ticket, sim_s
         }
     }
 
-    // LOG_DEBUG("Worker %d performing service (%u ms)", worker_id, duration_ms);
+    LOG_DEBUG("Worker %d performing service (%u ms)", worker_id, duration_ms);
 
     // 3. Complete
     sim_client_read_time(shm, &d, &h, &m);
